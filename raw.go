@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/gorilla/mux"
 )
 
 // CampaignMetadataFilename is the name of each campaign metadata file in each campaign directory
@@ -24,7 +26,8 @@ const DeletionTagSuffix = ".ptofile_delete_me"
 var DataRelativeURL *url.URL
 
 func init() {
-	DataRelativeURL, err := url.Parse("data")
+	var err error
+	DataRelativeURL, err = url.Parse("data")
 	if err != nil {
 		panic("relative URL parse invariant violation")
 	}
@@ -44,6 +47,14 @@ func ReadRDSMetadata(pathname string) (out RDSMetadata, err error) {
 // WriteToFile writes this metadata object as JSON to a file, ignoring virual metadata keys
 func (md *RDSMetadata) WriteToFile(pathname string) error {
 	return nil
+}
+
+// RDSFiletype encapsulates a filetype in the raw data store
+type RDSFiletype struct {
+	// PTO filetype name
+	Filetype string `json:"file_type"`
+	// Associated MIME type
+	ContentType string `json:"mime_type"`
 }
 
 // RDSError encapsulates a raw data store error, containing a subject
@@ -265,6 +276,11 @@ func (cam *RDSCampaign) putFileMetadata(filename string, md *RDSMetadata) error 
 	return nil
 }
 
+func (cam *RDSCampaign) getFiletype(filename string) (*RDSFiletype, error) {
+	// FIXME
+	return nil, nil
+}
+
 // NewRDSCampaign creates a new campaign object bound the path of a directory on
 // disk containing the campaign's files.
 func NewRDSCampaign(config *PTOServerConfig, path string) *RDSCampaign {
@@ -287,6 +303,15 @@ type RawDataStore struct {
 
 	// campaign cache
 	campaigns map[string]*RDSCampaign
+}
+
+func rdsHTTPError(w http.ResponseWriter, err error) {
+	switch ev := err.(type) {
+	case *RDSError:
+		http.Error(w, ev.Error(), ev.Status)
+	default:
+		http.Error(w, fmt.Sprintf("internal server error: %s", err.Error()), 500)
+	}
 }
 
 // scanCampaigns updates the RawDataStore to reflect the current state of the
@@ -352,6 +377,7 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 	outb, err := json.Marshal(out)
 	if err != nil {
 		http.Error(w, "raw data store error: cannot marshal campaign list", 500)
+		return
 	}
 
 	// FIXME pagination goes here
@@ -361,19 +387,210 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 }
 
 func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
 
+	// get campaign name
+	camname, ok := vars["campaign"]
+	if !ok {
+		http.Error(w, "missing campaign", 400)
+		return
+	}
+
+	// fail if not authorized
+	if !IsAuthorized(w, r, "read_raw:"+camname) {
+		return
+	}
+
+	// look up campaign
+	cam, ok := rds.campaigns[camname]
+	if !ok {
+		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), 404)
+		return
+	}
+
+	out, err := cam.getCampaignMetadata()
+	if err != nil {
+		rdsHTTPError(w, err)
+		return
+	}
+
+	outb, err := json.Marshal(out)
+	if err != nil {
+		http.Error(w, "raw data store error: cannot marshal campaign metadata", 500)
+		return
+	}
+
+	w.Header()["Content-Type"] = []string{"application/json"}
+	w.Write(outb)
 }
 
 func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
 
+	// get campaign name
+	camname, ok := vars["campaign"]
+	if !ok {
+		http.Error(w, "missing campaign", 400)
+		return
+	}
+
+	// fail if not authorized
+	if !IsAuthorized(w, r, "write_raw:"+camname) {
+		return
+	}
+
+	// read metadata from request
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+
+	// unmarshal it
+	var in RDSMetadata
+	err = json.Unmarshal(b, in)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+
+	// now look up the campaign
+	cam, ok := rds.campaigns[camname]
+	if !ok {
+		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), 404)
+		return
+	}
+
+	// overwrite metadata
+	err = cam.putCampaignMetadata(&in)
+	if err != nil {
+		rdsHTTPError(w, err)
+		return
+	}
+
+	// now reflect it back
+	out, err := cam.getCampaignMetadata()
+	if err != nil {
+		rdsHTTPError(w, err)
+		return
+	}
+
+	outb, err := json.Marshal(out)
+	if err != nil {
+		http.Error(w, "raw data store error: cannot marshal campaign metadata", 500)
+		return
+	}
+
+	w.Header()["Content-Type"] = []string{"application/json"}
+	w.Write(outb)
 }
 
 func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
 
+	camname, ok := vars["campaign"]
+	if !ok {
+		http.Error(w, "missing campaign", 400)
+		return
+	}
+
+	filename, ok := vars["file"]
+	if !ok {
+		http.Error(w, "missing file", 400)
+		return
+	}
+
+	// fail if not authorized
+	if !IsAuthorized(w, r, "read_raw:"+camname) {
+		return
+	}
+
+	cam, ok := rds.campaigns[vars["campaign"]]
+	if !ok {
+		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), 404)
+		return
+	}
+
+	out, err := cam.getFileMetadata(filename)
+	if err != nil {
+		rdsHTTPError(w, err)
+		return
+	}
+
+	outb, err := json.Marshal(out)
+	if err != nil {
+		http.Error(w, "raw data store error: cannot marshal file metadata", 500)
+		return
+	}
+
+	w.Header()["Content-Type"] = []string{"application/json"}
+	w.Write(outb)
 }
 
 func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
 
+	camname, ok := vars["campaign"]
+	if !ok {
+		http.Error(w, "missing campaign", 400)
+		return
+	}
+
+	filename, ok := vars["file"]
+	if !ok {
+		http.Error(w, "missing file", 400)
+		return
+	}
+
+	// fail if not authorized
+	if !IsAuthorized(w, r, "write_raw:"+camname) {
+		return
+	}
+
+	// read metadata from request
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+
+	// unmarshal it
+	var in RDSMetadata
+	err = json.Unmarshal(b, in)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+
+	// now look up the campaign
+	cam, ok := rds.campaigns[camname]
+	if !ok {
+		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), 404)
+		return
+	}
+
+	// overwrite metadata for file
+	err = cam.putFileMetadata(filename, &in)
+	if err != nil {
+		rdsHTTPError(w, err)
+		return
+	}
+
+	// now reflect it back
+	out, err := cam.getFileMetadata(filename)
+	if err != nil {
+		rdsHTTPError(w, err)
+		return
+	}
+
+	outb, err := json.Marshal(out)
+	if err != nil {
+		http.Error(w, "raw data store error: cannot marshal file metadata", 500)
+		return
+	}
+
+	w.Header()["Content-Type"] = []string{"application/json"}
+	w.Write(outb) // FIXME log error here
 }
 
 func (rds *RawDataStore) HandleDeleteFile(w http.ResponseWriter, r *http.Request) {
@@ -382,6 +599,65 @@ func (rds *RawDataStore) HandleDeleteFile(w http.ResponseWriter, r *http.Request
 
 func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Request) {
 
+	vars := mux.Vars(r)
+
+	camname, ok := vars["campaign"]
+	if !ok {
+		http.Error(w, "missing campaign", 400)
+		return
+	}
+
+	filename, ok := vars["file"]
+	if !ok {
+		http.Error(w, "missing file", 400)
+		return
+	}
+
+	// fail if not authorized
+	if !IsAuthorized(w, r, "write_raw:"+camname) {
+		return
+	}
+
+	// now look up the campaign
+	cam, ok := rds.campaigns[camname]
+	if !ok {
+		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), 404)
+		return
+	}
+
+	// determine MIME type
+	ft, err := cam.getFiletype(filename)
+
+	// build a local filesystem path for downloading and validate it
+	rawpath := filepath.Clean(filepath.Join(rds.path, camname, filename))
+	if pathok, _ := filepath.Match(filepath.Join(rds.path, "*", "*"), rawpath); !pathok {
+		http.Error(w, fmt.Sprintf("path %s is not ok", rawpath), 400)
+		return
+	}
+
+	// write MIME type to header
+	w.Header()["Content-Type"] = []string{ft.ContentType}
+
+	// now stream the file to the writer
+	rawfile, err := os.Open(rawpath)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	buf := make([]byte, 65536)
+	for {
+		n, err := rawfile.Read(buf)
+		if err == nil {
+			if n == 0 {
+				break
+			}
+			w.Write(buf[0:n]) // FIXME log error here
+		} else {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
 }
 
 func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request) {
