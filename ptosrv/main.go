@@ -61,6 +61,7 @@ func main() {
 	r.HandleFunc("/raw/{campaign}", rds.HandlePutCampaignMetadata).methods("PUT")
 	r.HandleFunc("/raw/{campaign}/{file}", rds.HandleGetFileMetadata).methods("GET")
 	r.HandleFunc("/raw/{campaign}/{file}", rds.HandlePutFileMetadata).methods("PUT")
+	r.HandleFunc("/raw/{campaign}/{file}", rds.HandleDeleteFile).methods("DELETE")
 	r.HandleFunc("/raw/{campaign}/{file}/data", rds.HandleFileDownload).methods("GET")
 	r.HandleFunc("/raw/{campaign}/{file}/data", rds.HandleFileDownload).methods("PUT")
 
