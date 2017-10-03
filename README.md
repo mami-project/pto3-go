@@ -1,2 +1,7 @@
 # gopto
-Experimental PTO v3 API implementation in Golang
+
+MAMI Path Transparency Observatory (PTO) version 3 API implementation in golang
+
+```
+ptosrv
+```

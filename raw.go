@@ -23,6 +23,7 @@ const FileMetadataSuffix = ".ptofile_metadata.json"
 // DeletionTagSuffix is the suffix on a deletion tag on disk
 const DeletionTagSuffix = ".ptofile_delete_me"
 
+// DataRelativeURL is the path relative to each file metadata path for content access
 var DataRelativeURL *url.URL
 
 func init() {
@@ -46,7 +47,12 @@ func ReadRDSMetadata(pathname string) (out RDSMetadata, err error) {
 
 // WriteToFile writes this metadata object as JSON to a file, ignoring virual metadata keys
 func (md *RDSMetadata) WriteToFile(pathname string) error {
-	return nil
+	b, err := json.Marshal(*md)
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(pathname, b, 0644)
 }
 
 // RDSFiletype encapsulates a filetype in the raw data store
@@ -182,6 +188,13 @@ func (cam *RDSCampaign) putCampaignMetadata(md *RDSMetadata) error {
 	cam.lock.Lock()
 	defer cam.lock.Unlock()
 
+	// verify that we have an owner
+	if _, ok := cam.campaignMetadata["_owner"]; !ok {
+		if _, ok := (*md)["_owner"]; !ok {
+			return RDSMissingMetadataError("_owner")
+		}
+	}
+
 	// copy metadata from input, ignoring virtuals
 	out := make(RDSMetadata, len(*md))
 	for k, v := range *md {
@@ -231,6 +244,34 @@ func (cam *RDSCampaign) getFileMetadata(filename string) (*RDSMetadata, error) {
 	return &out, nil
 }
 
+// updateFileVirtualMetadata fills in the __data and __data_size virtual metadata
+// for a file. Not concurrency safe: caller must hold the campaign write lock.
+func (cam *RDSCampaign) updateFileVirtualMetadata(filename string) error {
+
+	// get file metadata
+	filemd, ok := cam.fileMetadata[filename]
+	if !ok {
+		return RDSNotFoundError(filename)
+	}
+
+	// get file size
+	var datasize int64
+	datafi, err := os.Stat(filepath.Join(cam.path, filename))
+	if err == nil {
+		datasize = datafi.Size()
+	} else if os.IsNotExist(err) {
+		datasize = 0
+	} else {
+		return err
+	}
+
+	// set virtuals
+	filemd["__data_size"] = datasize
+	filemd["__data"] = cam.config.BaseURL.ResolveReference(DataRelativeURL).String()
+
+	return nil
+}
+
 func (cam *RDSCampaign) putFileMetadata(filename string, md *RDSMetadata) error {
 	cam.lock.Lock()
 	defer cam.lock.Unlock()
@@ -256,29 +297,59 @@ func (cam *RDSCampaign) putFileMetadata(filename string, md *RDSMetadata) error 
 		return err
 	}
 
-	// FIXME refactor this into its own function, upload needs to call it too
-	// fill in __data and __data_size virtuals
-	var datasize int64
-	datafi, err := os.Stat(filepath.Join(cam.path, filename))
-	if err == nil {
-		datasize = datafi.Size()
-	} else if os.IsNotExist(err) {
-		datasize = 0
-	} else {
-		return err
+	// update metadata cache
+	cam.fileMetadata[filename] = out
+
+	// and update virtuals
+	return cam.updateFileVirtualMetadata(filename)
+}
+
+func (cam *RDSCampaign) getMetadataString(filename string, k string) string {
+	// reload if stale
+	err := cam.reloadMetadata(false)
+	if err != nil {
+		return ""
 	}
 
-	out["__data_size"] = datasize
-	out["__data"] = cam.config.BaseURL.ResolveReference(DataRelativeURL).String()
+	// if file given, try in file first
+	var md RDSMetadata
+	if filename == "" {
+		md = cam.campaignMetadata
+	} else {
+		md, ok := cam.fileMetadata[filename]
+		if !ok {
+			return ""
+		}
+	}
 
-	// and update metadata cache
-	cam.fileMetadata[filename] = out
-	return nil
+	// type assert to string, or print to force
+	iv := md[k]
+
+	switch v := iv.(type) {
+	case string:
+		return v
+	default:
+		return fmt.Sprintf("%v", iv)
+	}
 }
 
 func (cam *RDSCampaign) getFiletype(filename string) (*RDSFiletype, error) {
-	// FIXME
-	return nil, nil
+	// reload if stale
+	err := cam.reloadMetadata(false)
+	if err != nil {
+		return nil, err
+	}
+
+	cam.lock.RLock()
+	defer cam.lock.RUnlock()
+
+	ftname := cam.getMetadataString(filename, "_file_type")
+	ctype, ok := cam.config.ContentTypes[ftname]
+	if !ok {
+		return nil, fmt.Errorf("unknown filetype %s", ftname)
+	}
+
+	return &RDSFiletype{ftname, ctype}, nil
 }
 
 // NewRDSCampaign creates a new campaign object bound the path of a directory on
@@ -594,7 +665,7 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 }
 
 func (rds *RawDataStore) HandleDeleteFile(w http.ResponseWriter, r *http.Request) {
-
+	http.Error(w, "delete not implemented, come back later", 501)
 }
 
 func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Request) {
@@ -614,7 +685,7 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	}
 
 	// fail if not authorized
-	if !IsAuthorized(w, r, "write_raw:"+camname) {
+	if !IsAuthorized(w, r, "read_raw:"+camname) {
 		return
 	}
 
@@ -644,6 +715,7 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	defer rawfile.Close()
 
 	buf := make([]byte, 65536)
 	for {
@@ -661,15 +733,110 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 }
 
 func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
 
+	camname, ok := vars["campaign"]
+	if !ok {
+		http.Error(w, "missing campaign", 400)
+		return
+	}
+
+	filename, ok := vars["file"]
+	if !ok {
+		http.Error(w, "missing file", 400)
+		return
+	}
+
+	// fail if not authorized
+	if !IsAuthorized(w, r, "write_raw:"+camname) {
+		return
+	}
+
+	// now look up the campaign
+	cam, ok := rds.campaigns[camname]
+	if !ok {
+		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), 404)
+		return
+	}
+
+	// build a local filesystem path for uploading and validate it
+	rawpath := filepath.Clean(filepath.Join(rds.path, camname, filename))
+	if pathok, _ := filepath.Match(filepath.Join(rds.path, "*", "*"), rawpath); !pathok {
+		http.Error(w, fmt.Sprintf("path %s is not ok", rawpath), 400)
+		return
+	}
+
+	// fail if file exists
+	_, err := os.Stat(rawpath)
+	if (err == nil) || !os.IsNotExist(err) {
+		http.Error(w, fmt.Sprintf("file %s/%s already exists", camname, filename), 400)
+	}
+
+	// determine and verify MIME type
+	ft, err := cam.getFiletype(filename)
+
+	if ft.ContentType != r.Header.Get("Content-Type") {
+		http.Error(w, fmt.Sprintf("Content-Type for %s/%s must be %s", camname, filename, ft.ContentType), 400)
+	}
+
+	// write MIME type to header
+	w.Header()["Content-Type"] = []string{ft.ContentType}
+
+	// now stream the file from the reader on to disk
+	rawfile, err := os.Create(rawpath)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer rawfile.Close()
+
+	reqreader, err := r.GetBody()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	buf := make([]byte, 65536)
+	for {
+		n, err := reqreader.Read(buf)
+		if err == nil {
+			if n == 0 {
+				break
+			}
+			rawfile.Write(buf[0:n]) // FIXME log error here
+		} else {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
+
+	// update file metadata to reflect size
+	rawfile.Sync()
+
+	err = cam.updateFileVirtualMetadata(filename)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+}
+
+func (rds *RawDataStore) AddRoutes(r *mux.Router) {
+	r.HandleFunc("/raw", rds.HandleListCampaigns).Methods("GET")
+	r.HandleFunc("/raw/{campaign}", rds.HandleGetCampaignMetadata).Methods("GET")
+	r.HandleFunc("/raw/{campaign}", rds.HandlePutCampaignMetadata).Methods("PUT")
+	r.HandleFunc("/raw/{campaign}/{file}", rds.HandleGetFileMetadata).Methods("GET")
+	r.HandleFunc("/raw/{campaign}/{file}", rds.HandlePutFileMetadata).Methods("PUT")
+	r.HandleFunc("/raw/{campaign}/{file}", rds.HandleDeleteFile).Methods("DELETE")
+	r.HandleFunc("/raw/{campaign}/{file}/data", rds.HandleFileDownload).Methods("GET")
+	r.HandleFunc("/raw/{campaign}/{file}/data", rds.HandleFileDownload).Methods("PUT")
 }
 
 // NewRawDataStore encapsulates a raw data store, given a pathname of a
 // directory containing its files.
-func NewRawDataStore(config *PTOServerConfig, path string) (*RawDataStore, error) {
-	rds := RawDataStore{config: config, path: path}
+func NewRawDataStore(config *PTOServerConfig) (*RawDataStore, error) {
+	rds := RawDataStore{config: config, path: config.RawRoot}
 
-	// now scan the directory for campaigns
+	// scan the directory for campaigns
 	rds.scanCampaigns()
 
 	return &rds, nil
