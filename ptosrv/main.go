@@ -7,12 +7,12 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/mami-project/gopto"
+	pto3 "github.com/mami-project/pto3-go"
 )
 
 func main() {
 	// load configuration file
-	config, err := gopto.LoadConfig("ptoconfig.json")
+	config, err := pto3.LoadConfig("ptoconfig.json")
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -23,7 +23,7 @@ func main() {
 
 	// create a RawDataStore around the RDS path if given
 	if config.RawRoot != "" {
-		rds, err := gopto.NewRawDataStore(config)
+		rds, err := pto3.NewRawDataStore(config)
 		if err != nil {
 			log.Fatal(err.Error())
 		}

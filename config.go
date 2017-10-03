@@ -1,4 +1,4 @@
-package gopto
+package pto3
 
 import (
 	"encoding/json"

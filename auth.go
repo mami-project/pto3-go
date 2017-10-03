@@ -1,6 +1,6 @@
 // Path Transparency Observatory JWT-based authorization
 
-package gopto
+package pto3
 
 import "net/http"
 
