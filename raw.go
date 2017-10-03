@@ -313,10 +313,11 @@ func (cam *RDSCampaign) getMetadataString(filename string, k string) string {
 
 	// if file given, try in file first
 	var md RDSMetadata
+	var ok bool
 	if filename == "" {
 		md = cam.campaignMetadata
 	} else {
-		md, ok := cam.fileMetadata[filename]
+		md, ok = cam.fileMetadata[filename]
 		if !ok {
 			return ""
 		}
