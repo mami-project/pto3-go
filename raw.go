@@ -367,6 +367,9 @@ type RawDataStore struct {
 	// application configuration
 	config *PTOServerConfig
 
+	// authorizer
+	azr *Authorizer
+
 	// base path
 	path string
 
@@ -430,7 +433,7 @@ type campaignList struct {
 func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Request) {
 
 	// fail if not authorized
-	if !IsAuthorized(w, r, "list_raw") {
+	if !rds.azr.IsAuthorized(w, r, "list_raw") {
 		return
 	}
 
@@ -469,7 +472,7 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 	}
 
 	// fail if not authorized
-	if !IsAuthorized(w, r, "read_raw:"+camname) {
+	if !rds.azr.IsAuthorized(w, r, "read_raw:"+camname) {
 		return
 	}
 
@@ -507,7 +510,7 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 	}
 
 	// fail if not authorized
-	if !IsAuthorized(w, r, "write_raw:"+camname) {
+	if !rds.azr.IsAuthorized(w, r, "write_raw:"+camname) {
 		return
 	}
 
@@ -573,7 +576,7 @@ func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Re
 	}
 
 	// fail if not authorized
-	if !IsAuthorized(w, r, "read_raw:"+camname) {
+	if !rds.azr.IsAuthorized(w, r, "read_raw:"+camname) {
 		return
 	}
 
@@ -615,7 +618,7 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 	}
 
 	// fail if not authorized
-	if !IsAuthorized(w, r, "write_raw:"+camname) {
+	if !rds.azr.IsAuthorized(w, r, "write_raw:"+camname) {
 		return
 	}
 
@@ -686,7 +689,7 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	}
 
 	// fail if not authorized
-	if !IsAuthorized(w, r, "read_raw:"+camname) {
+	if !rds.azr.IsAuthorized(w, r, "read_raw:"+camname) {
 		return
 	}
 
@@ -749,7 +752,7 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	// fail if not authorized
-	if !IsAuthorized(w, r, "write_raw:"+camname) {
+	if !rds.azr.IsAuthorized(w, r, "write_raw:"+camname) {
 		return
 	}
 
@@ -834,8 +837,8 @@ func (rds *RawDataStore) AddRoutes(r *mux.Router) {
 
 // NewRawDataStore encapsulates a raw data store, given a pathname of a
 // directory containing its files.
-func NewRawDataStore(config *PTOServerConfig) (*RawDataStore, error) {
-	rds := RawDataStore{config: config, path: config.RawRoot}
+func NewRawDataStore(config *PTOServerConfig, azr *Authorizer) (*RawDataStore, error) {
+	rds := RawDataStore{config: config, azr: azr, path: config.RawRoot}
 
 	// scan the directory for campaigns
 	rds.scanCampaigns()
