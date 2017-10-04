@@ -60,7 +60,7 @@ func TestMain(m *testing.M) {
 func TestListCampaigns(t *testing.T) {
 
 	// list campaigns, this should be empty
-	req, err := http.NewRequest("GET", "http://ptotest.corvid.ch/raw/", nil)
+	req, err := http.NewRequest("GET", "http://ptotest.corvid.ch/raw", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,10 +77,10 @@ func TestListCampaigns(t *testing.T) {
 	}
 
 	if res.Header().Get("Content-Type") != "application/json" {
-		t.Fatal()
+		t.Fatalf("unexpected content type %s", res.Header().Get("Content-Type"))
 	}
 
-	if err = json.Unmarshal(res.Body.Bytes(), camlist); err != nil {
+	if err = json.Unmarshal(res.Body.Bytes(), &camlist); err != nil {
 		t.Fatal(err)
 	}
 
