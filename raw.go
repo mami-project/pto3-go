@@ -457,7 +457,7 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 
 	// FIXME pagination goes here
 
-	w.Header()["Content-Type"] = []string{"application/json"}
+	w.Header().Set("Content-Type", "application/json")
 	w.Write(outb)
 }
 
@@ -495,7 +495,7 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 		return
 	}
 
-	w.Header()["Content-Type"] = []string{"application/json"}
+	w.Header().Set("Content-Type", "application/json")
 	w.Write(outb)
 }
 
@@ -556,7 +556,7 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 		return
 	}
 
-	w.Header()["Content-Type"] = []string{"application/json"}
+	w.Header().Set("Content-Type", "application/json")
 	w.Write(outb)
 }
 
@@ -598,7 +598,7 @@ func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	w.Header()["Content-Type"] = []string{"application/json"}
+	w.Header().Set("Content-Type", "application/json")
 	w.Write(outb)
 }
 
@@ -664,7 +664,7 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	w.Header()["Content-Type"] = []string{"application/json"}
+	w.Header().Set("Content-Type", "application/json")
 	w.Write(outb) // FIXME log error here
 }
 
@@ -711,7 +711,8 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	}
 
 	// write MIME type to header
-	w.Header()["Content-Type"] = []string{ft.ContentType}
+
+	w.Header().Set("Content-Type", ft.ContentType)
 
 	// now stream the file to the writer
 	rawfile, err := os.Open(rawpath)
@@ -784,7 +785,7 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	// write MIME type to header
-	w.Header()["Content-Type"] = []string{ft.ContentType}
+	w.Header().Set("Content-Type", ft.ContentType)
 
 	// now stream the file from the reader on to disk
 	rawfile, err := os.Create(rawpath)

@@ -50,11 +50,42 @@ func TestMain(m *testing.M) {
 	}
 
 	r = mux.NewRouter()
+	r.HandleFunc("/", config.HandleRoot)
 	rds.AddRoutes(r)
 
 	// go!
 	os.Exit(m.Run())
 
+}
+
+func TestListRoot(t *testing.T) {
+	req, err := http.NewRequest("GET", "http://ptotest.corvid.ch/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, req)
+
+	var links map[string]string
+
+	if res.Code != 200 {
+		t.Fatalf("GET / got status %d", res.Code)
+	}
+
+	if res.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf("GET / unexpected content type %s", res.Header().Get("Content-Type"))
+	}
+
+	if err = json.Unmarshal(res.Body.Bytes(), &links); err != nil {
+		t.Fatal(err)
+	}
+
+	rawlink := links["raw"]
+	if rawlink != "http://ptotest.corvid.ch/raw" {
+		t.Fatalf("raw link is %s", rawlink)
+	}
 }
 
 func TestListCampaigns(t *testing.T) {
@@ -86,5 +117,23 @@ func TestListCampaigns(t *testing.T) {
 
 	if _, ok := camlist["campaigns"]; !ok {
 		t.Fatal("GET /raw missing campaign key")
+	}
+}
+
+func TestBadAuth(t *testing.T) {
+
+	// list campaigns with an unknown api key
+	req, err := http.NewRequest("GET", "http://ptotest.corvid.ch/raw", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "APIKEY deadbeef")
+	req.Header.Set("Accept", "application/json")
+
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, req)
+
+	if res.Code != 403 {
+		t.Fatalf("GET /raw with bad APIKEY got status %d", res.Code)
 	}
 }
