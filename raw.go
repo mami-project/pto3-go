@@ -52,7 +52,7 @@ func (md *RDSMetadata) WriteToFile(pathname string) error {
 		return err
 	}
 
-	return ioutil.WriteFile(pathname, b, 0755)
+	return ioutil.WriteFile(pathname, b, 0644)
 }
 
 // RDSFiletype encapsulates a filetype in the raw data store
@@ -430,7 +430,7 @@ func (rds *RawDataStore) createCampaign(camname string, md *RDSMetadata) (*RDSCa
 
 	campath := filepath.Join(rds.path, camname)
 
-	err := os.Mkdir(campath, 0644)
+	err := os.Mkdir(campath, 0755)
 	if err != nil {
 		return nil, err
 	}
