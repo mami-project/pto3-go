@@ -2,7 +2,7 @@
 
 Path Transparency Observatory API (PAPI) specifiation, version 3
 
-**NOTE** as of this commit the code in package `github.com/mami-project/gopto` does not yet fully implement this specification.
+**NOTE** as of this commit the code in package `github.com/mami-project/pto3-go` does not yet fully implement this specification.
 
 The P consists of four applications: raw data access and upload, observation
 access, observation query, and data analysis control. The interface to each
@@ -63,6 +63,7 @@ The following reserved and virtual metadata keys are presently supported:
 | Key             | Description                                                             |
 | --------------- | ----------------------------------------------------------------------- |
 | `_file_type`    | PTO filetype. See Filetypes, below.                                     |
+| `_owner`        | Identity of user or organization owning the file/campaign               |
 | `_time_start`   | Timestamp of first observation in the raw data file, in ISO8601 format  |
 | `_time_end`     | Time of last observation in the raw data file, in ISO8601 format        |
 | `__data`        | URL of the resource containing file data.                               |
@@ -92,6 +93,8 @@ are listed below:
 
 | Filetype            | MIME type                     | Description                                   |
 | ------------------- | ------------------------------|---------------------------------------------- |
+| `obs-ndjson-bz2`    | `application/bzip2`           | Compressed observations in [OSF](OBSETS.md) |
+| `obs-ndjson`        | `application/vnd.mami.ndjson` | Uncompressed observations in [OSF](OBSETS.md) |
 | `ps-ecn-ndjson-bz2` | `application/bzip2`           | Compressed [PATHspider](https://pathspider.net) ECN results             |
 | `ps-ecn-ndjson`     | `application/vnd.mami.ndjson` | Uncompressed [PATHspider](https://pathspider.net) ECN results           |
 

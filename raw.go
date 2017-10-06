@@ -74,13 +74,13 @@ type RDSError struct {
 
 func (e *RDSError) Error() string {
 	switch e.Status {
-	case 400:
+	case http.StatusBadRequest:
 		return fmt.Sprintf("metadata key %s", e.subject)
-	case 403:
+	case http.StatusForbidden:
 		return fmt.Sprintf("operation forbidden on %s", e.subject)
-	case 404:
+	case http.StatusNotFound:
 		return fmt.Sprintf("%s not found", e.subject)
-	case 415:
+	case http.StatusUnsupportedMediaType:
 		return fmt.Sprintf("wrong Content-Type: %s required", e.subject)
 	}
 
@@ -89,12 +89,12 @@ func (e *RDSError) Error() string {
 
 // RDSNotFoundError returns a 404 error for a missing campaign and/or file
 func RDSNotFoundError(name string) error {
-	return &RDSError{name, 404}
+	return &RDSError{name, http.StatusNotFound}
 }
 
 // RDSMissingMetadataError returns a 400 error for a missing metadata key in upload
 func RDSMissingMetadataError(key string) error {
-	return &RDSError{key, 400}
+	return &RDSError{key, http.StatusBadRequest}
 }
 
 // RDSCampaign encapsulates a single campaign in a raw data store,
@@ -385,7 +385,7 @@ func rdsHTTPError(w http.ResponseWriter, err error) {
 	case *RDSError:
 		http.Error(w, ev.Error(), ev.Status)
 	default:
-		http.Error(w, fmt.Sprintf("internal server error: %s", err.Error()), 500)
+		http.Error(w, fmt.Sprintf("internal server error: %s", err.Error()), http.StatusInternalServerError)
 	}
 }
 
@@ -443,7 +443,7 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 	for k, _ := range rds.campaigns {
 		camurl, err := url.Parse(k)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("raw data store error: campaign %s not ok", k), 500)
+			http.Error(w, fmt.Sprintf("raw data store error: campaign %s not ok", k), http.StatusInternalServerError)
 			return
 		}
 		out.Campaigns = append(out.Campaigns, camurl.String())
@@ -451,7 +451,7 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		http.Error(w, "raw data store error: cannot marshal campaign list", 500)
+		http.Error(w, "raw data store error: cannot marshal campaign list", http.StatusInternalServerError)
 		return
 	}
 
@@ -467,7 +467,7 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 	// get campaign name
 	camname, ok := vars["campaign"]
 	if !ok {
-		http.Error(w, "missing campaign", 400)
+		http.Error(w, "missing campaign", http.StatusBadRequest)
 		return
 	}
 
@@ -479,7 +479,7 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 	// look up campaign
 	cam, ok := rds.campaigns[camname]
 	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), 404)
+		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
 		return
 	}
 
@@ -491,7 +491,7 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		http.Error(w, "raw data store error: cannot marshal campaign metadata", 500)
+		http.Error(w, "raw data store error: cannot marshal campaign metadata", http.StatusInternalServerError)
 		return
 	}
 
@@ -505,7 +505,7 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 	// get campaign name
 	camname, ok := vars["campaign"]
 	if !ok {
-		http.Error(w, "missing campaign", 400)
+		http.Error(w, "missing campaign", http.StatusBadRequest)
 		return
 	}
 
@@ -517,7 +517,7 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 	// read metadata from request
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -525,14 +525,14 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 	var in RDSMetadata
 	err = json.Unmarshal(b, in)
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// now look up the campaign
 	cam, ok := rds.campaigns[camname]
 	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), 404)
+		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
 		return
 	}
 
@@ -552,11 +552,12 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		http.Error(w, "raw data store error: cannot marshal campaign metadata", 500)
+		http.Error(w, "raw data store error: cannot marshal campaign metadata", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
 	w.Write(outb)
 }
 
@@ -565,13 +566,13 @@ func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Re
 
 	camname, ok := vars["campaign"]
 	if !ok {
-		http.Error(w, "missing campaign", 400)
+		http.Error(w, "missing campaign", http.StatusBadRequest)
 		return
 	}
 
 	filename, ok := vars["file"]
 	if !ok {
-		http.Error(w, "missing file", 400)
+		http.Error(w, "missing file", http.StatusBadRequest)
 		return
 	}
 
@@ -582,7 +583,7 @@ func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Re
 
 	cam, ok := rds.campaigns[vars["campaign"]]
 	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), 404)
+		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
 		return
 	}
 
@@ -594,7 +595,7 @@ func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Re
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		http.Error(w, "raw data store error: cannot marshal file metadata", 500)
+		http.Error(w, "raw data store error: cannot marshal file metadata", http.StatusInternalServerError)
 		return
 	}
 
@@ -607,13 +608,13 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 
 	camname, ok := vars["campaign"]
 	if !ok {
-		http.Error(w, "missing campaign", 400)
+		http.Error(w, "missing campaign", http.StatusBadRequest)
 		return
 	}
 
 	filename, ok := vars["file"]
 	if !ok {
-		http.Error(w, "missing file", 400)
+		http.Error(w, "missing file", http.StatusBadRequest)
 		return
 	}
 
@@ -625,7 +626,7 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 	// read metadata from request
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -633,14 +634,14 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 	var in RDSMetadata
 	err = json.Unmarshal(b, in)
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// now look up the campaign
 	cam, ok := rds.campaigns[camname]
 	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), 404)
+		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
 		return
 	}
 
@@ -660,16 +661,17 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		http.Error(w, "raw data store error: cannot marshal file metadata", 500)
+		http.Error(w, "raw data store error: cannot marshal file metadata", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	w.Write(outb) // FIXME log error here
 }
 
 func (rds *RawDataStore) HandleDeleteFile(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "delete not implemented, come back later", 501)
+	http.Error(w, "delete not implemented, come back later", http.StatusNotImplemented)
 }
 
 func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Request) {
@@ -678,13 +680,13 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 
 	camname, ok := vars["campaign"]
 	if !ok {
-		http.Error(w, "missing campaign", 400)
+		http.Error(w, "missing campaign", http.StatusBadRequest)
 		return
 	}
 
 	filename, ok := vars["file"]
 	if !ok {
-		http.Error(w, "missing file", 400)
+		http.Error(w, "missing file", http.StatusBadRequest)
 		return
 	}
 
@@ -696,7 +698,7 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	// now look up the campaign
 	cam, ok := rds.campaigns[camname]
 	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), 404)
+		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
 		return
 	}
 
@@ -706,7 +708,7 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	// build a local filesystem path for downloading and validate it
 	rawpath := filepath.Clean(filepath.Join(rds.path, camname, filename))
 	if pathok, _ := filepath.Match(filepath.Join(rds.path, "*", "*"), rawpath); !pathok {
-		http.Error(w, fmt.Sprintf("path %s is not ok", rawpath), 400)
+		http.Error(w, fmt.Sprintf("path %s is not ok", rawpath), http.StatusBadRequest)
 		return
 	}
 
@@ -717,7 +719,7 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	// now stream the file to the writer
 	rawfile, err := os.Open(rawpath)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer rawfile.Close()
@@ -731,7 +733,7 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 			}
 			w.Write(buf[0:n]) // FIXME log error here
 		} else {
-			http.Error(w, err.Error(), 500)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
@@ -742,13 +744,13 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 
 	camname, ok := vars["campaign"]
 	if !ok {
-		http.Error(w, "missing campaign", 400)
+		http.Error(w, "missing campaign", http.StatusBadRequest)
 		return
 	}
 
 	filename, ok := vars["file"]
 	if !ok {
-		http.Error(w, "missing file", 400)
+		http.Error(w, "missing file", http.StatusBadRequest)
 		return
 	}
 
@@ -760,28 +762,28 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	// now look up the campaign
 	cam, ok := rds.campaigns[camname]
 	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), 404)
+		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
 		return
 	}
 
 	// build a local filesystem path for uploading and validate it
 	rawpath := filepath.Clean(filepath.Join(rds.path, camname, filename))
 	if pathok, _ := filepath.Match(filepath.Join(rds.path, "*", "*"), rawpath); !pathok {
-		http.Error(w, fmt.Sprintf("path %s is not ok", rawpath), 400)
+		http.Error(w, fmt.Sprintf("path %s is not ok", rawpath), http.StatusBadRequest)
 		return
 	}
 
 	// fail if file exists
 	_, err := os.Stat(rawpath)
 	if (err == nil) || !os.IsNotExist(err) {
-		http.Error(w, fmt.Sprintf("file %s/%s already exists", camname, filename), 400)
+		http.Error(w, fmt.Sprintf("file %s/%s already exists", camname, filename), http.StatusBadRequest)
 	}
 
 	// determine and verify MIME type
 	ft, err := cam.getFiletype(filename)
 
 	if ft.ContentType != r.Header.Get("Content-Type") {
-		http.Error(w, fmt.Sprintf("Content-Type for %s/%s must be %s", camname, filename, ft.ContentType), 400)
+		http.Error(w, fmt.Sprintf("Content-Type for %s/%s must be %s", camname, filename, ft.ContentType), http.StatusBadRequest)
 	}
 
 	// write MIME type to header
@@ -790,14 +792,14 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	// now stream the file from the reader on to disk
 	rawfile, err := os.Create(rawpath)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer rawfile.Close()
 
 	reqreader, err := r.GetBody()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -810,19 +812,22 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 			}
 			rawfile.Write(buf[0:n]) // FIXME log error here
 		} else {
-			http.Error(w, err.Error(), 500)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 
 	// update file metadata to reflect size
 	rawfile.Sync()
-
 	err = cam.updateFileVirtualMetadata(filename)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// and now a reply... what to show here?
+	w.WriteHeader(http.StatusAccepted)
+
 }
 
 func (rds *RawDataStore) AddRoutes(r *mux.Router) {
