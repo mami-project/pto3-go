@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"strconv"
 	"testing"
 
 	"github.com/gorilla/mux"
@@ -142,12 +141,20 @@ func TestBadAuth(t *testing.T) {
 	executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw", nil, "abadc0de", http.StatusForbidden)
 }
 
+type testRawMetadata struct {
+	FileType    string `json:"_file_type"`
+	Owner       string `json:"_owner"`
+	Description string `json:"description"`
+	TimeStart   string `json:"_time_start"`
+	TimeEnd     string `json:"_time_end"`
+	DataSize    int    `json:"__data_size"`
+	DataURL     string `json:"__data"`
+}
+
 func TestRoundTrip(t *testing.T) {
 
-	var md map[string]string
-
 	// create a new campaign
-	md = map[string]string{
+	md := pto3.RDSMetadata{
 		"_file_type":  "test",
 		"_owner":      "ptotest@mami-project.eu",
 		"description": "a campaign filled with uninteresting test data",
@@ -155,48 +162,38 @@ func TestRoundTrip(t *testing.T) {
 	res := executePutJSON(r, t, "http://ptotest.mami-project.eu/raw/test", md, GoodAPIKey)
 
 	// create a file within the campaign
-	md = map[string]string{
+	md = pto3.RDSMetadata{
 		"_time_start": "2010-01-01T00:00:00",
 		"_time_end":   "2010-01-02T00:00:00",
 	}
 	res = executePutJSON(r, t, "http://ptotest.mami-project.eu/raw/test/file001.json", md, GoodAPIKey)
 
 	// find the data link
-	err := json.Unmarshal(res.Body.Bytes(), md)
+	var trm testRawMetadata
+	err := json.Unmarshal(res.Body.Bytes(), &trm)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	dataurl, ok := md["__data"]
-	if !ok {
+	if trm.DataURL == "" {
 		t.Fatal("missing __data virtual after metadata upload")
 	}
 
 	// now upload the data
 	data := []string{"this", "is", "a", "list", "of", "words"}
-	res = executePutJSON(r, t, dataurl, data, GoodAPIKey)
+	res = executePutJSON(r, t, trm.DataURL, data, GoodAPIKey)
 
 	// retrieve file metadata and check file size
 	res = executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw/test/file001.json", nil, GoodAPIKey, http.StatusOK)
 	checkContentType(t, res)
 
-	err = json.Unmarshal(res.Body.Bytes(), md)
+	err = json.Unmarshal(res.Body.Bytes(), &trm)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	datasize_str, ok := md["__data_size"]
-	if !ok {
-		t.Fatal("missing __data_size virtual after data upload")
-	}
-
-	datasize, err := strconv.Atoi(datasize_str)
-	if err != nil {
-		t.Fatalf("got non integer data size: %s", datasize_str)
-	}
-
 	b, _ := json.Marshal(data)
-	if len(b) != datasize {
-		t.Fatalf("file upload size mismatch: sent %d got %d", len(b), datasize)
+	if len(b) != trm.DataSize {
+		t.Fatalf("file upload size mismatch: sent %d got %d", len(b), trm.DataSize)
 	}
 }

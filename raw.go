@@ -119,6 +119,20 @@ type RDSCampaign struct {
 	lock sync.RWMutex
 }
 
+// NewRDSCampaign creates a new campaign object bound the path of a directory on
+// disk containing the campaign's files.
+func NewRDSCampaign(config *PTOServerConfig, path string) *RDSCampaign {
+	cam := RDSCampaign{
+		config:           config,
+		path:             path,
+		stale:            true,
+		campaignMetadata: make(RDSMetadata),
+		fileMetadata:     make(map[string]RDSMetadata),
+	}
+
+	return &cam
+}
+
 // reloadMetadata reloads the metadata for this campaign and its files from disk
 func (cam *RDSCampaign) reloadMetadata(force bool) error {
 	var err error
@@ -351,14 +365,6 @@ func (cam *RDSCampaign) getFiletype(filename string) (*RDSFiletype, error) {
 	}
 
 	return &RDSFiletype{ftname, ctype}, nil
-}
-
-// NewRDSCampaign creates a new campaign object bound the path of a directory on
-// disk containing the campaign's files.
-func NewRDSCampaign(config *PTOServerConfig, path string) *RDSCampaign {
-	cam := RDSCampaign{config: config, path: path, stale: true}
-
-	return &cam
 }
 
 // A RawDataStore encapsulates a pile of PTO data and metadata files as a set of
