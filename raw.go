@@ -358,11 +358,11 @@ func (cam *RDSCampaign) putFileMetadata(filename string, md *RDSMetadata) error 
 	return cam.updateFileVirtualMetadata(filename)
 }
 
-func (cam *RDSCampaign) getFiletype(filename string) (*RDSFiletype, error) {
+func (cam *RDSCampaign) getFiletype(filename string) *RDSFiletype {
 	// reload if stale
 	err := cam.reloadMetadata(false)
 	if err != nil {
-		return nil, err
+		return nil
 	}
 
 	cam.lock.RLock()
@@ -384,10 +384,10 @@ func (cam *RDSCampaign) getFiletype(filename string) (*RDSFiletype, error) {
 
 	ctype, ok := cam.config.ContentTypes[ftname]
 	if !ok {
-		return nil, fmt.Errorf("unknown filetype %s", ftname)
+		return nil
 	}
 
-	return &RDSFiletype{ftname, ctype}, nil
+	return &RDSFiletype{ftname, ctype}
 }
 
 // A RawDataStore encapsulates a pile of PTO data and metadata files as a set of
@@ -753,12 +753,15 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	// now look up the campaign
 	cam, ok := rds.campaigns[camname]
 	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
+		http.Error(w, fmt.Sprintf("campaign %s not found", camname), http.StatusNotFound)
 		return
 	}
 
 	// determine MIME type
-	ft, err := cam.getFiletype(filename)
+	ft := cam.getFiletype(filename)
+	if ft == nil {
+		http.Error(w, fmt.Sprintf("cannot get filetype for %s", filename), http.StatusInternalServerError)
+	}
 
 	// build a local filesystem path for downloading and validate it
 	rawpath := filepath.Clean(filepath.Join(rds.path, camname, filename))
@@ -835,7 +838,10 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	// determine and verify MIME type
-	ft, err := cam.getFiletype(filename)
+	ft := cam.getFiletype(filename)
+	if ft == nil {
+		http.Error(w, fmt.Sprintf("cannot get filetype for %s", filename), http.StatusInternalServerError)
+	}
 	if ft.ContentType != r.Header.Get("Content-Type") {
 		http.Error(w, fmt.Sprintf("Content-Type for %s/%s must be %s", camname, filename, ft.ContentType), http.StatusBadRequest)
 	}
