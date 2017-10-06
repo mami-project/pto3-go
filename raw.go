@@ -40,7 +40,7 @@ type RDSMetadata map[string]interface{}
 func ReadRDSMetadata(pathname string) (out RDSMetadata, err error) {
 	rmd, err := ioutil.ReadFile(pathname)
 	if err == nil {
-		err = json.Unmarshal(rmd, out)
+		err = json.Unmarshal(rmd, &out)
 	}
 	return
 }
@@ -52,7 +52,7 @@ func (md *RDSMetadata) WriteToFile(pathname string) error {
 		return err
 	}
 
-	return ioutil.WriteFile(pathname, b, 0644)
+	return ioutil.WriteFile(pathname, b, 0755)
 }
 
 // RDSFiletype encapsulates a filetype in the raw data store
@@ -426,6 +426,23 @@ func (rds *RawDataStore) scanCampaigns() error {
 	return nil
 }
 
+func (rds *RawDataStore) createCampaign(camname string, md *RDSMetadata) (*RDSCampaign, error) {
+
+	campath := filepath.Join(rds.path, camname)
+
+	err := os.Mkdir(campath, 0644)
+	if err != nil {
+		return nil, err
+	}
+	cam := NewRDSCampaign(rds.config, campath)
+
+	rds.lock.Lock()
+	rds.campaigns[camname] = cam
+	rds.lock.Unlock()
+
+	return cam, nil
+}
+
 type campaignList struct {
 	Campaigns []string `json:"campaigns"`
 }
@@ -523,7 +540,7 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 
 	// unmarshal it
 	var in RDSMetadata
-	err = json.Unmarshal(b, in)
+	err = json.Unmarshal(b, &in)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -532,8 +549,12 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 	// now look up the campaign
 	cam, ok := rds.campaigns[camname]
 	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
-		return
+		// Campaign doesn't exist. We have to create it.
+		cam, err = rds.createCampaign(camname, &in)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("cannot create campaign %s", camname), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// overwrite metadata
@@ -632,7 +653,7 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 
 	// unmarshal it
 	var in RDSMetadata
-	err = json.Unmarshal(b, in)
+	err = json.Unmarshal(b, &in)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
