@@ -578,7 +578,7 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusCreated)
 	w.Write(outb)
 }
 
