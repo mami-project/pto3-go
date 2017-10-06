@@ -102,7 +102,6 @@ func checkContentType(t *testing.T, res *httptest.ResponseRecorder) {
 		t.Fatalf("unexpected content type %s", res.Header().Get("Content-Type"))
 	}
 }
-
 func TestListRoot(t *testing.T) {
 	res := executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/", nil, "", http.StatusOK)
 
@@ -159,6 +158,8 @@ func TestRoundTrip(t *testing.T) {
 		"_owner":      "ptotest@mami-project.eu",
 		"description": "a campaign filled with uninteresting test data",
 	}
+	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test")
+
 	res := executePutJSON(r, t, "http://ptotest.mami-project.eu/raw/test", md, GoodAPIKey)
 
 	// create a file within the campaign
@@ -166,6 +167,7 @@ func TestRoundTrip(t *testing.T) {
 		"_time_start": "2010-01-01T00:00:00",
 		"_time_end":   "2010-01-02T00:00:00",
 	}
+	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test/file001.json")
 	res = executePutJSON(r, t, "http://ptotest.mami-project.eu/raw/test/file001.json", md, GoodAPIKey)
 
 	// find the data link
@@ -178,6 +180,8 @@ func TestRoundTrip(t *testing.T) {
 	if trm.DataURL == "" {
 		t.Fatal("missing __data virtual after metadata upload")
 	}
+
+	t.Logf("attempting to upload file to %s", trm.DataURL)
 
 	// now upload the data
 	data := []string{"this", "is", "a", "list", "of", "words"}

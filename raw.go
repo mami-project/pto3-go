@@ -133,6 +133,23 @@ func NewRDSCampaign(config *PTOServerConfig, path string) *RDSCampaign {
 	return &cam
 }
 
+func checkCampaignMetadata(md *RDSMetadata) (*RDSMetadata, error) {
+	// verify that we have an owner
+	if _, ok := (*md)["_owner"]; !ok {
+		return nil, RDSMissingMetadataError("_owner")
+	}
+
+	// copy metadata from input, ignoring virtuals
+	out := make(RDSMetadata, len(*md))
+	for k, v := range *md {
+		if !strings.HasPrefix(k, "__") {
+			out[k] = v
+		}
+	}
+
+	return &out, nil
+}
+
 // reloadMetadata reloads the metadata for this campaign and its files from disk
 func (cam *RDSCampaign) reloadMetadata(force bool) error {
 	var err error
@@ -141,7 +158,7 @@ func (cam *RDSCampaign) reloadMetadata(force bool) error {
 	defer cam.lock.Unlock()
 
 	// skip if not stale
-	if !cam.stale {
+	if !force && !cam.stale {
 		return nil
 	}
 
@@ -198,33 +215,51 @@ func (cam *RDSCampaign) getCampaignMetadata() (*RDSMetadata, error) {
 	return &out, nil
 }
 
+func (cam *RDSCampaign) creat(md *RDSMetadata) error {
+	err := os.Mkdir(cam.path, 0755)
+	if err != nil {
+		return err
+	}
+
+	// make sure campaign metadata is ok
+	md, err = checkCampaignMetadata(md)
+	if err != nil {
+		return err
+	}
+
+	// write it directly to the file
+	err = md.WriteToFile(filepath.Join(cam.path, CampaignMetadataFilename))
+	if err != nil {
+		return err
+	}
+
+	// and force a rescan
+	err = cam.reloadMetadata(true)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (cam *RDSCampaign) putCampaignMetadata(md *RDSMetadata) error {
 	cam.lock.Lock()
 	defer cam.lock.Unlock()
 
-	// verify that we have an owner
-	if _, ok := cam.campaignMetadata["_owner"]; !ok {
-		if _, ok := (*md)["_owner"]; !ok {
-			return RDSMissingMetadataError("_owner")
-		}
-	}
-
-	// copy metadata from input, ignoring virtuals
-	out := make(RDSMetadata, len(*md))
-	for k, v := range *md {
-		if !strings.HasPrefix(k, "__") {
-			out[k] = v
-		}
+	// make sure campaign metadata is ok
+	md, err := checkCampaignMetadata(md)
+	if err != nil {
+		return err
 	}
 
 	// write to campaign metadata file
-	err := out.WriteToFile(filepath.Join(cam.path, CampaignMetadataFilename))
+	err = md.WriteToFile(filepath.Join(cam.path, CampaignMetadataFilename))
 	if err != nil {
 		return err
 	}
 
 	// update metadata cache
-	cam.campaignMetadata = out
+	cam.campaignMetadata = *md
 	return nil
 }
 
@@ -279,9 +314,14 @@ func (cam *RDSCampaign) updateFileVirtualMetadata(filename string) error {
 		return err
 	}
 
-	// set virtuals
 	filemd["__data_size"] = datasize
-	filemd["__data"] = cam.config.BaseURL.ResolveReference(DataRelativeURL).String()
+
+	// generate data path
+	datarel, err := url.Parse("/raw/" + filepath.Base(cam.path) + "/" + filename + "/data")
+	if err != nil {
+		return err
+	}
+	filemd["__data"] = cam.config.BaseURL.ResolveReference(datarel).String()
 
 	return nil
 }
@@ -318,36 +358,6 @@ func (cam *RDSCampaign) putFileMetadata(filename string, md *RDSMetadata) error 
 	return cam.updateFileVirtualMetadata(filename)
 }
 
-func (cam *RDSCampaign) getMetadataString(filename string, k string) string {
-	// reload if stale
-	err := cam.reloadMetadata(false)
-	if err != nil {
-		return ""
-	}
-
-	// if file given, try in file first
-	var md RDSMetadata
-	var ok bool
-	if filename == "" {
-		md = cam.campaignMetadata
-	} else {
-		md, ok = cam.fileMetadata[filename]
-		if !ok {
-			return ""
-		}
-	}
-
-	// type assert to string, or print to force
-	iv := md[k]
-
-	switch v := iv.(type) {
-	case string:
-		return v
-	default:
-		return fmt.Sprintf("%v", iv)
-	}
-}
-
 func (cam *RDSCampaign) getFiletype(filename string) (*RDSFiletype, error) {
 	// reload if stale
 	err := cam.reloadMetadata(false)
@@ -358,7 +368,20 @@ func (cam *RDSCampaign) getFiletype(filename string) (*RDSFiletype, error) {
 	cam.lock.RLock()
 	defer cam.lock.RUnlock()
 
-	ftname := cam.getMetadataString(filename, "_file_type")
+	md, ok := cam.fileMetadata[filename]
+	if !ok {
+		md = cam.campaignMetadata
+	}
+
+	ftnamev := md["_file_type"]
+	var ftname string
+	switch iv := ftnamev.(type) {
+	case string:
+		ftname = iv
+	default:
+		ftname = fmt.Sprintf("%v", iv)
+	}
+
 	ctype, ok := cam.config.ContentTypes[ftname]
 	if !ok {
 		return nil, fmt.Errorf("unknown filetype %s", ftname)
@@ -432,15 +455,20 @@ func (rds *RawDataStore) scanCampaigns() error {
 	return nil
 }
 
+// FIXME rethink how to bootstrap new campaigns...
 func (rds *RawDataStore) createCampaign(camname string, md *RDSMetadata) (*RDSCampaign, error) {
 
 	campath := filepath.Join(rds.path, camname)
-
-	err := os.Mkdir(campath, 0755)
+	cam := NewRDSCampaign(rds.config, campath)
+	err := cam.creat(md)
 	if err != nil {
 		return nil, err
 	}
-	cam := NewRDSCampaign(rds.config, campath)
+
+	err = cam.putCampaignMetadata(md)
+	if err != nil {
+		return nil, err
+	}
 
 	rds.lock.Lock()
 	rds.campaigns[camname] = cam
@@ -808,7 +836,6 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 
 	// determine and verify MIME type
 	ft, err := cam.getFiletype(filename)
-
 	if ft.ContentType != r.Header.Get("Content-Type") {
 		http.Error(w, fmt.Sprintf("Content-Type for %s/%s must be %s", camname, filename, ft.ContentType), http.StatusBadRequest)
 	}
@@ -865,7 +892,7 @@ func (rds *RawDataStore) AddRoutes(r *mux.Router) {
 	r.HandleFunc("/raw/{campaign}/{file}", rds.HandlePutFileMetadata).Methods("PUT")
 	r.HandleFunc("/raw/{campaign}/{file}", rds.HandleDeleteFile).Methods("DELETE")
 	r.HandleFunc("/raw/{campaign}/{file}/data", rds.HandleFileDownload).Methods("GET")
-	r.HandleFunc("/raw/{campaign}/{file}/data", rds.HandleFileDownload).Methods("PUT")
+	r.HandleFunc("/raw/{campaign}/{file}/data", rds.HandleFileUpload).Methods("PUT")
 }
 
 // NewRawDataStore encapsulates a raw data store, given a pathname of a
