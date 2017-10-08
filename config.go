@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+
+	"github.com/go-pg/pg"
 )
 
 // PTOServerConfig contains a configuration of a PTO server
@@ -15,8 +17,11 @@ type PTOServerConfig struct {
 	// base path for raw data store; empty for no RDS.
 	RawRoot string
 
-	// Filetype registry
+	// Filetype registry for RDS.
 	ContentTypes map[string]string
+
+	// PostgreSQL options for connection to observation database; leave default for no OBS.
+	ObsDatabase pg.Options
 }
 
 func (config *PTOServerConfig) HandleRoot(w http.ResponseWriter, r *http.Request) {

@@ -174,14 +174,11 @@ The resources and methods available thereon are summarized in the table below.
 | Method   | Resource        | Permission | Description                                           |
 | -------- | --------------- | ---------- | ----------------------------------------------------- |
 | `GET`    | `/obs`          | `list_obs` | Retrieve URLs for observation sets as JSON            |
+| `POST`    | `/obs/create`  | `write_obs` | Create new observation set                         |
 | `GET`    | `/obs/<o>`      | `read_obs` | Retrieve metadata and provenance for *o* as JSON      |
+| `PUT`    | `/obs/<o>`      | `write_obs` | Write metadata and provenance for *o* as JSON      |
 | `GET`    | `/obs/<o>/data` | `read_obs` | Retrieve obset file for *o* as NDJSON (by convention) |
-
-[ISSUE: Add PUT here, so that an analysis runtime could be build atop the observation set API.]
-
-There is presently no write access to observation sets through the API;
-observation sets can only be created by running analyzers; see Data Analysis,
-below.
+| `PUT`    | `/obs/<o>/data` | `read_obs` | Upload obset file for *o* as NDJSON (by convention) |
 
 ## Metadata and Provenance
 
@@ -204,7 +201,7 @@ The following reserved and virtual metadata keys are presently supported:
 | Key             | Description                                                  |
 | --------------- | ------------------------------------------------------------ |
 | `_sources`      | Array of PTO URLs of raw data sources and observation sets   |
-| `_analyzer`     | PTO URLs of analyzer                                         |
+| `_analyzer`     | PTO URL of analyzer                                         |
 | `_campaign`     | PTO URL of campaign from which raw data ultimately derived   |
 | `__conditions`  | Array of all conditions present in the observation set       |
 | `__obs_count`   | Count of observations in the observation set                 |
