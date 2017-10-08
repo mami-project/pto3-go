@@ -124,7 +124,6 @@ func TestListRoot(t *testing.T) {
 }
 
 func TestListCampaigns(t *testing.T) {
-
 	// list campaigns, this should be empty
 	res := executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw", nil, "", GoodAPIKey, http.StatusOK)
 	checkContentType(t, res)
@@ -155,7 +154,6 @@ type testRawMetadata struct {
 }
 
 func TestRoundTrip(t *testing.T) {
-
 	// create a new campaign
 	md := pto3.RDSMetadata{
 		"_file_type":  "test",
@@ -165,6 +163,16 @@ func TestRoundTrip(t *testing.T) {
 	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test")
 
 	res := executePutJSON(r, t, "http://ptotest.mami-project.eu/raw/test", md, "application/json", GoodAPIKey)
+
+	// check campaign metadata download
+	res = executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw/test", nil, "", GoodAPIKey, 200)
+	err := json.Unmarshal(res.Body.Bytes(), &md)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if md["description"] != "a campaign filled with uninteresting test data" {
+		t.Fatalf("campaign metadata retrieval failed; got description %s", md["description"])
+	}
 
 	// create a file within the campaign
 	md = pto3.RDSMetadata{
@@ -176,7 +184,7 @@ func TestRoundTrip(t *testing.T) {
 
 	// find the data link
 	var trm testRawMetadata
-	err := json.Unmarshal(res.Body.Bytes(), &trm)
+	err = json.Unmarshal(res.Body.Bytes(), &trm)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,8 +208,16 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	b, _ := json.Marshal(data)
-	if len(b) != trm.DataSize {
-		t.Fatalf("file upload size mismatch: sent %d got %d", len(b), trm.DataSize)
+	bytesup, _ := json.Marshal(data)
+	if len(bytesup) != trm.DataSize {
+		t.Fatalf("file upload size mismatch: sent %d got %d", len(bytesup), trm.DataSize)
+	}
+
+	// now download the file
+	res = executeRequest(r, t, "GET", trm.DataURL, nil, "", GoodAPIKey, 200)
+
+	bytesdown := res.Body.Bytes()
+	if !bytes.Equal(bytesup, bytesdown) {
+		t.Fatalf("file download content mismatch: sent %s got %s", bytesup, bytesdown)
 	}
 }

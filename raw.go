@@ -28,11 +28,7 @@ const DeletionTagSuffix = ".ptofile_delete_me"
 var DataRelativeURL *url.URL
 
 func init() {
-	var err error
-	DataRelativeURL, err = url.Parse("data")
-	if err != nil {
-		panic("relative URL parse invariant violation")
-	}
+	DataRelativeURL, _ = url.Parse("data")
 }
 
 // RDSMetadata represents metadata about a file or a campaign
@@ -811,10 +807,9 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	for {
 		n, err := rawfile.Read(buf)
 		if err == nil {
-			if n == 0 {
-				break
-			}
 			w.Write(buf[0:n]) // FIXME log error here
+		} else if err == io.EOF {
+			break
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -893,10 +888,11 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	for {
 		n, err := reqreader.Read(buf)
 		if err == nil {
-			if n == 0 {
-				break
+			_, err = rawfile.Write(buf[0:n])
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
 			}
-			rawfile.Write(buf[0:n]) // FIXME log error here
 		} else if err == io.EOF {
 			break
 		} else {
