@@ -63,12 +63,16 @@ func TestMain(m *testing.M) {
 
 }
 
-func executeRequest(r *mux.Router, t *testing.T, method string, url string, body io.Reader, apikey string, expectstatus int) *httptest.ResponseRecorder {
+func executeRequest(r *mux.Router, t *testing.T, method string, url string, body io.Reader, bodytype string, apikey string, expectstatus int) *httptest.ResponseRecorder {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		t.Fatal(err)
 	}
 	req.Header.Set("Accept", "application/json")
+
+	if bodytype != "" {
+		req.Header.Set("Content-Type", bodytype)
+	}
 
 	if apikey != "" {
 		req.Header.Set("Authorization", "APIKEY "+apikey)
@@ -88,13 +92,13 @@ func executeRequest(r *mux.Router, t *testing.T, method string, url string, body
 	return res
 }
 
-func executePutJSON(r *mux.Router, t *testing.T, url string, content interface{}, apikey string) *httptest.ResponseRecorder {
+func executePutJSON(r *mux.Router, t *testing.T, url string, content interface{}, bodytype string, apikey string) *httptest.ResponseRecorder {
 	b, err := json.Marshal(content)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	return executeRequest(r, t, "PUT", url, bytes.NewBuffer(b), apikey, http.StatusCreated)
+	return executeRequest(r, t, "PUT", url, bytes.NewBuffer(b), bodytype, apikey, http.StatusCreated)
 }
 
 func checkContentType(t *testing.T, res *httptest.ResponseRecorder) {
@@ -103,7 +107,7 @@ func checkContentType(t *testing.T, res *httptest.ResponseRecorder) {
 	}
 }
 func TestListRoot(t *testing.T) {
-	res := executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/", nil, "", http.StatusOK)
+	res := executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/", nil, "", "", http.StatusOK)
 
 	checkContentType(t, res)
 
@@ -122,7 +126,7 @@ func TestListRoot(t *testing.T) {
 func TestListCampaigns(t *testing.T) {
 
 	// list campaigns, this should be empty
-	res := executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw", nil, GoodAPIKey, http.StatusOK)
+	res := executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw", nil, "", GoodAPIKey, http.StatusOK)
 	checkContentType(t, res)
 
 	var camlist map[string]interface{}
@@ -137,7 +141,7 @@ func TestListCampaigns(t *testing.T) {
 }
 
 func TestBadAuth(t *testing.T) {
-	executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw", nil, "abadc0de", http.StatusForbidden)
+	executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw", nil, "", "abadc0de", http.StatusForbidden)
 }
 
 type testRawMetadata struct {
@@ -160,7 +164,7 @@ func TestRoundTrip(t *testing.T) {
 	}
 	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test")
 
-	res := executePutJSON(r, t, "http://ptotest.mami-project.eu/raw/test", md, GoodAPIKey)
+	res := executePutJSON(r, t, "http://ptotest.mami-project.eu/raw/test", md, "application/json", GoodAPIKey)
 
 	// create a file within the campaign
 	md = pto3.RDSMetadata{
@@ -168,7 +172,7 @@ func TestRoundTrip(t *testing.T) {
 		"_time_end":   "2010-01-02T00:00:00",
 	}
 	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test/file001.json")
-	res = executePutJSON(r, t, "http://ptotest.mami-project.eu/raw/test/file001.json", md, GoodAPIKey)
+	res = executePutJSON(r, t, "http://ptotest.mami-project.eu/raw/test/file001.json", md, "application/json", GoodAPIKey)
 
 	// find the data link
 	var trm testRawMetadata
@@ -185,10 +189,10 @@ func TestRoundTrip(t *testing.T) {
 
 	// now upload the data
 	data := []string{"this", "is", "a", "list", "of", "words"}
-	res = executePutJSON(r, t, trm.DataURL, data, GoodAPIKey)
+	res = executePutJSON(r, t, trm.DataURL, data, "application/json", GoodAPIKey)
 
 	// retrieve file metadata and check file size
-	res = executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw/test/file001.json", nil, GoodAPIKey, http.StatusOK)
+	res = executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw/test/file001.json", nil, "", GoodAPIKey, http.StatusOK)
 	checkContentType(t, res)
 
 	err = json.Unmarshal(res.Body.Bytes(), &trm)

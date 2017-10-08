@@ -3,6 +3,7 @@ package pto3
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -368,12 +369,22 @@ func (cam *RDSCampaign) getFiletype(filename string) *RDSFiletype {
 	cam.lock.RLock()
 	defer cam.lock.RUnlock()
 
+	// try to retrieve metadata, inherit from campaign
+	var ftnamev interface{}
 	md, ok := cam.fileMetadata[filename]
-	if !ok {
-		md = cam.campaignMetadata
+	if ok {
+		ftnamev, ok = md["_file_type"]
+		if !ok {
+			ftnamev, ok = cam.campaignMetadata["_file_type"]
+		}
+	} else {
+		ftnamev, ok = cam.campaignMetadata["_file_type"]
 	}
 
-	ftnamev := md["_file_type"]
+	if !ok {
+		return nil
+	}
+
 	var ftname string
 	switch iv := ftnamev.(type) {
 	case string:
@@ -565,6 +576,13 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// fail if not JSON
+	if r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, fmt.Sprintf("Content-type for metadata must be application/json; got %s instead",
+			r.Header.Get("Content-Type")), http.StatusUnsupportedMediaType)
+		return
+	}
+
 	// read metadata from request
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -675,6 +693,13 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 
 	// fail if not authorized
 	if !rds.azr.IsAuthorized(w, r, "write_raw:"+camname) {
+		return
+	}
+
+	// fail if not JSON
+	if r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, fmt.Sprintf("Content-type for metadata must be application/json; got %s instead",
+			r.Header.Get("Content-Type")), http.StatusUnsupportedMediaType)
 		return
 	}
 
@@ -841,6 +866,7 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	ft := cam.getFiletype(filename)
 	if ft == nil {
 		http.Error(w, fmt.Sprintf("cannot get filetype for %s", filename), http.StatusInternalServerError)
+		return
 	}
 	if ft.ContentType != r.Header.Get("Content-Type") {
 		http.Error(w, fmt.Sprintf("Content-Type for %s/%s must be %s", camname, filename, ft.ContentType), http.StatusBadRequest)
@@ -871,6 +897,8 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 				break
 			}
 			rawfile.Write(buf[0:n]) // FIXME log error here
+		} else if err == io.EOF {
+			break
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -886,7 +914,8 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	// and now a reply... what to show here?
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusCreated)
+	// FIXME a body might be nice
 
 }
 
