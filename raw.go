@@ -792,7 +792,6 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	}
 
 	// write MIME type to header
-
 	w.Header().Set("Content-Type", ft.ContentType)
 
 	// now stream the file to the writer
