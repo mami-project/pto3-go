@@ -14,6 +14,9 @@ type PTOServerConfig struct {
 	// base URL of web service
 	BaseURL url.URL
 
+	// API key filename
+	APIKeyFile string
+
 	// base path for raw data store; empty for no RDS.
 	RawRoot string
 

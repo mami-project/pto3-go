@@ -15,9 +15,14 @@ import (
 
 const ISO8601Format = "2006-01-02T15:04:05"
 
+type Condition struct {
+	ID   int
+	Name string
+}
+
 type ObservationSet struct {
-	Id       int64
-	Sources  []string
+	ID       int
+	Sources  []string `pg:",array"`
 	Analyzer string
 	Metadata map[string]string
 }
@@ -72,22 +77,24 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 }
 
 type Observation struct {
-	Id        int64
-	Set       *ObservationSet
-	Start     time.Time
-	End       time.Time
-	Path      string
-	Condition string
-	Value     int
+	ID          int
+	SetID       int
+	Set         *ObservationSet
+	Start       time.Time
+	End         time.Time
+	Path        string
+	ConditionID int
+	Condition   *Condition
+	Value       int
 }
 
 func (obs *Observation) MarshalJSON() ([]byte, error) {
 	jslice := []string{
-		fmt.Sprintf("%d", obs.Set.Id),
+		fmt.Sprintf("%d", obs.SetID),
 		obs.Start.Format(ISO8601Format),
 		obs.End.Format(ISO8601Format),
 		obs.Path,
-		obs.Condition,
+		obs.Condition.Name,
 	}
 
 	if obs.Value != 0 {
@@ -109,7 +116,7 @@ func (obs *Observation) UnmarshalJSON(b []byte) error {
 		return errors.New("Observation requires at least five elements")
 	}
 
-	obs.Id = 0
+	obs.ID = 0
 	obs.Start, err = time.Parse(ISO8601Format, jslice[1])
 	if err != nil {
 		return err
@@ -119,7 +126,7 @@ func (obs *Observation) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	obs.Path = jslice[3]
-	obs.Condition = jslice[4]
+	obs.Condition = &Condition{Name: jslice[4]} // fixme, mark condition as not backed by DB?
 
 	if len(jslice) >= 6 {
 		obs.Value, err = strconv.Atoi(jslice[5])
@@ -192,8 +199,6 @@ func (osr *ObservationStore) HandleCreateSet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// FIXME insert into database, get ID, form URL for the newly created observation set
-	http.Error(w, "not done learning go-pg yet", http.StatusNotImplemented)
 }
 
 func (osr *ObservationStore) HandleGetMetadata(w http.ResponseWriter, r *http.Request) {
