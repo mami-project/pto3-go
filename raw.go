@@ -31,7 +31,7 @@ func init() {
 	DataRelativeURL, _ = url.Parse("data")
 }
 
-// RDSMetadata represents metadata about a file or a campaign
+// RDSMetadata represents metadata about a file or a campaign FIXME refactor to use structs for this.
 type RDSMetadata map[string]interface{}
 
 func ReadRDSMetadata(pathname string) (out RDSMetadata, err error) {
@@ -52,7 +52,7 @@ func (md *RDSMetadata) WriteToFile(pathname string) error {
 	return ioutil.WriteFile(pathname, b, 0644)
 }
 
-// RDSFiletype encapsulates a filetype in the raw data store
+// RDSFiletype encapsulates a filetype in the raw data store FIXME not quite the right type
 type RDSFiletype struct {
 	// PTO filetype name
 	Filetype string `json:"file_type"`
@@ -488,6 +488,9 @@ type campaignList struct {
 	Campaigns []string `json:"campaigns"`
 }
 
+// HandleListCampaigns handles GET /raw, returning a list of campaigns in the
+// raw data store. It writes a JSON object to the response with a single key,
+// "campaigns", whose content is an array of campaign URL as strings.
 func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Request) {
 
 	// fail if not authorized
@@ -519,6 +522,9 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 	w.Write(outb)
 }
 
+// HandleGetCampaignMetadata handles GET /raw/<campaign>, returning metadata for
+// a campaign. It writes a JSON object to the response containing campaign
+// metadata.
 func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
@@ -557,6 +563,10 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 	w.Write(outb)
 }
 
+// HandlePutCampaignMetadata handles PUT /raw/<campaign>, overwriting metadata for
+// a campaign, creating it if necessary. It requires a JSON object in the
+// request body containing campaign metadata. It echoes the written metadata
+// back in the response.
 func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
@@ -630,6 +640,10 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 	w.Write(outb)
 }
 
+// HandleGetFileMetadata handles GET /raw/<campaign>/<file>, returning
+// metadata for a file, including virtual metadata (file size and data URL) and
+// any metadata inherited from the campaign. It writes a JSON object to the
+// response containing file metadata.
 func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
@@ -672,6 +686,10 @@ func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Re
 	w.Write(outb)
 }
 
+// HandlePutFileMetadata handles PUT /raw/<campaign>/<file>, overwriting metadata for
+// a file, creating it if necessary. It requires a JSON object in the
+// request body containing file metadata. It echoes the full file metadata
+// back in the response, including inherited campaign metadata and any virtual metadata.
 func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
@@ -746,10 +764,17 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 	w.Write(outb) // FIXME log error here
 }
 
+// HandleDeleteFile handles DELETE /raw/<campaign>/<file>, deleting a file's
+// metadata and content by marking it pending deletion in the raw data store.
+// Deletion is not yet fully specified or implemented, so this just returns a
+// StatusNotImplemented response for now.
 func (rds *RawDataStore) HandleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "delete not implemented, come back later", http.StatusNotImplemented)
 }
 
+// HandleFileDownload handles GET /raw/<campaign>/<file>/data, returning a file's
+// content. It writes a response of the appropriate MIME type for the file (as
+// determined by the filetypes map and the _file_type metadata key).
 func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
@@ -816,6 +841,8 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// HandleFileUpload handles PUT /raw/<campaign>/<file>/data. It requires a request of the appropriate MIME type for the file (as
+// determined by the filetypes map and the _file_type metadata key) whose body is the file's content. It writes a response containing the file's metadata.
 func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
@@ -908,10 +935,22 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// and now a reply... what to show here?
-	w.WriteHeader(http.StatusCreated)
-	// FIXME a body might be nice
+	// and now a reply... return file metadata
+	out, err := cam.getFileMetadata(filename)
+	if err != nil {
+		rdsHTTPError(w, err)
+		return
+	}
 
+	outb, err := json.Marshal(out)
+	if err != nil {
+		http.Error(w, "raw data store error: cannot marshal file metadata", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(outb)
 }
 
 func (rds *RawDataStore) AddRoutes(r *mux.Router) {

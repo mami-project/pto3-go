@@ -1,6 +1,9 @@
 package pto3
 
-import "fmt"
+import (
+	"fmt"
+	"log"
+)
 
 // AsStringArray tries to typeswitch an interface to a string or a string array
 func AsStringArray(v interface{}) ([]string, bool) {
@@ -10,6 +13,7 @@ func AsStringArray(v interface{}) ([]string, bool) {
 	case []string:
 		return cv, true
 	default:
+		log.Printf("tried to call AsStringArray on %v of type %T", cv, cv)
 		return nil, false
 	}
 }

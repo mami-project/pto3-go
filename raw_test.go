@@ -5,12 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"os"
 	"testing"
 
 	"github.com/gorilla/mux"
@@ -22,46 +18,48 @@ const GoodAPIKey = "07e57ab18e70"
 var rds *pto3.RawDataStore
 var r *mux.Router
 
-func TestMain(m *testing.M) {
+// FIXME need to merge the two testing mains here
 
-	// create temporary RDS directory
-	rawroot, err := ioutil.TempDir("", "pto3_test")
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	defer os.RemoveAll(rawroot)
+// func TestMain(m *testing.M) {
 
-	// create configuration, RDS, and router (as package vars?)
-	baseurl, _ := url.Parse("http://ptotest.mami-project.eu")
-	config := pto3.PTOServerConfig{
-		BaseURL:      *baseurl,
-		RawRoot:      rawroot,
-		ContentTypes: map[string]string{"test": "application/json"},
-	}
+// 	// create temporary RDS directory
+// 	rawroot, err := ioutil.TempDir("", "pto3_test")
+// 	if err != nil {
+// 		log.Fatal(err.Error())
+// 	}
+// 	defer os.RemoveAll(rawroot)
 
-	authorizer := pto3.Authorizer{
-		APIKeys: map[string]map[string]bool{
-			GoodAPIKey: map[string]bool{
-				"list_raw":       true,
-				"read_raw:test":  true,
-				"write_raw:test": true,
-			},
-		},
-	}
+// 	// create configuration, RDS, and router (as package vars?)
+// 	baseurl, _ := url.Parse("http://ptotest.mami-project.eu")
+// 	config := pto3.PTOServerConfig{
+// 		BaseURL:      *baseurl,
+// 		RawRoot:      rawroot,
+// 		ContentTypes: map[string]string{"test": "application/json"},
+// 	}
 
-	rds, err = pto3.NewRawDataStore(&config, &authorizer)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+// 	authorizer := pto3.Authorizer{
+// 		APIKeys: map[string]map[string]bool{
+// 			GoodAPIKey: map[string]bool{
+// 				"list_raw":       true,
+// 				"read_raw:test":  true,
+// 				"write_raw:test": true,
+// 			},
+// 		},
+// 	}
 
-	r = mux.NewRouter()
-	r.HandleFunc("/", config.HandleRoot)
-	rds.AddRoutes(r)
+// 	rds, err = pto3.NewRawDataStore(&config, &authorizer)
+// 	if err != nil {
+// 		log.Fatal(err.Error())
+// 	}
 
-	// go!
-	os.Exit(m.Run())
+// 	r = mux.NewRouter()
+// 	r.HandleFunc("/", config.HandleRoot)
+// 	rds.AddRoutes(r)
 
-}
+// 	// go!
+// 	os.Exit(m.Run())
+
+// }
 
 func executeRequest(r *mux.Router, t *testing.T, method string, url string, body io.Reader, bodytype string, apikey string, expectstatus int) *httptest.ResponseRecorder {
 	req, err := http.NewRequest(method, url, body)
