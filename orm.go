@@ -164,7 +164,7 @@ func (obs *Observation) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON fills in this observation from a JSON array line in an
 // Observation Set File.
 func (obs *Observation) UnmarshalJSON(b []byte) error {
-	var jslice []string
+	var jslice []interface{}
 
 	err := json.Unmarshal(b, &jslice)
 	if err != nil {
@@ -176,21 +176,21 @@ func (obs *Observation) UnmarshalJSON(b []byte) error {
 	}
 
 	obs.ID = 0
-	obs.SetID, err = strconv.Atoi(jslice[0]) // fill in Set ID, will be ignored by force insert
+	obs.SetID, err = strconv.Atoi(AsString(jslice[0])) // fill in Set ID, will be ignored by force insert
 
-	obs.Start, err = time.Parse(ISO8601Format, jslice[1])
+	obs.Start, err = time.Parse(ISO8601Format, AsString(jslice[1]))
 	if err != nil {
 		return err
 	}
-	obs.End, err = time.Parse(ISO8601Format, jslice[2])
+	obs.End, err = time.Parse(ISO8601Format, AsString(jslice[2]))
 	if err != nil {
 		return err
 	}
-	obs.Path = &Path{String: jslice[3]}
-	obs.Condition = &Condition{Name: jslice[4]}
+	obs.Path = &Path{String: AsString(jslice[3])}
+	obs.Condition = &Condition{Name: AsString(jslice[4])}
 
 	if len(jslice) >= 6 {
-		obs.Value, err = strconv.Atoi(jslice[5])
+		obs.Value, err = strconv.Atoi(AsString(jslice[5]))
 		if err != nil {
 			return err
 		}

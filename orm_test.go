@@ -51,7 +51,7 @@ func TestMain(m *testing.M) {
 	// }
 }
 
-func TestCreateObservation(t *testing.T) {
+func TestObservationRoundtrip(t *testing.T) {
 
 	set_json := []byte(`
 	{"_sources": 
@@ -73,13 +73,18 @@ func TestCreateObservation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var obs pto3.Observation
-	if err := json.Unmarshal(obs_json, &obs); err != nil {
+	var obsin pto3.Observation
+	if err := json.Unmarshal(obs_json, &obsin); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := obs.InsertInSet(TestDB, &set); err != nil {
+	if err := obsin.InsertInSet(TestDB, &set); err != nil {
 		t.Fatal(err)
 	}
 
+	var obsout pto3.Observation
+	obsout.ID = obsin.ID
+	if err := TestDB.Select(&obsout); err != nil {
+		t.Fatal(err)
+	}
 }
