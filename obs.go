@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 
 	"github.com/go-pg/pg"
 	"github.com/gorilla/mux"
@@ -93,13 +94,42 @@ func (osr *ObservationStore) HandleCreateSet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusCreated)
 	w.Write(b)
 }
 
+// HandleCreateSet handles POST /obs/create. It requires a JSON object with
+// observation set metadata in the request. It echoes back the metadata as a
+// JSON object in the response, with a link to the created object in the __link
+// metadata key.
+
 func (osr *ObservationStore) HandleGetMetadata(w http.ResponseWriter, r *http.Request) {
-	// FIXME insert into database, get ID, form URL for the newly created observation set
-	http.Error(w, "not done learning go-pg yet", http.StatusNotImplemented)
+	vars := mux.Vars(r)
+
+	// get set ID
+	setid, err := strconv.ParseInt(vars["set"], 16, 64)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("bad or missing set ID %s: %s", vars["set"], err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	set := ObservationSet{ID: int(setid)}
+	if err := osr.db.Select(&set); err != nil {
+		// FIXME distinguish not found from some other database error
+	}
+
+	// compute a link for the set
+	set.LinkVia(osr.config.BaseURL)
+
+	// and send it on
+	b, err := json.Marshal(&set)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(b)
 }
 
 func (osr *ObservationStore) HandlePutMetadata(w http.ResponseWriter, r *http.Request) {
