@@ -44,6 +44,10 @@ func (osr *ObservationStore) HandleListSets(w http.ResponseWriter, r *http.Reque
 	http.Error(w, "not done learning go-pg yet", http.StatusNotImplemented)
 }
 
+// HandleCreateSet handles POST /obs/create. It requires a JSON object with
+// observation set metadata in the request. It echoes back the metadata as a
+// JSON object in the response, with a link to the created object in the __link
+// metadata key.
 func (osr *ObservationStore) HandleCreateSet(w http.ResponseWriter, r *http.Request) {
 	// fail if not authorized
 	if !osr.azr.IsAuthorized(w, r, "write_obs") {
@@ -79,8 +83,18 @@ func (osr *ObservationStore) HandleCreateSet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// FIXME echo back the inserted set
+	// compute a link for it
+	set.LinkVia(osr.config.BaseURL)
+
+	// and echo back the set, including the link
+	b, err = json.Marshal(&set)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
+	w.Write(b)
 }
 
 func (osr *ObservationStore) HandleGetMetadata(w http.ResponseWriter, r *http.Request) {

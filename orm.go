@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -60,6 +61,7 @@ type ObservationSet struct {
 	Sources  []string `pg:",array"`
 	Analyzer string
 	Metadata map[string]string
+	link     string
 }
 
 // MarshalJSON turns this observation set into a JSON observation set metadata
@@ -70,6 +72,10 @@ func (set *ObservationSet) MarshalJSON() ([]byte, error) {
 
 	jmap["_sources"] = set.Sources
 	jmap["_analyzer"] = set.Analyzer
+
+	if set.link != "" {
+		jmap["__link"] = set.link
+	}
 
 	for k, v := range set.Metadata {
 		jmap[k] = v
@@ -130,6 +136,11 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 	}
 }
 
+func (set *ObservationSet) LinkVia(baseurl url.URL) {
+	seturl, _ := url.Parse(fmt.Sprintf("obs/%016x", set.ID))
+	set.link = seturl.String()
+}
+
 type Observation struct {
 	ID          int
 	SetID       int
@@ -143,19 +154,19 @@ type Observation struct {
 	Value       int
 }
 
-// MarshalJSON turns this observation into a JSON array  suitable for use as a
+// MarshalJSON turns this observation into a JSON array suitable for use as a
 // line in an Observation Set File.
 func (obs *Observation) MarshalJSON() ([]byte, error) {
-	jslice := []string{
-		fmt.Sprintf("%d", obs.SetID),
-		obs.Start.Format(ISO8601Format),
-		obs.End.Format(ISO8601Format),
+	jslice := []interface{}{
+		obs.SetID,
+		obs.Start.UTC().Format(time.RFC3339),
+		obs.End.UTC().Format(time.RFC3339),
 		obs.Path.String,
 		obs.Condition.Name,
 	}
 
 	if obs.Value != 0 {
-		jslice = append(jslice, strconv.Itoa(obs.Value))
+		jslice = append(jslice, obs.Value)
 	}
 
 	return json.Marshal(&jslice)
@@ -178,14 +189,15 @@ func (obs *Observation) UnmarshalJSON(b []byte) error {
 	obs.ID = 0
 	obs.SetID, err = strconv.Atoi(AsString(jslice[0])) // fill in Set ID, will be ignored by force insert
 
-	obs.Start, err = time.Parse(ISO8601Format, AsString(jslice[1]))
+	obs.Start, err = time.Parse(time.RFC3339, AsString(jslice[1]))
 	if err != nil {
 		return err
 	}
-	obs.End, err = time.Parse(ISO8601Format, AsString(jslice[2]))
+	obs.End, err = time.Parse(time.RFC3339, AsString(jslice[2]))
 	if err != nil {
 		return err
 	}
+
 	obs.Path = &Path{String: AsString(jslice[3])}
 	obs.Condition = &Condition{Name: AsString(jslice[4])}
 
@@ -219,7 +231,9 @@ func (obs *Observation) InsertInSet(db orm.DB, set *ObservationSet) error {
 	return db.Insert(obs)
 }
 
-// Create tables. Use for testing and ptodb init command.
+// CreateTables insures that the tables used by the ORM exist in the given
+// database. This is used for testing, and the (not yet implemented) ptodb init
+// command.
 func CreateTables(db *pg.DB) error {
 	opts := orm.CreateTableOptions{
 		IfNotExists:   true,
@@ -247,7 +261,8 @@ func CreateTables(db *pg.DB) error {
 	})
 }
 
-// Drop tables. Use only for testing, please.
+// DropTables removes the tables used by the ORM from the database. Use this for
+// testing only, please.
 func DropTables(db *pg.DB) error {
 	return db.RunInTransaction(func(tx *pg.Tx) error {
 		if err := db.DropTable(&Observation{}, nil); err != nil {
