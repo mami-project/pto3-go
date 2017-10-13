@@ -165,10 +165,10 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 
 	// drop tables
-	// err = dropTables(TestDB)
-	// if err != nil {
-	// 	log.Fatal(err.Error())
-	// }
+	err = dropTables(TestDB)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 }
 
 func TestCreateObservationSet(t *testing.T) {
@@ -200,15 +200,18 @@ func TestCreateObservationSet(t *testing.T) {
 	t1, _ := time.Parse(ISO8601Format, "2009-02-20T13:00:45")
 
 	o := Observation{
-		Set:       &s,
-		Start:     t0,
-		End:       t1,
-		Path:      &p,
-		Condition: &c,
+		Set:         &s,
+		SetID:       s.ID,
+		Start:       t0,
+		End:         t1,
+		Path:        &p,
+		PathID:      p.ID,
+		Condition:   &c,
+		ConditionID: c.ID,
 	}
 
 	if err := TestDB.Insert(&o); err != nil {
 		t.Fatal(err)
 	}
-	t.Fatalf("created observation id %d in set id %d", o.ID, o.SetID)
+	t.Log("created observation id %d in set id %d", o.ID, o.SetID)
 }
