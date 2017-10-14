@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-pg/pg"
@@ -62,6 +63,7 @@ type ObservationSet struct {
 	Analyzer string
 	Metadata map[string]string
 	link     string
+	count    int
 }
 
 // MarshalJSON turns this observation set into a JSON observation set metadata
@@ -95,20 +97,21 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	// zero ID, it will be assigned on insertion anyway
+	// zero ID, it will be assigned on insertion or from the
 	set.ID = 0
 
 	var ok bool
 	for k, v := range jmap {
-		switch k {
-		case "_sources":
+		if k == "_sources" {
 			set.Sources, ok = AsStringArray(v)
 			if !ok {
 				return errors.New("_sources not a string array")
 			}
-		case "_analyzer":
+		} else if k == "_analyzer" {
 			set.Analyzer = AsString(v)
-		default:
+		} else if strings.HasPrefix(k, "__") {
+
+		} else {
 			set.Metadata[k] = AsString(v)
 		}
 	}
@@ -136,9 +139,20 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 	}
 }
 
+func (set *ObservationSet) Update(db orm.DB) error {
+	return db.Update(set)
+}
+
 func (set *ObservationSet) LinkVia(baseurl url.URL) {
 	seturl, _ := url.Parse(fmt.Sprintf("obs/%016x", set.ID))
 	set.link = seturl.String()
+}
+
+func (set *ObservationSet) CountObservations(db orm.DB) int {
+	if set.count == 0 {
+		set.count, _ = db.Model(&Observation{}).Where("setid == ?", set.ID).Count()
+	}
+	return set.count
 }
 
 type Observation struct {
