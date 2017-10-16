@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -31,15 +32,99 @@ func init() {
 	DataRelativeURL, _ = url.Parse("data")
 }
 
-// RDSMetadata represents metadata about a file or a campaign FIXME refactor to use structs for this.
-type RDSMetadata map[string]interface{}
+type RDSMetadata struct {
+	Parent    *RDSMetadata
+	filetype  string
+	Owner     string
+	TimeStart *time.Time
+	TimeEnd   *time.Time
+	Metadata  map[string]string
+	datalink  string
+	datasize  int
+}
 
-func ReadRDSMetadata(pathname string) (out RDSMetadata, err error) {
-	rmd, err := ioutil.ReadFile(pathname)
-	if err == nil {
-		err = json.Unmarshal(rmd, &out)
+func (md *RDSMetadata) MarshalJSON() ([]byte, error) {
+	jmap := make(map[string]interface{})
+
+	if md.filetype != "" {
+		if md.Parent == nil || md.filetype != md.Parent.filetype {
+			jmap["_file_type"] = md.filetype
+		}
 	}
-	return
+
+	if md.Owner != "" {
+		jmap["_owner"] = md.Owner
+	}
+
+	if md.TimeStart != nil {
+		if (md.Parent == nil && md.Parent.TimeStart != nil) || md.TimeStart.Equal(*md.Parent.TimeStart) {
+			jmap["_time_start"] = md.TimeStart.Format(time.RFC3339)
+		}
+	}
+
+	if md.TimeEnd != nil {
+		if (md.Parent == nil && md.Parent.TimeStart != nil) || md.TimeStart.Equal(*md.Parent.TimeStart) {
+			jmap["_time_start"] = md.TimeStart.Format(time.RFC3339)
+		}
+	}
+
+	if md.datalink != "" {
+		jmap["__data"] = md.datalink
+	}
+
+	if md.datasize != 0 {
+		jmap["__data_size"] = md.datasize
+	}
+
+	for k, v := range md.Metadata {
+		if md.Parent == nil {
+			jmap[k] = v
+		} else {
+			vp, ok := md.Parent.Metadata[k]
+			if !ok || vp != v {
+				jmap[k] = v
+			}
+		}
+	}
+
+	return json.Marshal(jmap)
+}
+
+func (md *RDSMetadata) UnmarshalJSON(b []byte) error {
+	md.Metadata = make(map[string]string)
+
+	var jmap map[string]interface{}
+
+	if err := json.Unmarshal(b, &jmap); err != nil {
+		return err
+	}
+
+	var err error
+	for k, v := range jmap {
+		if k == "_file_type" {
+			md.filetype = AsString(v)
+		} else if k == "_owner" {
+			md.Owner = AsString(v)
+		} else if k == "_time_start" {
+			var t time.Time
+			if t, err = AsTime(v); err != nil {
+				return err
+			}
+			md.TimeStart = &t
+		} else if k == "_time_end" {
+			var t time.Time
+			if t, err = AsTime(v); err != nil {
+				return err
+			}
+			md.TimeEnd = &t
+		} else if strings.HasPrefix(k, "__") {
+			// Ignore all (incoming) __ keys instead of stuffing them in metadata
+		} else {
+			md.Metadata[k] = AsString(v)
+		}
+	}
+
+	return nil
 }
 
 // WriteToFile writes this metadata object as JSON to a file, ignoring virual metadata keys
@@ -50,6 +135,56 @@ func (md *RDSMetadata) WriteToFile(pathname string) error {
 	}
 
 	return ioutil.WriteFile(pathname, b, 0644)
+}
+
+// Validate returns nil if the metadata is valid (i.e., it or its parent has all required keys), or an error if not
+func (md *RDSMetadata) Validate(isCampaign bool) error {
+	if md.Owner == "" && (md.Parent == nil || md.Parent.Owner == "") {
+		return RDSMissingMetadataError("missing _owner")
+	}
+
+	// short circuit file-only checks
+	if isCampaign {
+		return nil
+	}
+
+	if md.filetype == "" && (md.Parent == nil || md.Parent.filetype == "") {
+		return RDSMissingMetadataError("missing _file_type")
+	}
+
+	if md.TimeStart == nil && (md.Parent == nil || md.Parent.TimeStart == nil) {
+		return RDSMissingMetadataError("missing _time_start")
+	}
+
+	if md.TimeEnd == nil && (md.Parent == nil || md.Parent.TimeEnd == nil) {
+		return RDSMissingMetadataError("missing _time_end")
+	}
+
+	return nil
+}
+
+func (md *RDSMetadata) Filetype() string {
+	if md.filetype == "" && md.Parent != nil {
+		return md.Parent.filetype
+	} else {
+		return md.filetype
+	}
+}
+
+func ReadRDSMetadata(pathname string, parent *RDSMetadata) (*RDSMetadata, error) {
+	var md RDSMetadata
+	b, err := ioutil.ReadFile(pathname)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = json.Unmarshal(b, &md); err != nil {
+		return nil, err
+	}
+
+	// link to campaign metadata for inheritance
+	md.Parent = parent
+	return &md, nil
 }
 
 // RDSFiletype encapsulates a filetype in the raw data store FIXME not quite the right type
@@ -107,10 +242,10 @@ type RDSCampaign struct {
 	stale bool
 
 	// campaign metadata cache
-	campaignMetadata RDSMetadata
+	campaignMetadata *RDSMetadata
 
 	// file metadata cache; keys of this define known filenames
-	fileMetadata map[string]RDSMetadata
+	fileMetadata map[string]*RDSMetadata
 
 	// lock on metadata structures
 	lock sync.RWMutex
@@ -120,31 +255,13 @@ type RDSCampaign struct {
 // disk containing the campaign's files.
 func NewRDSCampaign(config *PTOServerConfig, path string) *RDSCampaign {
 	cam := RDSCampaign{
-		config:           config,
-		path:             path,
-		stale:            true,
-		campaignMetadata: make(RDSMetadata),
-		fileMetadata:     make(map[string]RDSMetadata),
+		config:       config,
+		path:         path,
+		stale:        true,
+		fileMetadata: make(map[string]*RDSMetadata),
 	}
 
 	return &cam
-}
-
-func checkCampaignMetadata(md *RDSMetadata) (*RDSMetadata, error) {
-	// verify that we have an owner
-	if _, ok := (*md)["_owner"]; !ok {
-		return nil, RDSMissingMetadataError("_owner")
-	}
-
-	// copy metadata from input, ignoring virtuals
-	out := make(RDSMetadata, len(*md))
-	for k, v := range *md {
-		if !strings.HasPrefix(k, "__") {
-			out[k] = v
-		}
-	}
-
-	return &out, nil
 }
 
 // reloadMetadata reloads the metadata for this campaign and its files from disk
@@ -160,17 +277,17 @@ func (cam *RDSCampaign) reloadMetadata(force bool) error {
 	}
 
 	// load the campaign metadata file
-	cam.campaignMetadata, err = ReadRDSMetadata(filepath.Join(cam.path, CampaignMetadataFilename))
+	cam.campaignMetadata, err = ReadRDSMetadata(filepath.Join(cam.path, CampaignMetadataFilename), nil)
 	if err != nil {
 		return err
 	}
 
 	// now scan directory and load each metadata file
-	// FIXME check for deletion file as well
 	direntries, err := ioutil.ReadDir(cam.path)
 	for _, direntry := range direntries {
 		if strings.HasSuffix(direntry.Name(), FileMetadataSuffix) {
-			cam.fileMetadata[direntry.Name()], err = ReadRDSMetadata(filepath.Join(cam.path, direntry.Name()))
+			cam.fileMetadata[direntry.Name()], err =
+				ReadRDSMetadata(filepath.Join(cam.path, direntry.Name()), cam.campaignMetadata)
 			if err != nil {
 				return err
 			}
@@ -199,40 +316,26 @@ func (cam *RDSCampaign) getCampaignMetadata() (*RDSMetadata, error) {
 		return nil, err
 	}
 
-	cam.lock.RLock()
-	defer cam.lock.RUnlock()
-
-	// copy metadata from cache
-	out := make(RDSMetadata, len(cam.campaignMetadata))
-	for k, v := range cam.campaignMetadata {
-		out[k] = v
-	}
-
-	// and we're done
-	return &out, nil
+	return cam.campaignMetadata, nil
 }
 
 func (cam *RDSCampaign) creat(md *RDSMetadata) error {
-	err := os.Mkdir(cam.path, 0755)
-	if err != nil {
+	if err := os.Mkdir(cam.path, 0755); err != nil {
 		return err
 	}
 
 	// make sure campaign metadata is ok
-	md, err = checkCampaignMetadata(md)
-	if err != nil {
+	if err := md.Validate(true); err != nil {
 		return err
 	}
 
 	// write it directly to the file
-	err = md.WriteToFile(filepath.Join(cam.path, CampaignMetadataFilename))
-	if err != nil {
+	if err := md.WriteToFile(filepath.Join(cam.path, CampaignMetadataFilename)); err != nil {
 		return err
 	}
 
 	// and force a rescan
-	err = cam.reloadMetadata(true)
-	if err != nil {
+	if err := cam.reloadMetadata(true); err != nil {
 		return err
 	}
 
@@ -244,19 +347,17 @@ func (cam *RDSCampaign) putCampaignMetadata(md *RDSMetadata) error {
 	defer cam.lock.Unlock()
 
 	// make sure campaign metadata is ok
-	md, err := checkCampaignMetadata(md)
-	if err != nil {
+	if err := md.Validate(true); err != nil {
 		return err
 	}
 
 	// write to campaign metadata file
-	err = md.WriteToFile(filepath.Join(cam.path, CampaignMetadataFilename))
-	if err != nil {
+	if err := md.WriteToFile(filepath.Join(cam.path, CampaignMetadataFilename)); err != nil {
 		return err
 	}
 
 	// update metadata cache
-	cam.campaignMetadata = *md
+	cam.campaignMetadata = md
 	return nil
 }
 
@@ -267,27 +368,13 @@ func (cam *RDSCampaign) getFileMetadata(filename string) (*RDSMetadata, error) {
 		return nil, err
 	}
 
-	cam.lock.RLock()
-	defer cam.lock.RUnlock()
-
 	// check for file metadata
 	filemd, ok := cam.fileMetadata[filename]
 	if !ok {
 		return nil, RDSNotFoundError(filename)
 	}
 
-	// copy campaign metadata from cache
-	out := make(RDSMetadata, len(cam.fileMetadata))
-	for k, v := range cam.campaignMetadata {
-		out[k] = v
-	}
-
-	// and override it with file metadata
-	for k, v := range filemd {
-		out[k] = v
-	}
-
-	return &out, nil
+	return filemd, nil
 }
 
 // updateFileVirtualMetadata fills in the __data and __data_size virtual metadata
@@ -295,30 +382,27 @@ func (cam *RDSCampaign) getFileMetadata(filename string) (*RDSMetadata, error) {
 func (cam *RDSCampaign) updateFileVirtualMetadata(filename string) error {
 
 	// get file metadata
-	filemd, ok := cam.fileMetadata[filename]
+	md, ok := cam.fileMetadata[filename]
 	if !ok {
 		return RDSNotFoundError(filename)
 	}
 
 	// get file size
-	var datasize int64
 	datafi, err := os.Stat(filepath.Join(cam.path, filename))
 	if err == nil {
-		datasize = datafi.Size()
+		md.datasize = int(datafi.Size())
 	} else if os.IsNotExist(err) {
-		datasize = 0
+		md.datasize = 0
 	} else {
 		return err
 	}
-
-	filemd["__data_size"] = datasize
 
 	// generate data path
 	datarel, err := url.Parse("/raw/" + filepath.Base(cam.path) + "/" + filename + "/data")
 	if err != nil {
 		return err
 	}
-	filemd["__data"] = cam.config.BaseURL.ResolveReference(datarel).String()
+	md.datalink = cam.config.BaseURL.ResolveReference(datarel).String()
 
 	return nil
 }
@@ -327,29 +411,22 @@ func (cam *RDSCampaign) putFileMetadata(filename string, md *RDSMetadata) error 
 	cam.lock.Lock()
 	defer cam.lock.Unlock()
 
-	// verify that we have a filetype somewhere
-	if _, ok := cam.campaignMetadata["_file_type"]; !ok {
-		if _, ok := (*md)["_file_type"]; !ok {
-			return RDSMissingMetadataError("_file_type")
-		}
-	}
+	// inherit from campaign
+	md.Parent = cam.campaignMetadata
 
-	// copy metadata from input, ignoring virtuals
-	out := make(RDSMetadata, len(*md))
-	for k, v := range *md {
-		if !strings.HasPrefix(k, "__") {
-			out[k] = v
-		}
+	// ensure we have a filetype
+	if md.Filetype() == "" {
+		return RDSMissingMetadataError("_file_type")
 	}
 
 	// write to file metadata file
-	err := out.WriteToFile(filepath.Join(cam.path, filename+FileMetadataSuffix))
+	err := md.WriteToFile(filepath.Join(cam.path, filename+FileMetadataSuffix))
 	if err != nil {
 		return err
 	}
 
 	// update metadata cache
-	cam.fileMetadata[filename] = out
+	cam.fileMetadata[filename] = md
 
 	// and update virtuals
 	return cam.updateFileVirtualMetadata(filename)
@@ -362,33 +439,12 @@ func (cam *RDSCampaign) getFiletype(filename string) *RDSFiletype {
 		return nil
 	}
 
-	cam.lock.RLock()
-	defer cam.lock.RUnlock()
-
-	// try to retrieve metadata, inherit from campaign
-	var ftnamev interface{}
 	md, ok := cam.fileMetadata[filename]
-	if ok {
-		ftnamev, ok = md["_file_type"]
-		if !ok {
-			ftnamev, ok = cam.campaignMetadata["_file_type"]
-		}
-	} else {
-		ftnamev, ok = cam.campaignMetadata["_file_type"]
-	}
-
 	if !ok {
 		return nil
 	}
 
-	var ftname string
-	switch iv := ftnamev.(type) {
-	case string:
-		ftname = iv
-	default:
-		ftname = fmt.Sprintf("%v", iv)
-	}
-
+	ftname := md.Filetype()
 	ctype, ok := cam.config.ContentTypes[ftname]
 	if !ok {
 		return nil

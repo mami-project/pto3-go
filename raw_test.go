@@ -50,10 +50,10 @@ type testRawMetadata struct {
 
 func TestRawRoundtrip(t *testing.T) {
 	// create a new campaign
-	md := pto3.RDSMetadata{
-		"_file_type":  "test",
-		"_owner":      "ptotest@mami-project.eu",
-		"description": "a campaign filled with uninteresting test data",
+	md := testRawMetadata{
+		FileType:    "test",
+		Owner:       "ptotest@mami-project.eu",
+		Description: "a campaign filled with uninteresting test data",
 	}
 	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test")
 
@@ -65,14 +65,14 @@ func TestRawRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if md["description"] != "a campaign filled with uninteresting test data" {
-		t.Fatalf("campaign metadata retrieval failed; got description %s", md["description"])
+	if md.Description != "a campaign filled with uninteresting test data" {
+		t.Fatalf("campaign metadata retrieval failed; got description %s", md.Description)
 	}
 
 	// create a file within the campaign
-	md = pto3.RDSMetadata{
-		"_time_start": "2010-01-01T00:00:00",
-		"_time_end":   "2010-01-02T00:00:00",
+	md = testRawMetadata{
+		TimeStart: "2010-01-01T00:00:00Z",
+		TimeEnd:   "2010-01-02T00:00:00Z",
 	}
 	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test/file001.json")
 	res = executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test/file001.json", md, GoodAPIKey, http.StatusCreated)

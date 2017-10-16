@@ -3,6 +3,7 @@ package pto3
 import (
 	"fmt"
 	"log"
+	"time"
 )
 
 // AsString tries to typeswitch an interface to a string, printing its value if not.
@@ -31,5 +32,21 @@ func AsStringArray(v interface{}) ([]string, bool) {
 	default:
 		log.Printf("tried to call AsStringArray on %v of type %T", cv, cv)
 		return nil, false
+	}
+}
+
+// AsTime tries to typeswitch an interface to a time.Time.
+func AsTime(v interface{}) (time.Time, error) {
+	switch cv := v.(type) {
+	case time.Time:
+		return cv, nil
+	case string:
+		return time.Parse(time.RFC3339, cv)
+	case int64:
+		return time.Unix(cv, 0), nil
+	case int:
+		return time.Unix(int64(cv), 0), nil
+	default:
+		return time.Parse(time.RFC3339, AsString(cv))
 	}
 }
