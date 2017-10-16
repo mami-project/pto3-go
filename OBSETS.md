@@ -15,15 +15,18 @@ elements, with the following semantics and format:
 | 0        | Observation Set Identifier, an integer                    |
 | 1        | Start time in ISO8601 format                              |
 | 2        | End time in ISO8601 format                                |
-| 3        | Path, as a JSON array of strings, one per path element    |
+| 3        | Path, as defined below                                    |
 | 4        | Condition, as a JSON string                               |
 | 5        | Value associated with condition, optional                 |
 
-*FIXME: as currently implemented a path is a string.*
+A *path* is a sequence of path elements. It can be represented either as a JSON
+array of strings, each one a path element; or as a JSON string containing a
+whitespace-separated sequence of path elements. The PTO currently generates only
+space-separated path strings, but accepts and may generate either in the future.
 
-*Path elements* are strings identifying hops along the path. The type of path
-element is implied by its format; the following path element types are currently
-supported:
+*Path elements* identify hops along the path. The
+type of path element is implied by its format; the following path element types
+are currently supported:
 
 | Format              | Description                                     |
 | ------------------- | ----------------------------------------------- |

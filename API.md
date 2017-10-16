@@ -1,17 +1,28 @@
-# PAPI
+# Path Transparency Observatory API Specification
 
-Path Transparency Observatory API (PAPI) specifiation, version 3
+Path Transparency Observatory API specifiation, version 3
 
-**NOTE** as of this commit the code in package `github.com/mami-project/pto3-go` does not yet fully implement this specification.
+**NOTE** as of this commit the code in package
+https://github.com/mami-project/pto3-go
+does not yet fully implement this specification. In addition, see [the issue
+tracker](https://github.com/mami-project/pto3-go/issues) for proposed changes to
+this specification and the implementation thereof.
 
-The P consists of four applications: raw data access and upload, observation
+The API consists of four applications: raw data access and upload, observation
 access, observation query, and data analysis control. The interface to each
 application is made up of certain resources accessed in a RESTful way; these
 resources are specified below.
 
 # Access Control and Permissions
 
-[ISSUE: document JSON Web Token based authentication]
+All applications use API key based access control. An API key is associated
+with a set of *permissions*, scoped to permitted operations on the observatory
+database, on access to raw data for specific campaigns. In this document, the
+permission required for a given method on a given resource is noted.
+
+API keys are given in the HTTP `Authorization` request header, which must
+consist of the string `APIKEY` followed by whitespace and the API key as a
+string.
 
 # Raw Data Access and Upload
 
@@ -69,8 +80,6 @@ The following reserved and virtual metadata keys are presently supported:
 | `__data`        | URL of the resource containing file data.                               |
 | `__data_size`   | Size of the file in bytes. 0 if the data file has not been uploaded.    |
 
-[ISSUE: files and campaigns have owner identities]
-
 Though the data resource is by convention accessible by appending `/data` to the
 path of the metadata resource, the system may at any time place data at another
 path; therefore, clients should only upload data to the path given in the
@@ -93,10 +102,10 @@ are listed below:
 
 | Filetype            | MIME type                     | Description                                   |
 | ------------------- | ------------------------------|---------------------------------------------- |
-| `obs-ndjson-bz2`    | `application/bzip2`           | Compressed observations in [OSF](OBSETS.md) |
-| `obs-ndjson`        | `application/vnd.mami.ndjson` | Uncompressed observations in [OSF](OBSETS.md) |
-| `ps-ecn-ndjson-bz2` | `application/bzip2`           | Compressed [PATHspider](https://pathspider.net) ECN results             |
-| `ps-ecn-ndjson`     | `application/vnd.mami.ndjson` | Uncompressed [PATHspider](https://pathspider.net) ECN results           |
+| `obs-bz2`           | `application/bzip2`           | Compressed observations in [OSF](OBSETS.md) |
+| `obs`               | `application/vnd.mami.ndjson` | Uncompressed observations in [OSF](OBSETS.md) |
+| `ps-ndjson-bz2` | `application/bzip2`           | Compressed [PATHspider](https://pathspider.net) results             |
+| `ps-ndjson`     | `application/vnd.mami.ndjson` | Uncompressed [PATHspider](https://pathspider.net) results           |
 
 ## API usage
 
@@ -173,10 +182,10 @@ The resources and methods available thereon are summarized in the table below.
 
 | Method   | Resource        | Permission | Description                                           |
 | -------- | --------------- | ---------- | ----------------------------------------------------- |
-| `GET`    | `/obs`          | `list_obs` | Retrieve URLs for observation sets as JSON            |
+| `GET`    | `/obs`          | `read_obs` | Retrieve URLs for observation sets as JSON            |
 | `POST`    | `/obs/create`  | `write_obs` | Create new observation set                         |
 | `GET`    | `/obs/<o>`      | `read_obs` | Retrieve metadata and provenance for *o* as JSON      |
-| `PUT`    | `/obs/<o>`      | `write_obs` | Write metadata and provenance for *o* as JSON      |
+| `PUT`    | `/obs/<o>`      | `write_obs` | Update metadata and provenance for *o* as JSON      |
 | `GET`    | `/obs/<o>/data` | `read_obs` | Retrieve obset file for *o* as NDJSON (by convention) |
 | `PUT`    | `/obs/<o>/data` | `read_obs` | Upload obset file for *o* as NDJSON (by convention) |
 
@@ -202,7 +211,6 @@ The following reserved and virtual metadata keys are presently supported:
 | --------------- | ------------------------------------------------------------ |
 | `_sources`      | Array of PTO URLs of raw data sources and observation sets   |
 | `_analyzer`     | PTO URL of analyzer                                         |
-| `_campaign`     | PTO URL of campaign from which raw data ultimately derived   |
 | `__conditions`  | Array of all conditions present in the observation set       |
 | `__obs_count`   | Count of observations in the observation set                 |
 | `__data`        | URL of the resource containing observation set data          |
@@ -238,20 +246,61 @@ below:
 | `condition`     | select    | yes       | Select observations with the given condition, with wildcards      |
 | `group_by`      | group     | yes       | Group observations and return counts by group  |
 | `intersect_condition` | set | yes       | Group observations by path, select paths by set intersection on conditions |
+| `option`        | options   | yes       | Specify a query option |
 
 All parameters with temporal semantics must be present, and are used to bound
 the query in time. Parameters with select semantics may be given to filter
 observations. if multiple instances of a select parameter are available, any of
 the values will match; however, an observation must match at least one of the
 values for each distinct parameter given (i.e., the query language supports AND
-of OR semantics). Parameters with group or set semantics modify the type of
-query as in the subsections below.
+of OR semantics). Parameters with group or set semantics, as well as the option parameter, may modify the type of
+query and the format of its results; see the [Results](#results) section below.
 
-## Observation Selection Queries
+## Query Options 
 
-A query created without any `group_by` or `intersect_condition` parameters is a
-selection query. The observations returned by this query are those within the
-interval between the `time_start` and `time_end` parameters which match the selection parameters.
+The `option` parameter is used to modify the behavior of queries. Multiple Options may be present. The following options are presently supported:
+
+| Option Value | Behavior                                                      |
+| ------------ | ------------------------------------------------------------- |
+| `sets_only`  | Return links to observation sets containing observations answering the query, instead of observation data directly |
+
+## Metadata
+
+When a query is submitted, it goes into the query cache. The query cache holds
+the query metadata until the query has been scheduled to run. Once it has run,
+the query metadata will updated to point to the result and the observation sets
+the query answers.
+
+| Key             | Description                                                  |
+| --------------- | ------------------------------------------------------------ |
+| `__parameters`  | Parameters from which the query was generated                |
+| `__state`       | Query state; see below                                       |
+| `__result`      | URL of the resource containing complete result, when available |
+| `__sources`     | Array of PTO URLs of observation sets covered by the query, when available   |
+| `_ext_ref`      | External reference for a permanence request; see below |
+
+A query can have one of following states:
+
+| State           | Meaning                                 |
+| --------------- | --------------------------------------- |
+| `submitted`     | Submitted, but not yet running          |
+| `pending`       | Running and awaiting results            |
+| `failed`        | Abnormally ended without returning results |
+| `complete`      | Results are available                   |
+| `permanent`     | Results are available and cached results will be stored permanently |
+
+A query can be mo
+
+## Results
+
+The type of the query determines the format of the results, as below:
+
+### Observation Selection Queries
+
+A query created without any `group_by` or `intersect_condition` parameters and
+without the `sets_only` option is a selection query. The observations returned
+by this query are those within the interval between the `time_start` and
+`time_end` parameters which match the selection parameters.
 
 [ISSUE: matching rules go here, describe condition wildcards.]
 
@@ -263,7 +312,20 @@ The result of a selection query is a JSON object, the fields of which are as fol
 | `next`         | Link to next page (see Pagination)                  |
 | `obs`          | JSON array containing observations in [OSF format](OBSETS.md) |
 
-## Condition Set Intersection Queries
+### Observation Set Selection Queries
+
+A query created without any `group_by` or `intersect_condition` parameters and
+with the `sets_only` option is a selection query. The observations returned
+by this query are those within the interval between the `time_start` and
+`time_end` parameters which match the selection parameters.
+
+| Key            | Value 
+| -------------- | ----------------------------------------------------|
+| `prev`         | Link to previous page (see Pagination)              |
+| `next`         | Link to next page (see Pagination)                  |
+| `sets`         | JSON array containing links to observation sets containing observations answering the query | 
+
+### Condition Set Intersection Queries
 
 A query created with one or more `intersect_condition` parameters is a set
 intersection query. First, observations matching the selection parameters are
@@ -280,16 +342,15 @@ observations with the specified condition. Foe example, a query with two
 select paths where there is at least one `foo.bar` observation and no `foo.baz`
 observations.
 
-
 The result of a set intersection query is a JSON object, the fields of which are as follows:
 
 | Key            | Value 
 | -------------- | ----------------------------------------------------|
 | `prev`         | Link to previous page (see Pagination)              |
 | `next`         | Link to next page (see Pagination)                  |
-| `paths`          | JSON array containing paths as JSON arrays        |
+| `paths`        | JSON array containing paths as strings              |
 
-## Aggregation Queries
+### Aggregation Queries
 
 A query created with one or more `group_by` parameters is an aggregation query.
 The results will return the count of obsevations selected by the select
@@ -317,24 +378,7 @@ The result of an aggregation query is a JSON object, the fields of which are as 
 | `next`         | Link to next page (see Pagination)                  |
 | `groups`       | [ISSUE: determine best way to represent this]       |
 
-## Metadata
 
-front matter
-
-| Key             | Description                                                  |
-| --------------- | ------------------------------------------------------------ |
-| `_state`        | Query state; see below                                       |
-| `_sources`      | Array of PTO URLs of observation sets covered by the query   |
-| `__parameters`  | Parameters from which the query was generated                |
-| `__result`      | URL of the resource containing complete result, when available |
-
-| State           | Meaning                                 |
-| --------------- | --------------------------------------- |
-| `submitted`     | Submitted, but not yet running          |
-| `pending`       | Running and awaiting results            |
-| `failed`        | Abnormally ended without returning results |
-| `complete`      | Results are available                   |
-| `permanent`     | Results are available and cached results will be stored permanently |
 
 
 # Data Analysis

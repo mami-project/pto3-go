@@ -228,7 +228,9 @@ func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Reque
 
 	// now select all the observations
 	// FIXME this sucks the whole obset into RAM, which is fast but probably not great.
-	// Figure out how to stream this
+	// Figure out how to stream this. Might require another library
+
+	// FIXME shouldn't this funtionality be in model.go?
 	var obsdat []Observation
 
 	err = osr.db.Model(&obsdat).
@@ -240,7 +242,8 @@ func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// and serialize them to JSON
+	// and serialize them to NDJSON
+	w.Header().Set("Content-type", "application/vnd.mami.ndjson")
 	w.WriteHeader(http.StatusOK)
 
 	for _, obs := range obsdat {
