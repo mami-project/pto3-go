@@ -3,8 +3,6 @@ package pto3_test
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,91 +11,8 @@ import (
 	pto3 "github.com/mami-project/pto3-go"
 )
 
-const GoodAPIKey = "07e57ab18e70"
-
 var rds *pto3.RawDataStore
 var r *mux.Router
-
-// FIXME need to merge the two testing mains here
-
-// func TestMain(m *testing.M) {
-
-// 	// create temporary RDS directory
-// 	rawroot, err := ioutil.TempDir("", "pto3_test")
-// 	if err != nil {
-// 		log.Fatal(err.Error())
-// 	}
-// 	defer os.RemoveAll(rawroot)
-
-// 	// create configuration, RDS, and router (as package vars?)
-// 	baseurl, _ := url.Parse("http://ptotest.mami-project.eu")
-// 	config := pto3.PTOServerConfig{
-// 		BaseURL:      *baseurl,
-// 		RawRoot:      rawroot,
-// 		ContentTypes: map[string]string{"test": "application/json"},
-// 	}
-
-// 	authorizer := pto3.Authorizer{
-// 		APIKeys: map[string]map[string]bool{
-// 			GoodAPIKey: map[string]bool{
-// 				"list_raw":       true,
-// 				"read_raw:test":  true,
-// 				"write_raw:test": true,
-// 			},
-// 		},
-// 	}
-
-// 	rds, err = pto3.NewRawDataStore(&config, &authorizer)
-// 	if err != nil {
-// 		log.Fatal(err.Error())
-// 	}
-
-// 	r = mux.NewRouter()
-// 	r.HandleFunc("/", config.HandleRoot)
-// 	rds.AddRoutes(r)
-
-// 	// go!
-// 	os.Exit(m.Run())
-
-// }
-
-func executeRequest(r *mux.Router, t *testing.T, method string, url string, body io.Reader, bodytype string, apikey string, expectstatus int) *httptest.ResponseRecorder {
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Accept", "application/json")
-
-	if bodytype != "" {
-		req.Header.Set("Content-Type", bodytype)
-	}
-
-	if apikey != "" {
-		req.Header.Set("Authorization", "APIKEY "+apikey)
-	}
-
-	res := httptest.NewRecorder()
-	r.ServeHTTP(res, req)
-
-	if res.Code != expectstatus {
-		errstr := fmt.Sprintf("%s %s expected status %d but got %d", method, url, expectstatus, res.Code)
-		if res.Code >= 400 {
-			errstr += ":\n" + string(res.Body.Bytes())
-		}
-		t.Fatal(errstr)
-	}
-
-	return res
-}
-
-func executePutJSON(r *mux.Router, t *testing.T, url string, content interface{}, bodytype string, apikey string) *httptest.ResponseRecorder {
-	b, err := json.Marshal(content)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return executeRequest(r, t, "PUT", url, bytes.NewBuffer(b), bodytype, apikey, http.StatusCreated)
-}
 
 func checkContentType(t *testing.T, res *httptest.ResponseRecorder) {
 	if res.Header().Get("Content-Type") != "application/json" {

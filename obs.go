@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-pg/pg"
 	"github.com/gorilla/mux"
@@ -252,6 +254,25 @@ func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request
 
 	// and write
 	osr.writeMetadataResponse(w, &set, http.StatusCreated)
+}
+
+func (osr *ObservationStore) CreateTables() error {
+	return CreateTables(osr.db)
+}
+
+func (osr *ObservationStore) DropTables() error {
+	return DropTables(osr.db)
+}
+
+func (osr *ObservationStore) EnableQueryLogging() {
+	osr.db.OnQueryProcessed(func(event *pg.QueryProcessedEvent) {
+		query, err := event.FormattedQuery()
+		if err != nil {
+			panic(err)
+		}
+
+		log.Printf("%s %s", time.Since(event.StartTime), query)
+	})
 }
 
 func (osr *ObservationStore) AddRoutes(r *mux.Router) {

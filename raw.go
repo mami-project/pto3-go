@@ -953,6 +953,17 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	w.Write(outb)
 }
 
+// Ensure that the directories backing the data store exist. Used for testing.
+func (rds *RawDataStore) CreateDirectories() error {
+	return os.Mkdir(rds.path, 0755)
+}
+
+// Remove the directories backing the data store incluing all their contents.
+// Used for testing.
+func (rds *RawDataStore) RemoveDirectories() error {
+	return os.RemoveAll(rds.path)
+}
+
 func (rds *RawDataStore) AddRoutes(r *mux.Router) {
 	r.HandleFunc("/raw", rds.HandleListCampaigns).Methods("GET")
 	r.HandleFunc("/raw/{campaign}", rds.HandleGetCampaignMetadata).Methods("GET")

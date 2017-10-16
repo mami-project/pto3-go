@@ -3,10 +3,7 @@ package pto3_test
 import (
 	"bytes"
 	"encoding/json"
-	"log"
-	"os"
 	"testing"
-	"time"
 
 	"github.com/go-pg/pg"
 	pto3 "github.com/mami-project/pto3-go"
@@ -14,45 +11,9 @@ import (
 
 var TestDB *pg.DB
 
-func TestMain(m *testing.M) {
-
-	opts := pg.Options{
-		Addr:     "localhost:5432",
-		User:     "ptotest",
-		Database: "ptotest",
-		Password: "helpful guide sheep train",
-	}
-
-	// connect to database
-	TestDB = pg.Connect(&opts)
-
-	// log everything that happens
-	TestDB.OnQueryProcessed(func(event *pg.QueryProcessedEvent) {
-		query, err := event.FormattedQuery()
-		if err != nil {
-			panic(err)
-		}
-
-		log.Printf("%s %s", time.Since(event.StartTime), query)
-	})
-
-	// now let's make us some tables
-	err := pto3.CreateTables(TestDB)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	// go!
-	os.Exit(m.Run())
-
-	// drop tables
-	// err = pto3.DropTables(TestDB)
-	// if err != nil {
-	// 	log.Fatal(err.Error())
-	// }
-}
-
 func TestObservationRoundtrip(t *testing.T) {
+
+	TestDB := pg.Connect(&(TestConfig.ObsDatabase))
 
 	set_json := []byte(`
 	{"_sources": 
