@@ -164,7 +164,7 @@ func (set *ObservationSet) LinkVia(baseurl url.URL) {
 
 func (set *ObservationSet) CountObservations(db orm.DB) int {
 	if set.count == 0 {
-		set.count, _ = db.Model(&Observation{}).Where("set_id == ?", set.ID).Count()
+		set.count, _ = db.Model(&Observation{}).Where("set_id = ?", set.ID).Count()
 	}
 	return set.count
 }
@@ -288,7 +288,7 @@ func MarshalObservations(obsdat []Observation) ([]byte, error) {
 
 func ReadObservations(in io.Reader) ([]Observation, error) {
 	sin := bufio.NewScanner(in)
-	out := make([]Observation, 1)
+	out := make([]Observation, 0)
 	var obs Observation
 	for sin.Scan() {
 		if err := json.Unmarshal([]byte(sin.Text()), &obs); err != nil {

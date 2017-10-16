@@ -14,7 +14,7 @@ type ClientObservationSet struct {
 	Analyzer string   `json:"_analyzer"`
 	Link     string   `json:"__link"`
 	Datalink string   `json:"__data"`
-	Count    int      `json:"__count"`
+	Count    int      `json:"__obs_count"`
 }
 
 func TestObsRoundtrip(t *testing.T) {
@@ -44,7 +44,7 @@ func TestObsRoundtrip(t *testing.T) {
 	}
 
 	if cset.Analyzer != set.Analyzer {
-		t.Errorf("observation set metadata analyzer mismatch, sent %s got %s", set.Analyzer, cset.Analyzer)
+		t.Fatalf("observation set metadata analyzer mismatch, sent %s got %s", set.Analyzer, cset.Analyzer)
 	}
 
 	if cset.Datalink == "" {
@@ -73,7 +73,7 @@ func TestObsRoundtrip(t *testing.T) {
 	}
 
 	if cset.Count != len(observations_up) {
-		t.Errorf("bad observation set __count after data PUT: expected %d got %d", len(observations_up), cset.Count)
+		t.Fatalf("bad observation set __obs_count after data PUT: expected %d got %d", len(observations_up), cset.Count)
 	}
 
 	// and try downloading it again
@@ -85,7 +85,7 @@ func TestObsRoundtrip(t *testing.T) {
 	}
 
 	if len(observations_up) != len(observations_down) {
-		t.Errorf("observation count mismatch")
+		t.Fatalf("observation count mismatch: sent %d got %d", len(observations_up), len(observations_down))
 	}
 
 	// fixme check timing too
