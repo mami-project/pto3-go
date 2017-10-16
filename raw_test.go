@@ -7,38 +7,20 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gorilla/mux"
 	pto3 "github.com/mami-project/pto3-go"
 )
 
 var rds *pto3.RawDataStore
-var r *mux.Router
 
 func checkContentType(t *testing.T, res *httptest.ResponseRecorder) {
 	if res.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("unexpected content type %s", res.Header().Get("Content-Type"))
 	}
 }
-func TestListRoot(t *testing.T) {
-	res := executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/", nil, "", "", http.StatusOK)
-
-	checkContentType(t, res)
-
-	var links map[string]string
-
-	if err := json.Unmarshal(res.Body.Bytes(), &links); err != nil {
-		t.Fatal(err)
-	}
-
-	rawlink := links["raw"]
-	if rawlink != "http://ptotest.mami-project.eu/raw" {
-		t.Fatalf("raw link is %s", rawlink)
-	}
-}
 
 func TestListCampaigns(t *testing.T) {
 	// list campaigns, this should be empty
-	res := executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw", nil, "", GoodAPIKey, http.StatusOK)
+	res := executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw", nil, "", GoodAPIKey, http.StatusOK)
 	checkContentType(t, res)
 
 	var camlist map[string]interface{}
@@ -53,7 +35,7 @@ func TestListCampaigns(t *testing.T) {
 }
 
 func TestBadAuth(t *testing.T) {
-	executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw", nil, "", "abadc0de", http.StatusForbidden)
+	executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw", nil, "", "abadc0de", http.StatusForbidden)
 }
 
 type testRawMetadata struct {
@@ -66,7 +48,7 @@ type testRawMetadata struct {
 	DataURL     string `json:"__data"`
 }
 
-func TestRoundTrip(t *testing.T) {
+func TestRawRoundtrip(t *testing.T) {
 	// create a new campaign
 	md := pto3.RDSMetadata{
 		"_file_type":  "test",
@@ -75,10 +57,10 @@ func TestRoundTrip(t *testing.T) {
 	}
 	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test")
 
-	res := executePutJSON(r, t, "http://ptotest.mami-project.eu/raw/test", md, "application/json", GoodAPIKey)
+	res := executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test", md, GoodAPIKey, http.StatusCreated)
 
 	// check campaign metadata download
-	res = executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw/test", nil, "", GoodAPIKey, 200)
+	res = executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw/test", nil, "", GoodAPIKey, 200)
 	err := json.Unmarshal(res.Body.Bytes(), &md)
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +75,7 @@ func TestRoundTrip(t *testing.T) {
 		"_time_end":   "2010-01-02T00:00:00",
 	}
 	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test/file001.json")
-	res = executePutJSON(r, t, "http://ptotest.mami-project.eu/raw/test/file001.json", md, "application/json", GoodAPIKey)
+	res = executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test/file001.json", md, GoodAPIKey, http.StatusCreated)
 
 	// find the data link
 	var trm testRawMetadata
@@ -110,10 +92,10 @@ func TestRoundTrip(t *testing.T) {
 
 	// now upload the data
 	data := []string{"this", "is", "a", "list", "of", "words"}
-	res = executePutJSON(r, t, trm.DataURL, data, "application/json", GoodAPIKey)
+	res = executeWithJSON(TestRouter, t, "PUT", trm.DataURL, data, GoodAPIKey, http.StatusCreated)
 
 	// retrieve file metadata and check file size
-	res = executeRequest(r, t, "GET", "http://ptotest.mami-project.eu/raw/test/file001.json", nil, "", GoodAPIKey, http.StatusOK)
+	res = executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw/test/file001.json", nil, "", GoodAPIKey, http.StatusOK)
 	checkContentType(t, res)
 
 	err = json.Unmarshal(res.Body.Bytes(), &trm)
@@ -127,7 +109,7 @@ func TestRoundTrip(t *testing.T) {
 	}
 
 	// now download the file
-	res = executeRequest(r, t, "GET", trm.DataURL, nil, "", GoodAPIKey, 200)
+	res = executeRequest(TestRouter, t, "GET", trm.DataURL, nil, "", GoodAPIKey, 200)
 
 	bytesdown := res.Body.Bytes()
 	if !bytes.Equal(bytesup, bytesdown) {

@@ -19,6 +19,8 @@ elements, with the following semantics and format:
 | 4        | Condition, as a JSON string                               |
 | 5        | Value associated with condition, optional                 |
 
+*FIXME: as currently implemented a path is a string.*
+
 *Path elements* are strings identifying hops along the path. The type of path
 element is implied by its format; the following path element types are currently
 supported:

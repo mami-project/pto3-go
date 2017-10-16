@@ -58,7 +58,7 @@ func (osr *ObservationStore) writeMetadataResponse(w http.ResponseWriter, set *O
 }
 
 func (osr *ObservationStore) HandleListSets(w http.ResponseWriter, r *http.Request) {
-	// FIXME insert into database, get ID, form URL for the newly created observation set
+	// FIXME select observation set IDs and generate links
 	http.Error(w, "not done learning go-pg yet", http.StatusNotImplemented)
 }
 
@@ -190,8 +190,7 @@ func (osr *ObservationStore) HandlePutMetadata(w http.ResponseWriter, r *http.Re
 }
 
 func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Request) {
-	// FIXME insert into database, get ID, form URL for the newly created observation set
-	http.Error(w, "not done learning go-pg yet", http.StatusNotImplemented)
+
 }
 
 // HandleUpload handles PUT /obs/create/data. It requires a newline-delimited
@@ -230,7 +229,7 @@ func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request
 		http.Error(w, fmt.Sprintf("Observation set %s already uploaded", vars["set"]), http.StatusBadRequest)
 	}
 
-	// now scan the input looking for observations
+	// now scan the input looking for observations, streaming them into the database
 	in := bufio.NewScanner(r.Body)
 	var obs Observation
 

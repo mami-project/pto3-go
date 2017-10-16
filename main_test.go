@@ -48,6 +48,9 @@ func setupOSR(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.Observat
 		log.Fatal(err.Error())
 	}
 
+	// log everything
+	osr.EnableQueryLogging()
+
 	// create tables
 	if err := osr.CreateTables(); err != nil {
 		log.Fatal(err.Error())
@@ -80,51 +83,6 @@ func setupAZR() *pto3.Authorizer {
 	}
 }
 
-var TestConfig pto3.PTOServerConfig
-
-func TestMain(m *testing.M) {
-	// define a configuration
-	baseurl, _ := url.Parse("http://ptotest.mami-project.eu")
-	TestConfig = pto3.PTOServerConfig{
-		BaseURL: *baseurl,
-		ContentTypes: map[string]string{
-			"test": "application/json",
-			"osf":  "applicaton/vnd.mami.ndjson",
-		},
-		ObsDatabase: pg.Options{
-			Addr:     "localhost:5432",
-			User:     "ptotest",
-			Database: "ptotest",
-			Password: "helpful guide sheep train",
-		},
-	}
-
-	// inner anon function ensures that os.Exit doesn't keep deferred teardown from running
-	os.Exit(func() int {
-		// get an authorizer
-		azr := setupAZR()
-
-		// build a raw data store around it (and prepare to clean up after it)
-		rds := setupRDS(&TestConfig, azr)
-		defer teardownRDS(rds)
-
-		// build an observation store around it (and prepare to clean up after it)
-		osr := setupOSR(&TestConfig, azr)
-		defer teardownOSR(osr)
-
-		// debugging: log every query
-		osr.EnableQueryLogging()
-
-		// set up routes
-		r = mux.NewRouter()
-		r.HandleFunc("/", TestConfig.HandleRoot)
-		rds.AddRoutes(r)
-		osr.AddRoutes(r)
-
-		return m.Run()
-	}())
-}
-
 func executeRequest(r *mux.Router, t *testing.T, method string, url string, body io.Reader, bodytype string, apikey string, expectstatus int) *httptest.ResponseRecorder {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
@@ -154,21 +112,91 @@ func executeRequest(r *mux.Router, t *testing.T, method string, url string, body
 	return res
 }
 
-func executePutJSON(r *mux.Router, t *testing.T, url string, content interface{}, bodytype string, apikey string) *httptest.ResponseRecorder {
+func executeWithJSON(r *mux.Router, t *testing.T,
+	method string, url string,
+	content interface{},
+	apikey string, expectstatus int) *httptest.ResponseRecorder {
+
 	b, err := json.Marshal(content)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	return executeRequest(r, t, "PUT", url, bytes.NewBuffer(b), bodytype, apikey, http.StatusCreated)
+	return executeRequest(r, t, method, url, bytes.NewBuffer(b), "application/json", apikey, expectstatus)
 }
 
-func executePutFile(r *mux.Router, t *testing.T, url string, filepath string, bodytype string, apikey string) *httptest.ResponseRecorder {
+func executeWithFile(r *mux.Router, t *testing.T,
+	method string, url string,
+	filepath string, bodytype string,
+	apikey string, expectstatus int) *httptest.ResponseRecorder {
+
 	f, err := os.Open(filepath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
 
-	return executeRequest(r, t, "PUT", url, f, bodytype, apikey, http.StatusCreated)
+	return executeRequest(r, t, method, url, f, bodytype, apikey, http.StatusCreated)
+}
+
+const TestBaseURL = "http://ptotest.mami-project.eu"
+
+var TestConfig pto3.PTOServerConfig
+var TestRouter *mux.Router
+
+func TestMain(m *testing.M) {
+	// define a configuration
+	baseurl, _ := url.Parse(TestBaseURL)
+	TestConfig = pto3.PTOServerConfig{
+		BaseURL: *baseurl,
+		ContentTypes: map[string]string{
+			"test": "application/json",
+			"osf":  "applicaton/vnd.mami.ndjson",
+		},
+		ObsDatabase: pg.Options{
+			Addr:     "localhost:5432",
+			User:     "ptotest",
+			Database: "ptotest",
+			Password: "helpful guide sheep train",
+		},
+	}
+
+	// inner anon function ensures that os.Exit doesn't keep deferred teardown from running
+	os.Exit(func() int {
+		// get an authorizer
+		azr := setupAZR()
+
+		// build a raw data store around it (and prepare to clean up after it)
+		rds := setupRDS(&TestConfig, azr)
+		defer teardownRDS(rds)
+
+		// build an observation store around it (and prepare to clean up after it)
+		osr := setupOSR(&TestConfig, azr)
+		defer teardownOSR(osr)
+
+		// set up routes
+		TestRouter = mux.NewRouter()
+		TestRouter.HandleFunc("/", TestConfig.HandleRoot)
+		rds.AddRoutes(TestRouter)
+		osr.AddRoutes(TestRouter)
+
+		return m.Run()
+	}())
+}
+
+func TestListRoot(t *testing.T) {
+	res := executeRequest(TestRouter, t, "GET", TestBaseURL+"/", nil, "", "", http.StatusOK)
+
+	checkContentType(t, res)
+
+	var links map[string]string
+
+	if err := json.Unmarshal(res.Body.Bytes(), &links); err != nil {
+		t.Fatal(err)
+	}
+
+	rawlink := links["raw"]
+	if rawlink != TestBaseURL+"/raw" {
+		t.Fatalf("raw link is %s", rawlink)
+	}
 }

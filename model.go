@@ -1,9 +1,12 @@
 package pto3
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"strconv"
 	"strings"
@@ -62,6 +65,7 @@ type ObservationSet struct {
 	Sources  []string `pg:",array"`
 	Analyzer string
 	Metadata map[string]string
+	datalink string
 	link     string
 	count    int
 }
@@ -77,6 +81,14 @@ func (set *ObservationSet) MarshalJSON() ([]byte, error) {
 
 	if set.link != "" {
 		jmap["__link"] = set.link
+	}
+
+	if set.datalink != "" {
+		jmap["__data"] = set.datalink
+	}
+
+	if set.count != 0 {
+		jmap["__obs_count"] = set.count
 	}
 
 	for k, v := range set.Metadata {
@@ -110,7 +122,7 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 		} else if k == "_analyzer" {
 			set.Analyzer = AsString(v)
 		} else if strings.HasPrefix(k, "__") {
-
+			// Ignore all (incoming) __ keys instead of stuffing them in metadata
 		} else {
 			set.Metadata[k] = AsString(v)
 		}
@@ -145,12 +157,14 @@ func (set *ObservationSet) Update(db orm.DB) error {
 
 func (set *ObservationSet) LinkVia(baseurl url.URL) {
 	seturl, _ := url.Parse(fmt.Sprintf("obs/%016x", set.ID))
-	set.link = seturl.String()
+	set.link = baseurl.ResolveReference(seturl).String()
+	dataurl, _ := url.Parse(fmt.Sprintf("obs/%016x/data", set.ID))
+	set.datalink = baseurl.ResolveReference(dataurl).String()
 }
 
 func (set *ObservationSet) CountObservations(db orm.DB) int {
 	if set.count == 0 {
-		set.count, _ = db.Model(&Observation{}).Where("setid == ?", set.ID).Count()
+		set.count, _ = db.Model(&Observation{}).Where("set_id == ?", set.ID).Count()
 	}
 	return set.count
 }
@@ -243,6 +257,50 @@ func (obs *Observation) InsertInSet(db orm.DB, set *ObservationSet) error {
 	obs.SetID = obs.Set.ID
 
 	return db.Insert(obs)
+}
+
+func WriteObservations(obsdat []Observation, out io.Writer) error {
+	for _, obs := range obsdat {
+		b, err := json.Marshal(&obs)
+		if err != nil {
+			return err
+		}
+		_, err = out.Write(b)
+		if err != nil {
+			return err
+		}
+		_, err = out.Write([]byte("\n"))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func MarshalObservations(obsdat []Observation) ([]byte, error) {
+	var out bytes.Buffer
+	err := WriteObservations(obsdat, &out)
+	if err != nil {
+		return nil, err
+	}
+	return out.Bytes(), err
+}
+
+func ReadObservations(in io.Reader) ([]Observation, error) {
+	sin := bufio.NewScanner(in)
+	out := make([]Observation, 1)
+	var obs Observation
+	for sin.Scan() {
+		if err := json.Unmarshal([]byte(sin.Text()), &obs); err != nil {
+			return nil, err
+		}
+		out = append(out, obs)
+	}
+	return out, nil
+}
+
+func UnmarshalObservations(in []byte) ([]Observation, error) {
+	return ReadObservations(bytes.NewBuffer(in))
 }
 
 // CreateTables insures that the tables used by the ORM exist in the given

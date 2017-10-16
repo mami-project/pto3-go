@@ -11,7 +11,8 @@ import (
 
 var TestDB *pg.DB
 
-func TestObservationRoundtrip(t *testing.T) {
+// FIXME this is probably obsolete now that we have the observation API tests...
+func TestORMObservationRoundtrip(t *testing.T) {
 
 	TestDB := pg.Connect(&(TestConfig.ObsDatabase))
 
