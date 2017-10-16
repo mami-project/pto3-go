@@ -187,16 +187,78 @@ func (osr *ObservationStore) HandlePutMetadata(w http.ResponseWriter, r *http.Re
 	osr.writeMetadataResponse(w, &set, http.StatusCreated)
 }
 
+// HandleDownload handles GET /obs/<set>/data. It requires  Set IDs in the input are ignored. It writes a response
+// containing the all the observations in the set as a newline-delimited
+// JSON stream (of content-type application/vnd.mami.ndjson) in observation set
+// file format.
+
 func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Request) {
-	// FIXME insert into database, get ID, form URL for the newly created observation set
-	http.Error(w, "not done learning go-pg yet", http.StatusNotImplemented)
+	// fail if not authorized
+	if !osr.azr.IsAuthorized(w, r, "write_obs") {
+		return
+	}
+
+	vars := mux.Vars(r)
+
+	// fill in set ID from URL
+	setid, err := strconv.ParseInt(vars["set"], 16, 64)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("bad or missing set ID %s: %s", vars["set"], err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	// retrieve set metadata
+	set := ObservationSet{ID: int(setid)}
+	if err := osr.db.Select(&set); err != nil {
+		if err == pg.ErrNoRows {
+			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// fail if no observations exist
+	if set.CountObservations(osr.db) == 0 {
+		http.Error(w, fmt.Sprintf("Observation set %s has no observations", vars["set"]), http.StatusNotFound)
+		return
+	}
+
+	// now select all the observations
+	// FIXME this sucks the whole obset into RAM, which is fast but probably not great.
+	// Figure out how to stream this
+	var obsdat []Observation
+
+	err = osr.db.Model(&obsdat).
+		Column("observation.*", "Condition", "Path").
+		Where("set_id = ?", setid).
+		Select()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// and serialize them to JSON
+	w.WriteHeader(http.StatusOK)
+
+	for _, obs := range obsdat {
+		b, err := json.Marshal(&obs)
+		if err != nil {
+			// FIXME can't error out at this point, need to truncate, scribble, and log.
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Write(b)
+		w.Write([]byte("\n"))
+	}
+
 }
 
-// HandleUpload handles PUT /obs/create/data. It requires a newline-delimited
+// HandleUpload handles PUT /obs/<set>/data. It requires a newline-delimited
 // JSON stream (of content-type application/vnd.mami.ndjson) in observation set
 // file format. Set IDs in the input are ignored. It writes a response
 // containing the set's metadata.
-
 func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	// fail if not authorized
 	if !osr.azr.IsAuthorized(w, r, "write_obs") {
@@ -226,6 +288,7 @@ func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request
 	// fail if observations exist
 	if set.CountObservations(osr.db) != 0 {
 		http.Error(w, fmt.Sprintf("Observation set %s already uploaded", vars["set"]), http.StatusBadRequest)
+		return
 	}
 
 	// now scan the input looking for observations
