@@ -38,78 +38,87 @@ func TestBadAuth(t *testing.T) {
 	executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw", nil, "", "abadc0de", http.StatusForbidden)
 }
 
-type testRawMetadata struct {
+type testCampaignMetadata struct {
 	FileType    string `json:"_file_type"`
 	Owner       string `json:"_owner"`
 	Description string `json:"description"`
-	TimeStart   string `json:"_time_start"`
-	TimeEnd     string `json:"_time_end"`
-	DataSize    int    `json:"__data_size"`
-	DataURL     string `json:"__data"`
+}
+
+type testFileMetadata struct {
+	TimeStart string `json:"_time_start"`
+	TimeEnd   string `json:"_time_end"`
+	DataSize  int    `json:"__data_size"`
+	DataURL   string `json:"__data"`
+}
+
+type testRawMetadata struct {
+	testCampaignMetadata
+	testFileMetadata
 }
 
 func TestRawRoundtrip(t *testing.T) {
 	// create a new campaign
-	md := testRawMetadata{
+	cmd := testCampaignMetadata{
 		FileType:    "test",
 		Owner:       "ptotest@mami-project.eu",
 		Description: "a campaign filled with uninteresting test data",
 	}
 	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test")
 
-	res := executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test", md, GoodAPIKey, http.StatusCreated)
+	res := executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test", cmd, GoodAPIKey, http.StatusCreated)
 
 	// check campaign metadata download
 	res = executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw/test", nil, "", GoodAPIKey, 200)
-	err := json.Unmarshal(res.Body.Bytes(), &md)
+	err := json.Unmarshal(res.Body.Bytes(), &cmd)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if md.Description != "a campaign filled with uninteresting test data" {
-		t.Fatalf("campaign metadata retrieval failed; got description %s", md.Description)
+
+	if cmd.Description != "a campaign filled with uninteresting test data" {
+		t.Fatalf("campaign metadata retrieval failed; got description %s", cmd.Description)
 	}
 
 	// create a file within the campaign
-	md = testRawMetadata{
+	fmd := testFileMetadata{
 		TimeStart: "2010-01-01T00:00:00Z",
 		TimeEnd:   "2010-01-02T00:00:00Z",
 	}
 	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test/file001.json")
-	res = executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test/file001.json", md, GoodAPIKey, http.StatusCreated)
+	res = executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test/file001.json", fmd, GoodAPIKey, http.StatusCreated)
 
 	// find the data link
-	var trm testRawMetadata
-	err = json.Unmarshal(res.Body.Bytes(), &trm)
+	var rmd testRawMetadata
+	err = json.Unmarshal(res.Body.Bytes(), &rmd)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if trm.DataURL == "" {
+	if rmd.DataURL == "" {
 		t.Fatal("missing __data virtual after metadata upload")
 	}
 
-	t.Logf("attempting to upload file to %s", trm.DataURL)
+	t.Logf("attempting to upload file to %s", rmd.DataURL)
 
 	// now upload the data
 	data := []string{"this", "is", "a", "list", "of", "words"}
-	res = executeWithJSON(TestRouter, t, "PUT", trm.DataURL, data, GoodAPIKey, http.StatusCreated)
+	res = executeWithJSON(TestRouter, t, "PUT", rmd.DataURL, data, GoodAPIKey, http.StatusCreated)
 
 	// retrieve file metadata and check file size
 	res = executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw/test/file001.json", nil, "", GoodAPIKey, http.StatusOK)
 	checkContentType(t, res)
 
-	err = json.Unmarshal(res.Body.Bytes(), &trm)
+	err = json.Unmarshal(res.Body.Bytes(), &rmd)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	bytesup, _ := json.Marshal(data)
-	if len(bytesup) != trm.DataSize {
-		t.Fatalf("file upload size mismatch: sent %d got %d", len(bytesup), trm.DataSize)
+	if len(bytesup) != rmd.DataSize {
+		t.Fatalf("file upload size mismatch: sent %d got %d", len(bytesup), rmd.DataSize)
 	}
 
 	// now download the file
-	res = executeRequest(TestRouter, t, "GET", trm.DataURL, nil, "", GoodAPIKey, 200)
+	res = executeRequest(TestRouter, t, "GET", rmd.DataURL, nil, "", GoodAPIKey, 200)
 
 	bytesdown := res.Body.Bytes()
 	if !bytes.Equal(bytesup, bytesdown) {

@@ -57,14 +57,14 @@ func (md *RDSMetadata) MarshalJSON() ([]byte, error) {
 	}
 
 	if md.TimeStart != nil {
-		if (md.Parent == nil && md.Parent.TimeStart != nil) || md.TimeStart.Equal(*md.Parent.TimeStart) {
+		if (md.Parent == nil) || (md.Parent.TimeStart != nil && !md.TimeStart.Equal(*md.Parent.TimeStart)) {
 			jmap["_time_start"] = md.TimeStart.Format(time.RFC3339)
 		}
 	}
 
 	if md.TimeEnd != nil {
-		if (md.Parent == nil && md.Parent.TimeStart != nil) || md.TimeStart.Equal(*md.Parent.TimeStart) {
-			jmap["_time_start"] = md.TimeStart.Format(time.RFC3339)
+		if (md.Parent == nil) || (md.Parent.TimeEnd != nil && !md.TimeEnd.Equal(*md.Parent.TimeEnd)) {
+			jmap["_time_end"] = md.TimeEnd.Format(time.RFC3339)
 		}
 	}
 
