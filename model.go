@@ -41,6 +41,15 @@ func (c *Condition) InsertOnce(db orm.DB) error {
 	return nil
 }
 
+// ConditionsByName returns a slice of conditions matching a condition name.
+// If a single condition name is given, returns that condition (with ID). If a
+// wildcard name is given, returns all conditions (with ID) matching the
+// wildcard.
+func ConditionsByName(name string, db orm.DB) ([]Condition, error) {
+	panic("ConditionsByName() not yet implemented")
+	return nil, nil
+}
+
 type Path struct {
 	ID     int
 	String string

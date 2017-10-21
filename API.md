@@ -238,11 +238,10 @@ below:
 | --------------- | --------- | --------- | ---------------------------------------------------------------- |
 | `time_start`    | temporal  | no        | Select observations starting at or after the given start time    |
 | `time_end`      | temporal  | no        | Select observations ending at or before the given end time       |
-| `campaign`      | select    | yes       | Select observations deriving from a given campaign               |
 | `set`           | select    | yes       | Select observations with in the given set ID                     |
 | `on_path`       | select    | yes       | Select observations with the given element in the path           | 
 | `source`        | select    | yes       | Select observations with the given element at the start of the path |
-| `destination`   | select    | yes       | Select observations with the given element at the end of the path |
+| `target`        | select    | yes       | Select observations with the given element at the end of the path |
 | `condition`     | select    | yes       | Select observations with the given condition, with wildcards      |
 | `group_by`      | group     | yes       | Group observations and return counts by group  |
 | `intersect_condition` | set | yes       | Group observations by path, select paths by set intersection on conditions |
@@ -273,7 +272,7 @@ the query answers.
 
 | Key             | Description                                                  |
 | --------------- | ------------------------------------------------------------ |
-| `__parameters`  | Parameters from which the query was generated                |
+| `__parameters`  | URL-encoded parameters from which the query was generated                |
 | `__state`       | Query state; see below                                       |
 | `__result`      | URL of the resource containing complete result, when available |
 | `__sources`     | Array of PTO URLs of observation sets covered by the query, when available   |
@@ -336,7 +335,7 @@ An `intersect_condition` parameter is either a full condition name (i.e.,
 without wildcards), or a full condition name prefixed with the character `!`
 (urlencoded `%21`). In the former case, the set is of all paths for which there
 is at least one observation with the specified condition. In the latter case,
-the set is negated, i.e. the set of all paths foe which there are no
+the set is negated, i.e. the set of all paths for which there are no
 observations with the specified condition. Foe example, a query with two
 `intersect_condition` parameters with values `foo.bar` and `!foo.baz` will
 select paths where there is at least one `foo.bar` observation and no `foo.baz`
@@ -368,7 +367,7 @@ available:
 | `day_hour`    | Count by hour of day of start_time (24 groups)     | 
 | `condition`   | Count by condition                                 |
 | `source`      | Count by first element in path                     |
-| `destination` | Count by last element in path                      |
+| `target`      | Count by last element in path                      |
 
 The result of an aggregation query is a JSON object, the fields of which are as follows:
 
@@ -377,9 +376,6 @@ The result of an aggregation query is a JSON object, the fields of which are as 
 | `prev`         | Link to previous page (see Pagination)              |
 | `next`         | Link to next page (see Pagination)                  |
 | `groups`       | [ISSUE: determine best way to represent this]       |
-
-
-
 
 # Data Analysis
 
