@@ -147,7 +147,7 @@ func NewQueryFromForm(form map[string][]string, db orm.DB) (*Query, error) {
 
 	// FIXME parse intersect conditions
 
-	// FIXME parse
+	// FIXME parse options
 
 	// hash everything into an identifier
 	q.generateIdentifier()
