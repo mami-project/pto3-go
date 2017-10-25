@@ -3,18 +3,11 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"os"
 	"time"
 )
-
-func randomPath(sourcePrefixes []string, targetPrefixes []string) string {
-
-	sourcePrefix := sourcePrefixes[rand.Intn(len(sourcePrefixes))]
-	targetPrefix := sourcePrefixes[rand.Intn(len(targetPrefixes))]
-
-	return fmt.Sprintf("%s%d * %s%d", sourcePrefix, rand.Intn(256), targetPrefix, rand.Intn(256))
-}
 
 func randomTime(base time.Time) (time.Time, time.Time) {
 	duration := rand.Int63n(1000000000 * 2)
@@ -23,44 +16,23 @@ func randomTime(base time.Time) (time.Time, time.Time) {
 	return base.Add(time.Duration(duration)), base.Add(time.Duration(offset))
 }
 
-func generateTestObservations(count int, out io.Writer) {
+type testObservationSpec struct {
+	SourceIP4           string
+	SourceIP6           string
+	IP4Bias             int
+	Target4Prefixes     []string
+	Target6Prefixes     []string
+	ConditionPrevalence map[string]int
+}
 
-	// define condition prevalences
-	conditionPrevalence := map[string]int{
-		"pto.test.color.red":             8,
-		"pto.test.color.orange":          7,
-		"pto.test.color.yellow":          6,
-		"pto.test.color.green":           5,
-		"pto.test.color.blue":            4,
-		"pto.test.color.indigo":          3,
-		"pto.test.color.violet":          2,
-		"pto.test.color.none_more_black": 1,
-	}
+func generateTestObservations(spec *testObservationSpec, count int, out io.Writer) {
 
-	// and create a condition die we can roll
+	// generate a condition die we can roll
 	conditions := make([]string, 0)
-	for k, v := range conditionPrevalence {
+	for k, v := range spec.ConditionPrevalence {
 		for i := 0; i < v; i++ {
 			conditions = append(conditions, k)
 		}
-	}
-
-	// some source prefixes
-	sourcePrefixes := []string{
-		"10.1.2.",
-		"10.3.4.",
-		"10.5.6.",
-		"10.7.8.",
-		"10.9.10.",
-	}
-
-	// some destination prefixes
-	targetPrefixes := []string{
-		"10.11.12.",
-		"10.13.14.",
-		"10.15.16.",
-		"10.17.18.",
-		"10.19.20.",
 	}
 
 	// start the clock
@@ -71,8 +43,19 @@ func generateTestObservations(count int, out io.Writer) {
 	// now emit some observations as ndjson
 	for i := 0; i < count; i++ {
 
-		// make a random path
-		path := randomPath(sourcePrefixes, targetPrefixes)
+		// generate v4 or v6 path
+		var path string
+		if rand.Intn(256) < spec.IP4Bias {
+			path = fmt.Sprintf("%s * %s%d",
+				spec.SourceIP4,
+				spec.Target4Prefixes[rand.Intn(len(spec.Target4Prefixes))],
+				rand.Intn(256))
+		} else {
+			path = fmt.Sprintf("%s * %s%x",
+				spec.SourceIP6,
+				spec.Target6Prefixes[rand.Intn(len(spec.Target6Prefixes))],
+				rand.Intn(65536))
+		}
 
 		// pick a random condition
 		condition := conditions[rand.Intn(len(conditions))]
@@ -89,5 +72,58 @@ func generateTestObservations(count int, out io.Writer) {
 }
 
 func main() {
-	generateTestObservations(7200, os.Stdout)
+
+	spec := testObservationSpec{
+		IP4Bias: 200,
+		Target4Prefixes: []string{
+			"10.11.12.",
+			"10.13.14.",
+			"10.15.16.",
+			"10.17.18.",
+			"10.19.20.",
+		},
+		Target6Prefixes: []string{
+			"2001:db8:82:83::",
+			"2001:db8:84:8a::",
+		},
+		ConditionPrevalence: map[string]int{
+			"pto.test.color.red":             8,
+			"pto.test.color.orange":          7,
+			"pto.test.color.yellow":          6,
+			"pto.test.color.green":           5,
+			"pto.test.color.blue":            4,
+			"pto.test.color.indigo":          3,
+			"pto.test.color.violet":          2,
+			"pto.test.color.none_more_black": 1,
+		},
+	}
+
+	sources4 := []string{
+		"10.33.44.55",
+		"10.33.44.66",
+		"10.33.44.77",
+		"10.33.44.88",
+		"10.33.44.99",
+		"10.33.44.121",
+	}
+	sources6 := []string{
+		"2001:db8:e55:5::",
+		"2001:db8:e66:6::",
+		"2001:db8:e77:7::",
+		"2001:db8:e88:8::",
+		"2001:db8:e99:9::",
+		"2001:db8:eaa:a::",
+	}
+
+	for i := range sources4 {
+		spec.SourceIP4 = sources4[i]
+		spec.SourceIP6 = sources6[i]
+		file, err := os.Create(fmt.Sprintf("testdata/7200_testobs_%d.ndjson", i))
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+		generateTestObservations(&spec, 7200, file)
+	}
+
 }
