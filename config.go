@@ -23,6 +23,9 @@ type PTOServerConfig struct {
 	// Filetype registry for RDS.
 	ContentTypes map[string]string
 
+	// base path for query cache data store; empty for no query cache.
+	QueryCacheRoot string
+
 	// PostgreSQL options for connection to observation database; leave default for no OBS.
 	ObsDatabase pg.Options
 }

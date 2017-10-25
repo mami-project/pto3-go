@@ -67,6 +67,27 @@ func teardownOSR(osr *pto3.ObservationStore) {
 	}
 }
 
+func setupQC(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.QueryCache {
+	// create temporary QC directory
+	var err error
+	config.QueryCacheRoot, err = ioutil.TempDir("", "pto3-test")
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	// create a QC
+	qc, err := pto3.NewQueryCache(config, azr)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+}
+
+func teardownQC(qc *pto3.QueryCache) {
+	if err := qc.RemoveDirectories(); err != nil {
+		log.Fatal(err.Error())
+	}
+}
+
 const GoodAPIKey = "07e57ab18e70"
 
 func setupAZR() *pto3.Authorizer {
@@ -166,13 +187,17 @@ func TestMain(m *testing.M) {
 		// get an authorizer
 		azr := setupAZR()
 
-		// build a raw data store around it (and prepare to clean up after it)
+		// build a raw data store  (and prepare to clean up after it)
 		rds := setupRDS(&TestConfig, azr)
 		defer teardownRDS(rds)
 
-		// build an observation store around it (and prepare to clean up after it)
+		// build an observation store (and prepare to clean up after it)
 		osr := setupOSR(&TestConfig, azr)
 		defer teardownOSR(osr)
+
+		// build a query cache (and prepare to clean up after it)
+		qc := setupQC(&TestConfig, azr)
+		defer teardownQC(qc)
 
 		// set up routes
 		TestRouter = mux.NewRouter()
