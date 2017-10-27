@@ -11,6 +11,8 @@ import (
 )
 
 func main() {
+	// FIXME command line arguments would be nice
+
 	// load configuration file
 	config, err := pto3.LoadConfig("ptoconfig.json")
 	if err != nil {

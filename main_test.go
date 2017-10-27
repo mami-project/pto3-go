@@ -67,28 +67,28 @@ func teardownOSR(osr *pto3.ObservationStore) {
 	}
 }
 
-func setupQC(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.QueryCache {
-	// create temporary QC directory
-	var err error
-	config.QueryCacheRoot, err = ioutil.TempDir("", "pto3-test-queries")
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+// func setupQC(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.QueryCache {
+// 	// create temporary QC directory
+// 	var err error
+// 	config.QueryCacheRoot, err = ioutil.TempDir("", "pto3-test-queries")
+// 	if err != nil {
+// 		log.Fatal(err.Error())
+// 	}
 
-	// create a QC
-	qc, err := pto3.NewQueryCache(config, azr)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+// 	// create a QC
+// 	qc, err := pto3.NewQueryCache(config, azr)
+// 	if err != nil {
+// 		log.Fatal(err.Error())
+// 	}
 
-	return qc
-}
+// 	return qc
+// }
 
-func teardownQC(qc *pto3.QueryCache) {
-	if err := qc.RemoveDirectories(); err != nil {
-		log.Fatal(err.Error())
-	}
-}
+// func teardownQC(qc *pto3.QueryCache) {
+// 	if err := qc.RemoveDirectories(); err != nil {
+// 		log.Fatal(err.Error())
+// 	}
+// }
 
 const GoodAPIKey = "07e57ab18e70"
 
@@ -101,9 +101,9 @@ func setupAZR() *pto3.Authorizer {
 				"write_raw:test": true,
 				"read_obs":       true,
 				"write_obs":      true,
-				"submit_query":   true,
-				"read_query":     true,
-				"update_query":   true,
+				// "submit_query":   true,
+				// "read_query":     true,
+				// "update_query":   true,
 			},
 		},
 	}
@@ -201,15 +201,15 @@ func TestMain(m *testing.M) {
 		defer teardownOSR(osr)
 
 		// build a query cache (and prepare to clean up after it)
-		qc := setupQC(&TestConfig, azr)
-		defer teardownQC(qc)
+		// qc := setupQC(&TestConfig, azr)
+		// defer teardownQC(qc)
 
 		// set up routes
 		TestRouter = mux.NewRouter()
 		TestRouter.HandleFunc("/", TestConfig.HandleRoot)
 		rds.AddRoutes(TestRouter)
 		osr.AddRoutes(TestRouter)
-		qc.AddRoutes(TestRouter)
+		// qc.AddRoutes(TestRouter)
 
 		return m.Run()
 	}())
