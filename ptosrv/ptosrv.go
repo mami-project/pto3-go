@@ -14,6 +14,8 @@ import (
 var configPath = flag.String("config", "ptoconfig.json", "Path to PTO configuration file")
 
 func main() {
+	flag.Parse()
+
 	config, err := pto3.LoadConfig(*configPath)
 	if err != nil {
 		log.Fatal(err.Error())
