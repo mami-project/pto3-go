@@ -17,7 +17,7 @@ import (
 )
 
 // CampaignMetadataFilename is the name of each campaign metadata file in each campaign directory
-const CampaignMetadataFilename = "pto_campaign_metadata.json"
+const CampaignMetadataFilename = "__pto_campaign_metadata.json"
 
 // FileMetadataSuffix is the suffix on each metadata file on disk
 const FileMetadataSuffix = ".pto_file_metadata.json"
