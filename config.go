@@ -11,8 +11,11 @@ import (
 
 // PTOServerConfig contains a configuration of a PTO server
 type PTOServerConfig struct {
+	// Address/port to bind to
+	BindTo string
+
 	// base URL of web service
-	BaseURL url.URL
+	BaseURL url.URL `json:"BaseURL,string"`
 
 	// API key filename
 	APIKeyFile string

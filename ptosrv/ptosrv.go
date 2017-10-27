@@ -3,6 +3,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 
@@ -10,11 +11,10 @@ import (
 	pto3 "github.com/mami-project/pto3-go"
 )
 
-func main() {
-	// FIXME command line arguments would be nice
+var configPath = flag.String("config", "ptoconfig.json", "Path to PTO configuration file")
 
-	// load configuration file
-	config, err := pto3.LoadConfig("ptoconfig.json")
+func main() {
+	config, err := pto3.LoadConfig(*configPath)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -46,5 +46,5 @@ func main() {
 		osr.AddRoutes(r)
 	}
 
-	log.Fatal(http.ListenAndServe(":8000", r))
+	log.Fatal(http.ListenAndServe(config.BindTo, r))
 }
