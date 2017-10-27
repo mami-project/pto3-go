@@ -21,7 +21,7 @@ import (
 func setupRDS(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.RawDataStore {
 	// create temporary RDS directory
 	var err error
-	config.RawRoot, err = ioutil.TempDir("", "pto3-test")
+	config.RawRoot, err = ioutil.TempDir("", "pto3-test-raw")
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -70,7 +70,7 @@ func teardownOSR(osr *pto3.ObservationStore) {
 func setupQC(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.QueryCache {
 	// create temporary QC directory
 	var err error
-	config.QueryCacheRoot, err = ioutil.TempDir("", "pto3-test")
+	config.QueryCacheRoot, err = ioutil.TempDir("", "pto3-test-queries")
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -80,6 +80,8 @@ func setupQC(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.QueryCach
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+
+	return qc
 }
 
 func teardownQC(qc *pto3.QueryCache) {
@@ -99,6 +101,9 @@ func setupAZR() *pto3.Authorizer {
 				"write_raw:test": true,
 				"read_obs":       true,
 				"write_obs":      true,
+				"submit_query":   true,
+				"read_query":     true,
+				"update_query":   true,
 			},
 		},
 	}
@@ -204,6 +209,7 @@ func TestMain(m *testing.M) {
 		TestRouter.HandleFunc("/", TestConfig.HandleRoot)
 		rds.AddRoutes(TestRouter)
 		osr.AddRoutes(TestRouter)
+		qc.AddRoutes(TestRouter)
 
 		return m.Run()
 	}())

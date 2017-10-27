@@ -247,10 +247,12 @@ func (q *Query) generateIdentifier() {
 }
 
 func (q *Query) MarshalJSON() ([]byte, error) {
+	// TODO write me
 	return nil, nil
 }
 
 func (q *Query) UnmarshalJSON(b []byte) error {
+	// TODO write me
 	return nil
 }
 
@@ -297,24 +299,55 @@ type QueryCache struct {
 	db *pg.DB
 
 	// Path to result cache directory
-	// FIXME are these flat files? or is this a JSON table?
 	path string
 
 	// Submitted queries not yet running
 	submitted []*Query
 
-	// Currently cached queries (includes those executing)
+	// Queries executing and cached in memory (recently executed)
 	cached map[string]*Query
 }
 
+// NewQueryCache creates a query cache given a configuration and an
+// authorizer. The query cache contains metadata and results (when available),
+// backed by permanent storage on disk, and an in-memory cache of recently executed
+
 func NewQueryCache(config *PTOServerConfig, azr *Authorizer) (*QueryCache, error) {
-	return nil, nil
+
+	qc := QueryCache{
+		config:    config,
+		azr:       azr,
+		db:        pg.Connect(&config.ObsDatabase),
+		path:      config.QueryCacheRoot,
+		submitted: make([]*Query, 0),
+		cached:    make(map[string]*Query),
+	}
+
+	return &qc, nil
+}
+
+// Ensure that the directories backing the query cache exist. Used for testing.
+func (qc *QueryCache) CreateDirectories() error {
+	return os.Mkdir(qc.path, 0755)
 }
 
 // Remove the directories backing the query cache incluing all their contents.
 // Used for testing.
 func (qc *QueryCache) RemoveDirectories() error {
 	return os.RemoveAll(qc.path)
+}
+
+func (qc *QueryCache) QueryByIdentifier(identifier string) (*Query, error) {
+	// check in memory
+
+	// then check on disk
+
+	return nil, nil
+}
+
+// Flush ensures that any state stored in the in-memory cache is written to disk.
+func (qc *QueryCache) Flush() error {
+	return nil
 }
 
 func (qc *QueryCache) HandleList(w http.ResponseWriter, r *http.Request) {
@@ -328,7 +361,6 @@ func (qc *QueryCache) HandleSubmit(w http.ResponseWriter, r *http.Request) {
 
 	// Q: do we need a context here?
 	http.Error(w, "not implemented", http.StatusNotImplemented)
-
 }
 
 func (qc *QueryCache) HandleGetMetadata(w http.ResponseWriter, r *http.Request) {
