@@ -402,7 +402,7 @@ func (cam *RDSCampaign) updateFileVirtualMetadata(filename string) error {
 	if err != nil {
 		return err
 	}
-	md.datalink = cam.config.BaseURL.ResolveReference(datarel).String()
+	md.datalink = cam.config.baseURL.ResolveReference(datarel).String()
 
 	return nil
 }

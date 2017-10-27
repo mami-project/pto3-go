@@ -45,7 +45,7 @@ func (osr *ObservationStore) initDB() error {
 
 func (osr *ObservationStore) writeMetadataResponse(w http.ResponseWriter, set *ObservationSet, status int) {
 	// compute a link for the observation set
-	set.LinkVia(osr.config.BaseURL)
+	set.LinkVia(osr.config.baseURL)
 
 	// now write it to the response
 	b, err := json.Marshal(&set)

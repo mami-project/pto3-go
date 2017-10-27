@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"testing"
 
@@ -172,9 +171,8 @@ var TestRouter *mux.Router
 
 func TestMain(m *testing.M) {
 	// define a configuration
-	baseurl, _ := url.Parse(TestBaseURL)
 	TestConfig = pto3.PTOServerConfig{
-		BaseURL: *baseurl,
+		BaseURL: TestBaseURL,
 		ContentTypes: map[string]string{
 			"test": "application/json",
 			"osf":  "applicaton/vnd.mami.ndjson",
@@ -185,6 +183,9 @@ func TestMain(m *testing.M) {
 			Database: "ptotest",
 			Password: "helpful guide sheep train",
 		},
+	}
+	if err := TestConfig.ParseURL(); err {
+		log.Fatal(err)
 	}
 
 	// inner anon function ensures that os.Exit doesn't keep deferred teardown from running

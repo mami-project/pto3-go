@@ -15,7 +15,9 @@ type PTOServerConfig struct {
 	BindTo string
 
 	// base URL of web service
-	BaseURL url.URL `json:"BaseURL,string"`
+	BaseURL string
+	// ...this right here is effing annoying but i'm not writing a custom unmarshaler just for that...
+	baseURL *url.URL
 
 	// API key filename
 	APIKeyFile string
@@ -38,7 +40,7 @@ func (config *PTOServerConfig) HandleRoot(w http.ResponseWriter, r *http.Request
 	rawrel, _ := url.Parse("raw")
 
 	links := map[string]string{
-		"raw": config.BaseURL.ResolveReference(rawrel).String(),
+		"raw": config.baseURL.ResolveReference(rawrel).String(),
 	}
 
 	linksj, err := json.Marshal(links)
@@ -61,6 +63,11 @@ func LoadConfig(filename string) (*PTOServerConfig, error) {
 	}
 
 	err = json.Unmarshal(b, &config)
+	if err != nil {
+		return nil, err
+	}
+
+	config.baseURL, err = url.Parse(config.BaseURL)
 	if err != nil {
 		return nil, err
 	}
