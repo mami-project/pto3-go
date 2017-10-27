@@ -554,6 +554,12 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// force a campaign rescan
+	err := rds.scanCampaigns()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("raw data store error: cannot scan campaigns"), http.StatusInternalServerError)
+	}
+
 	// construct URLs based on the campaign
 	out := campaignList{make([]string, len(rds.campaigns))}
 

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	pto3 "github.com/mami-project/pto3-go"
@@ -16,26 +18,6 @@ func checkContentType(t *testing.T, res *httptest.ResponseRecorder) {
 	if res.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("unexpected content type %s", res.Header().Get("Content-Type"))
 	}
-}
-
-func TestListCampaigns(t *testing.T) {
-	// list campaigns, this should be empty
-	res := executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw", nil, "", GoodAPIKey, http.StatusOK)
-	checkContentType(t, res)
-
-	var camlist map[string]interface{}
-
-	if err := json.Unmarshal(res.Body.Bytes(), &camlist); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, ok := camlist["campaigns"]; !ok {
-		t.Fatal("GET /raw missing campaign key")
-	}
-}
-
-func TestBadAuth(t *testing.T) {
-	executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw", nil, "", "abadc0de", http.StatusForbidden)
 }
 
 type testCampaignMetadata struct {
@@ -54,6 +36,55 @@ type testFileMetadata struct {
 type testRawMetadata struct {
 	testCampaignMetadata
 	testFileMetadata
+}
+
+func TestScanCampaigns(t *testing.T) {
+	// create a test directory
+	if err := os.Mkdir(filepath.Join(TestConfig.RawRoot, "scantest"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// create a metadata file in it
+	mdmap := testCampaignMetadata{
+		FileType:    "test",
+		Owner:       "ptotest@mami-project.eu",
+		Description: "An empty campaign designed to force a scanCampaigns() to run",
+	}
+
+	mdfile, err := os.Create(filepath.Join(TestConfig.RawRoot, "scantest", pto3.CampaignMetadataFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mdfile.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b, err := json.Marshal(mdmap)
+
+	if _, err := mdfile.Write(b); err != nil {
+		t.Fatal(err)
+	}
+
+	// list campaigns to force a rescan
+	res := executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw", nil, "", GoodAPIKey, http.StatusOK)
+	checkContentType(t, res)
+
+	var camlist struct {
+		Campaigns []string `json:"campaigns"`
+	}
+
+	if err := json.Unmarshal(res.Body.Bytes(), &camlist); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(camlist.Campaigns) < 1 {
+		t.Fatal("missing campaign")
+	}
+}
+
+func TestBadAuth(t *testing.T) {
+	executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw", nil, "", "abadc0de", http.StatusForbidden)
 }
 
 func TestRawRoundtrip(t *testing.T) {
