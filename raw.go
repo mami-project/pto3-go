@@ -563,7 +563,7 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 	}
 
 	// construct URLs based on the campaign
-	out := campaignList{make([]string, len(rds.campaigns))}
+	out := campaignList{make([]string, 0)}
 
 	for k, _ := range rds.campaigns {
 		camurl, err := url.Parse(k)

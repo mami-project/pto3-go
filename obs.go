@@ -29,20 +29,6 @@ func NewObservationStore(config *PTOServerConfig, azr *Authorizer) (*Observation
 	return &osr, nil
 }
 
-func (osr *ObservationStore) initDB() error {
-	err := osr.db.CreateTable(&ObservationSet{}, nil)
-	if err != nil {
-		return err
-	}
-
-	err = osr.db.CreateTable(&Observation{}, nil)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (osr *ObservationStore) writeMetadataResponse(w http.ResponseWriter, set *ObservationSet, status int) {
 	// compute a link for the observation set
 	set.LinkVia(osr.config.baseURL)
