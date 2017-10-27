@@ -184,7 +184,7 @@ func TestMain(m *testing.M) {
 			Password: "helpful guide sheep train",
 		},
 	}
-	if err := TestConfig.ParseURL(); err {
+	if err := TestConfig.ParseURL(); err != nil {
 		log.Fatal(err)
 	}
 

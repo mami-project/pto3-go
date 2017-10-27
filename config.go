@@ -35,6 +35,12 @@ type PTOServerConfig struct {
 	ObsDatabase pg.Options
 }
 
+func (config *PTOServerConfig) ParseURL() error {
+	var err error
+	config.baseURL, err = url.Parse(config.BaseURL)
+	return err
+}
+
 func (config *PTOServerConfig) HandleRoot(w http.ResponseWriter, r *http.Request) {
 
 	rawrel, _ := url.Parse("raw")
@@ -62,13 +68,11 @@ func LoadConfig(filename string) (*PTOServerConfig, error) {
 		return nil, err
 	}
 
-	err = json.Unmarshal(b, &config)
-	if err != nil {
+	if err = json.Unmarshal(b, &config); err != nil {
 		return nil, err
 	}
 
-	config.baseURL, err = url.Parse(config.BaseURL)
-	if err != nil {
+	if err = config.ParseURL(); err != nil {
 		return nil, err
 	}
 
