@@ -17,13 +17,13 @@ import (
 )
 
 // CampaignMetadataFilename is the name of each campaign metadata file in each campaign directory
-const CampaignMetadataFilename = "ptocampaign_metadata.json"
+const CampaignMetadataFilename = "pto_campaign_metadata.json"
 
 // FileMetadataSuffix is the suffix on each metadata file on disk
-const FileMetadataSuffix = ".ptofile_metadata.json"
+const FileMetadataSuffix = ".pto_file_metadata.json"
 
 // DeletionTagSuffix is the suffix on a deletion tag on disk
-const DeletionTagSuffix = ".ptofile_delete_me"
+const DeletionTagSuffix = ".pto_file_delete_me"
 
 // DataRelativeURL is the path relative to each file metadata path for content access
 var DataRelativeURL *url.URL
