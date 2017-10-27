@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -503,6 +504,7 @@ func (rds *RawDataStore) scanCampaigns() error {
 			_, err := os.Stat(mdpath)
 			if err != nil {
 				if os.IsNotExist(err) {
+					log.Printf("Missing campaign metadata file %s", mdpath)
 					continue // no metadata file means we don't care about this directory
 				} else {
 					return err // something else broke. die.
