@@ -38,6 +38,15 @@ type testRawMetadata struct {
 	testFileMetadata
 }
 
+type testCampaignList struct {
+	Campaigns []string `json:"campaigns"`
+}
+
+type testCampaignFileList struct {
+	Metadata testCampaignMetadata `json:"metadata"`
+	Files    []string             `json:"files"`
+}
+
 func TestScanCampaigns(t *testing.T) {
 	// create a test directory
 	if err := os.Mkdir(filepath.Join(TestConfig.RawRoot, "scantest"), 0755); err != nil {
@@ -70,9 +79,7 @@ func TestScanCampaigns(t *testing.T) {
 	res := executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw", nil, "", GoodAPIKey, http.StatusOK)
 	checkContentType(t, res)
 
-	var camlist struct {
-		Campaigns []string `json:"campaigns"`
-	}
+	var camlist testCampaignList
 
 	if err := json.Unmarshal(res.Body.Bytes(), &camlist); err != nil {
 		t.Fatal(err)
@@ -89,67 +96,83 @@ func TestBadAuth(t *testing.T) {
 
 func TestRawRoundtrip(t *testing.T) {
 	// create a new campaign
-	cmd := testCampaignMetadata{
+	cmd_up := testCampaignMetadata{
 		FileType:    "test",
 		Owner:       "ptotest@mami-project.eu",
 		Description: "a campaign filled with uninteresting test data",
 	}
-	t.Log("attempting to create https://ptotest.mami-project.eu/raw/test")
 
-	res := executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test", cmd, GoodAPIKey, http.StatusCreated)
+	res := executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test", cmd_up, GoodAPIKey, http.StatusCreated)
 
 	// check campaign metadata download
+	var cmd_down testCampaignFileList
 	res = executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw/test", nil, "", GoodAPIKey, 200)
-	err := json.Unmarshal(res.Body.Bytes(), &cmd)
+	err := json.Unmarshal(res.Body.Bytes(), &cmd_down)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if cmd.Description != "a campaign filled with uninteresting test data" {
-		t.Fatalf("campaign metadata retrieval failed; got description %s", cmd.Description)
+	if cmd_up.Description != cmd_down.Metadata.Description {
+		t.Fatalf("campaign metadata retrieval failed; got description %s", cmd_down.Metadata.Description)
 	}
 
 	// create a file within the campaign
-	fmd := testFileMetadata{
+	fmd_up := testFileMetadata{
 		TimeStart: "2010-01-01T00:00:00Z",
 		TimeEnd:   "2010-01-02T00:00:00Z",
 	}
-	t.Log("attempting to create https://ptotest.mami-project.eu/raw/test/file001.json")
-	res = executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test/file001.json", fmd, GoodAPIKey, http.StatusCreated)
+	res = executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test/file001.json", fmd_up, GoodAPIKey, http.StatusCreated)
 
 	// find the data link
-	var rmd testRawMetadata
-	err = json.Unmarshal(res.Body.Bytes(), &rmd)
-	if err != nil {
+	var fmd_refl testRawMetadata
+	if err = json.Unmarshal(res.Body.Bytes(), &fmd_refl); err != nil {
 		t.Fatal(err)
 	}
 
-	if rmd.DataURL == "" {
+	if fmd_refl.DataURL == "" {
 		t.Fatal("missing __data virtual after metadata upload")
 	}
 
-	t.Logf("attempting to upload file to %s", rmd.DataURL)
+	// now download metadata
+	res = executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw/test/file001.json", nil, "", GoodAPIKey, 200)
+
+	var fmd_down testRawMetadata
+	if err = json.Unmarshal(res.Body.Bytes(), &fmd_down); err != nil {
+		t.Fatal(err)
+	}
+
+	if fmd_refl.DataURL != fmd_down.DataURL {
+		t.Fatalf("data URL mismatch, reflected %s, downloaded %s", fmd_refl.DataURL, fmd_down.DataURL)
+	}
+
+	if fmd_down.TimeStart != fmd_up.TimeStart {
+		t.Fatalf("bad start time in downloaded metadata, got %s", fmd_down.TimeStart)
+	}
+
+	if fmd_down.Description != cmd_up.Description {
+		t.Fatalf("did not inherit description in downloaded metadata, got %s", fmd_down.Description)
+	}
 
 	// now upload the data
 	data := []string{"this", "is", "a", "list", "of", "words"}
-	res = executeWithJSON(TestRouter, t, "PUT", rmd.DataURL, data, GoodAPIKey, http.StatusCreated)
+	res = executeWithJSON(TestRouter, t, "PUT", fmd_refl.DataURL, data, GoodAPIKey, http.StatusCreated)
 
 	// retrieve file metadata and check file size
 	res = executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw/test/file001.json", nil, "", GoodAPIKey, http.StatusOK)
 	checkContentType(t, res)
 
-	err = json.Unmarshal(res.Body.Bytes(), &rmd)
+	err = json.Unmarshal(res.Body.Bytes(), &fmd_down)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	bytesup, _ := json.Marshal(data)
-	if len(bytesup) != rmd.DataSize {
-		t.Fatalf("file upload size mismatch: sent %d got %d", len(bytesup), rmd.DataSize)
+	if len(bytesup) != fmd_down.DataSize {
+		t.Fatalf("file upload size mismatch: sent %d got %d", len(bytesup), fmd_down.DataSize)
 	}
 
 	// now download the file
-	res = executeRequest(TestRouter, t, "GET", rmd.DataURL, nil, "", GoodAPIKey, 200)
+	res = executeRequest(TestRouter, t, "GET", fmd_refl.DataURL, nil, "", GoodAPIKey, 200)
 
 	bytesdown := res.Body.Bytes()
 	if !bytes.Equal(bytesup, bytesdown) {

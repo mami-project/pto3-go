@@ -44,13 +44,36 @@ type RDSMetadata struct {
 	datasize  int
 }
 
-func (md *RDSMetadata) MarshalJSON() ([]byte, error) {
+func (md *RDSMetadata) DumpJSONObject(inherit bool) ([]byte, error) {
+
 	jmap := make(map[string]interface{})
 
-	if md.filetype != "" {
-		if md.Parent == nil || md.filetype != md.Parent.filetype {
-			jmap["_file_type"] = md.filetype
+	// first inherit from parent
+	if inherit && md.Parent != nil {
+		if md.Parent.filetype != "" {
+			jmap["_file_type"] = md.Parent.filetype
 		}
+
+		if md.Parent.Owner != "" {
+			jmap["_owner"] = md.Parent.Owner
+		}
+
+		if md.Parent.TimeStart != nil {
+			jmap["_time_start"] = md.Parent.TimeStart.Format(time.RFC3339)
+		}
+
+		if md.Parent.TimeEnd != nil {
+			jmap["_time_start"] = md.Parent.TimeEnd.Format(time.RFC3339)
+		}
+
+		for k, v := range md.Parent.Metadata {
+			jmap[k] = v
+		}
+	}
+
+	// then overwrite with own values
+	if md.filetype != "" {
+		jmap["_file_type"] = md.filetype
 	}
 
 	if md.Owner != "" {
@@ -58,17 +81,14 @@ func (md *RDSMetadata) MarshalJSON() ([]byte, error) {
 	}
 
 	if md.TimeStart != nil {
-		if (md.Parent == nil) || (md.Parent.TimeStart != nil && !md.TimeStart.Equal(*md.Parent.TimeStart)) {
-			jmap["_time_start"] = md.TimeStart.Format(time.RFC3339)
-		}
+		jmap["_time_start"] = md.TimeStart.Format(time.RFC3339)
 	}
 
 	if md.TimeEnd != nil {
-		if (md.Parent == nil) || (md.Parent.TimeEnd != nil && !md.TimeEnd.Equal(*md.Parent.TimeEnd)) {
-			jmap["_time_end"] = md.TimeEnd.Format(time.RFC3339)
-		}
+		jmap["_time_end"] = md.TimeEnd.Format(time.RFC3339)
 	}
 
+	// data link and data size are not inheritable
 	if md.datalink != "" {
 		jmap["__data"] = md.datalink
 	}
@@ -78,17 +98,15 @@ func (md *RDSMetadata) MarshalJSON() ([]byte, error) {
 	}
 
 	for k, v := range md.Metadata {
-		if md.Parent == nil {
-			jmap[k] = v
-		} else {
-			vp, ok := md.Parent.Metadata[k]
-			if !ok || vp != v {
-				jmap[k] = v
-			}
-		}
+		jmap[k] = v
 	}
 
 	return json.Marshal(jmap)
+}
+
+func (md *RDSMetadata) MarshalJSON() ([]byte, error) {
+	// by default, serialize object with all inherited information
+	return md.DumpJSONObject(true)
 }
 
 func (md *RDSMetadata) UnmarshalJSON(b []byte) error {
@@ -130,7 +148,7 @@ func (md *RDSMetadata) UnmarshalJSON(b []byte) error {
 
 // WriteToFile writes this metadata object as JSON to a file, ignoring virual metadata keys
 func (md *RDSMetadata) WriteToFile(pathname string) error {
-	b, err := json.Marshal(*md)
+	b, err := md.DumpJSONObject(false)
 	if err != nil {
 		return err
 	}
