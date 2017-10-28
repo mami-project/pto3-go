@@ -58,7 +58,7 @@ func (config *PTOServerConfig) HandleRoot(w http.ResponseWriter, r *http.Request
 	linksj, err := json.Marshal(links)
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		LogInternalServerError(w, "marshaling root link list", err)
 		return
 	}
 

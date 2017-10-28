@@ -36,7 +36,7 @@ func (osr *ObservationStore) writeMetadataResponse(w http.ResponseWriter, set *O
 	// now write it to the response
 	b, err := json.Marshal(&set)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		LogInternalServerError(w, "marshaling metadata", err)
 		return
 	}
 	w.WriteHeader(status)
@@ -52,7 +52,7 @@ func (osr *ObservationStore) HandleListSets(w http.ResponseWriter, r *http.Reque
 
 	// select set IDs into an array
 	if err := osr.db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&set_ids)); err != nil && err != pg.ErrNoRows {
-		http.Error(w, "couldn't list set IDs", http.StatusInternalServerError)
+		LogInternalServerError(w, "listing set IDs", err)
 		return
 	}
 
@@ -66,7 +66,7 @@ func (osr *ObservationStore) HandleListSets(w http.ResponseWriter, r *http.Reque
 
 	outb, err := json.Marshal(sets)
 	if err != nil {
-		http.Error(w, "raw data store error: cannot marshal set list", http.StatusInternalServerError)
+		LogInternalServerError(w, "marshaling set list", err)
 		return
 	}
 
@@ -109,7 +109,8 @@ func (osr *ObservationStore) HandleCreateSet(w http.ResponseWriter, r *http.Requ
 		return set.Insert(t, true)
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Print(err)
+		LogInternalServerError(w, "inserting set record", err)
 		return
 	}
 
@@ -138,7 +139,7 @@ func (osr *ObservationStore) HandleGetMetadata(w http.ResponseWriter, r *http.Re
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			LogInternalServerError(w, "retrieving set from database", err)
 		}
 		return
 	}
@@ -193,7 +194,7 @@ func (osr *ObservationStore) HandlePutMetadata(w http.ResponseWriter, r *http.Re
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			LogInternalServerError(w, "updating set metadata", err)
 		}
 		return
 	}
@@ -227,7 +228,7 @@ func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Reque
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			LogInternalServerError(w, "retrieving set", err)
 		}
 		return
 	}
@@ -250,7 +251,7 @@ func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Reque
 		Where("set_id = ?", setid).
 		Select()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		LogInternalServerError(w, "retrieving observation set", err)
 		return
 	}
 
@@ -261,8 +262,8 @@ func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Reque
 	for _, obs := range obsdat {
 		b, err := json.Marshal(&obs)
 		if err != nil {
-			// FIXME can't error out at this point, need to truncate, scribble, and log.
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("aborting download of observation set %s due to error: %v", vars["set"], err)
+			w.Write([]byte("\"error during download\"\n"))
 			return
 		}
 
@@ -297,7 +298,7 @@ func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			LogInternalServerError(w, "retrieving set metadata", err)
 		}
 		return
 	}
@@ -324,7 +325,7 @@ func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request
 		return nil
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		LogInternalServerError(w, "inserting observation data", err)
 	}
 
 	// now update observation count

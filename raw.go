@@ -498,7 +498,7 @@ func rdsHTTPError(w http.ResponseWriter, err error) {
 	case *RDSError:
 		http.Error(w, ev.Error(), ev.Status)
 	default:
-		http.Error(w, fmt.Sprintf("internal server error: %s", err.Error()), http.StatusInternalServerError)
+		LogInternalServerError(w, "", err)
 	}
 }
 
@@ -579,7 +579,8 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 	// force a campaign rescan
 	err := rds.scanCampaigns()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("cannot scan campaigns"), http.StatusInternalServerError)
+		LogInternalServerError(w, "scanning campaigns", err)
+		return
 	}
 
 	// construct URLs based on the campaign
@@ -589,7 +590,7 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 	for k := range rds.campaigns {
 		camurl, err := url.Parse(fmt.Sprintf("raw/%s", k))
 		if err != nil {
-			http.Error(w, "error generating campaign list", http.StatusInternalServerError)
+			LogInternalServerError(w, "generating campaign link", err)
 			return
 		}
 		out.Campaigns[i] = rds.config.baseURL.ResolveReference(camurl).String()
@@ -600,7 +601,7 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		http.Error(w, "error generating campaign list", http.StatusInternalServerError)
+		LogInternalServerError(w, "marshaling campaign list", err)
 		return
 	}
 
@@ -652,7 +653,7 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 		filepath, err := url.Parse("/raw/" + filepath.Base(cam.path) + "/" + filename)
 		if err != nil {
 			log.Print(err)
-			http.Error(w, "couldn't generate file link", http.StatusInternalServerError)
+			LogInternalServerError(w, "generating file link", err)
 		}
 		out.Files[i] = rds.config.baseURL.ResolveReference(filepath).String()
 		i++
@@ -660,7 +661,7 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		http.Error(w, "raw data store error: cannot marshal campaign metadata", http.StatusInternalServerError)
+		LogInternalServerError(w, "marshaling campaign metadata", err)
 		return
 	}
 
@@ -715,7 +716,7 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 		// Campaign doesn't exist. We have to create it.
 		cam, err = rds.createCampaign(camname, &in)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("cannot create campaign %s", camname), http.StatusInternalServerError)
+			LogInternalServerError(w, fmt.Sprintf("creating campaign %s", camname), err)
 			return
 		}
 	}
@@ -736,7 +737,7 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		http.Error(w, "raw data store error: cannot marshal campaign metadata", http.StatusInternalServerError)
+		LogInternalServerError(w, "marshalling campaign metadata", err)
 		return
 	}
 
@@ -783,7 +784,7 @@ func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Re
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		http.Error(w, "raw data store error: cannot marshal file metadata", http.StatusInternalServerError)
+		LogInternalServerError(w, "marshalling file metadata", err)
 		return
 	}
 
@@ -860,7 +861,7 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		http.Error(w, "raw data store error: cannot marshal file metadata", http.StatusInternalServerError)
+		LogInternalServerError(w, "marshalling file metadata", err)
 		return
 	}
 
@@ -911,7 +912,7 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	// determine MIME type
 	ft := cam.getFiletype(filename)
 	if ft == nil {
-		http.Error(w, fmt.Sprintf("cannot get filetype for %s", filename), http.StatusInternalServerError)
+		LogInternalServerError(w, fmt.Sprintf("determining filetype for %s", filename), nil)
 	}
 
 	// build a local filesystem path for downloading and validate it
@@ -927,7 +928,7 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	// now stream the file to the writer
 	rawfile, err := os.Open(rawpath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		LogInternalServerError(w, "opening data file", err)
 		return
 	}
 	defer rawfile.Close()
@@ -940,7 +941,7 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 		} else if err == io.EOF {
 			break
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			LogInternalServerError(w, "reading data file", err)
 			return
 		}
 	}
@@ -991,7 +992,7 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	// determine and verify MIME type
 	ft := cam.getFiletype(filename)
 	if ft == nil {
-		http.Error(w, fmt.Sprintf("cannot get filetype for %s", filename), http.StatusInternalServerError)
+		LogInternalServerError(w, fmt.Sprintf("getting filetype for %s", filename), nil)
 		return
 	}
 	if ft.ContentType != r.Header.Get("Content-Type") {
@@ -1004,14 +1005,14 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	// now stream the file from the reader on to disk
 	rawfile, err := os.Create(rawpath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		LogInternalServerError(w, "creating data file", err)
 		return
 	}
 	defer rawfile.Close()
 
 	reqreader, err := r.GetBody()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		LogInternalServerError(w, "reading upload data", err)
 		return
 	}
 
@@ -1021,13 +1022,13 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 		if err == nil {
 			_, err = rawfile.Write(buf[0:n])
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				LogInternalServerError(w, "writing upload data", err)
 				return
 			}
 		} else if err == io.EOF {
 			break
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			LogInternalServerError(w, "reading upload data", err)
 			return
 		}
 	}
@@ -1036,7 +1037,7 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	rawfile.Sync()
 	err = cam.updateFileVirtualMetadata(filename)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		LogInternalServerError(w, "updating virtual metadata", err)
 		return
 	}
 
@@ -1049,7 +1050,7 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		http.Error(w, "raw data store error: cannot marshal file metadata", http.StatusInternalServerError)
+		LogInternalServerError(w, "marshalling file metadata", err)
 		return
 	}
 
