@@ -51,8 +51,7 @@ func (osr *ObservationStore) HandleListSets(w http.ResponseWriter, r *http.Reque
 	var set_ids []int
 
 	// select set IDs into an array
-	if err := osr.db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&set_ids)); err != nil {
-		log.Print(err)
+	if err := osr.db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&set_ids)); err != nil && err != pg.ErrNoRows {
 		http.Error(w, "couldn't list set IDs", http.StatusInternalServerError)
 		return
 	}
