@@ -588,6 +588,11 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 	w.Write(outb)
 }
 
+type campaignFileList struct {
+	Metadata *RDSMetadata `json:"metadata"`
+	Files    []string     `json:"files"`
+}
+
 // HandleGetCampaignMetadata handles GET /raw/<campaign>, returning metadata for
 // a campaign. It writes a JSON object to the response containing campaign
 // metadata.
@@ -613,10 +618,24 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 		return
 	}
 
-	out, err := cam.getCampaignMetadata()
+	var out campaignFileList
+	var err error
+	out.Metadata, err = cam.getCampaignMetadata()
 	if err != nil {
 		rdsHTTPError(w, err)
 		return
+	}
+
+	out.Files = make([]string, len(cam.fileMetadata))
+	i := 0
+	for filename := range cam.fileMetadata {
+		filepath, err := url.Parse("/raw/" + filepath.Base(cam.path) + "/" + filename)
+		if err != nil {
+			log.Print(err)
+			http.Error(w, "couldn't generate file link", http.StatusInternalServerError)
+		}
+		out.Files[i] = rds.config.baseURL.ResolveReference(filepath).String()
+		i++
 	}
 
 	outb, err := json.Marshal(out)
