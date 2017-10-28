@@ -11,10 +11,17 @@ import (
 	pto3 "github.com/mami-project/pto3-go"
 )
 
-var configPath = flag.String("config", "ptoconfig.json", "Path to PTO configuration file")
+var configPath = flag.String("config", "ptoconfig.json", "Path to PTO `config file`")
+var initdb = flag.Bool("initdb", false, "Create database tables on startup")
+var help = flag.Bool("help", false, "show usage message")
 
 func main() {
 	flag.Parse()
+
+	if *help {
+		flag.PrintDefaults()
+		return
+	}
 
 	config, err := pto3.LoadConfig(*configPath)
 	if err != nil {
@@ -47,10 +54,18 @@ func main() {
 		if err != nil {
 			log.Fatal(err.Error())
 		}
+
+		if *initdb {
+			err = osr.CreateTables()
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			log.Printf("...created observation tables")
+		}
+
 		osr.AddRoutes(r)
 		log.Printf("...will serve /obs from postgresql://%s@%s/%s",
 			config.ObsDatabase.User, config.ObsDatabase.Addr, config.ObsDatabase.Database)
-
 	}
 
 	log.Printf("...listening on %s", config.BindTo)

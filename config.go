@@ -43,16 +43,22 @@ func (config *PTOServerConfig) ParseURL() error {
 
 func (config *PTOServerConfig) HandleRoot(w http.ResponseWriter, r *http.Request) {
 
-	rawrel, _ := url.Parse("raw")
+	links := make(map[string]string)
 
-	links := map[string]string{
-		"raw": config.baseURL.ResolveReference(rawrel).String(),
+	if config.RawRoot != "" {
+		rawrel, _ := url.Parse("raw")
+		links["raw"] = config.baseURL.ResolveReference(rawrel).String()
+	}
+
+	if config.ObsDatabase.Database != "" {
+		obsrel, _ := url.Parse("obs")
+		links["obs"] = config.baseURL.ResolveReference(obsrel).String()
 	}
 
 	linksj, err := json.Marshal(links)
 
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
