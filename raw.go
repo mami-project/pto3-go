@@ -288,7 +288,7 @@ func (cam *RDSCampaign) reloadMetadata(force bool) error {
 	for _, direntry := range direntries {
 		metafilename := direntry.Name()
 		if strings.HasSuffix(metafilename, FileMetadataSuffix) {
-			linkname := metafilename[len(metafilename)-len(FileMetadataSuffix) : len(metafilename)]
+			linkname := metafilename[0 : len(metafilename)-len(FileMetadataSuffix)]
 			cam.fileMetadata[linkname], err =
 				ReadRDSMetadata(filepath.Join(cam.path, metafilename), cam.campaignMetadata)
 			if err != nil {
