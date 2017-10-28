@@ -48,24 +48,38 @@ attempted and appeared to be successful.
 
 ## Metadata Elements
 
-JSON objects in the file are treated as metadata key-value pairs. The `_sources`, `_analyzer`, and `_campaign` elements will be used for provenance. Depending on the context 
+JSON objects in the file are treated as metadata key-value pairs, depending on
+context (see below). 
 
 # Contexts
 
-Any ndjson file containing 5- or 6-element arrays that can be interpreted as observations and objects that can be interpreted as metadata is considered a well-formed obsetvation set file. However, in various contexts, the PTO provides additional contracts on the file format, as below:
+Any ndjson file containing 5- or 6-element arrays that can be interpreted as
+observations and objects that can be interpreted as metadata is considered a
+well-formed obsetvation set file. However, in various contexts, the PTO
+provides additional contracts on the file format, as below:
 
 ## Observation Access API
 
-observations only, obset ID filled in but always same on download, ignored on upload. no metadata.
+With Observation Access API, the observation set ID is filled in on download,
+and ignored on upload. Metadata is not present in downloaded files, and is
+ignored in uploaded files.
 
 ## Results via Query API
 
-not NDJSON but observations as array of arrays, obset ID significant, no metadata.
+Within a query result, the `obs` key contains a JSON array of observations as
+in this file format. The observation set ID is present and refers to the
+observation set ID within the PTO. Observation set metadata is not present.
 
 ## As Analyzer Input
 
-as from observation access API, but metadata present and guaranteed to be the first element in the file
+When provided to a local analyzer as input, observation set IDs are
+significant. Observations from multiple observation sets are not mixed on
+input: first, all observations from one set are read, then all from the next
+set, and so on. Metadata is present, and appears directly before the first
+observation in each observation set.
 
 ## As Analyzer Output
 
-as to observation access API, but metadata may be present, last metadata element wins.
+When produced by a local analyzer as output, observation set IDs are ignored.
+Multiple metadata elements may be present, but only the last metadata element
+present will be taken as metadata for the new observation set.

@@ -8,10 +8,10 @@ does not yet fully implement this specification. In addition, see [the issue
 tracker](https://github.com/mami-project/pto3-go/issues) for proposed changes to
 this specification and the implementation thereof.
 
-The API consists of four applications: raw data access and upload, observation
-access, observation query, and data analysis control. The interface to each
-application is made up of certain resources accessed in a RESTful way; these
-resources are specified below.
+The API consists of three applications: raw data access and upload,
+observation access, and observation query. The interface to each application
+is made up of certain resources accessed in a RESTful way; these resources are
+specified below.
 
 # Access Control and Permissions
 
@@ -74,7 +74,7 @@ The following reserved and virtual metadata keys are presently supported:
 | Key             | Description                                                             |
 | --------------- | ----------------------------------------------------------------------- |
 | `_file_type`    | PTO filetype. See Filetypes, below.                                     |
-| `_owner`        | Identity of user or organization owning the file/campaign               |
+| `_owner`        | Identity (via email) of user or organization owning the file/campaign   |
 | `_time_start`   | Timestamp of first observation in the raw data file, in ISO8601 format  |
 | `_time_end`     | Time of last observation in the raw data file, in ISO8601 format        |
 | `__data`        | URL of the resource containing file data.                               |
@@ -107,45 +107,16 @@ are listed below:
 | `ps-ndjson-bz2` | `application/bzip2`           | Compressed [PATHspider](https://pathspider.net) results             |
 | `ps-ndjson`     | `application/vnd.mami.ndjson` | Uncompressed [PATHspider](https://pathspider.net) results           |
 
-## API usage
+## Raw data API usage
 
 We use [curl](https://curl.haxx.se) to illustrate the usage of the PTO raw API.
-We assume the PAPI API is rooted at `https://pto.example.com/`, and that the API
+We assume the API is rooted at `https://pto.example.com/`, and that the API
 key `12345` holds the permissions `list_raw`, `read_raw:test`, and
 `write_raw:test`.
 
 ## Creating and listing campaigns
 
-In order to upload raw data files, a campaign to contain the files must be
-created first. To create a campaign, we simply PUT the metadata of the campaign.
-Let's assume this campaign will contain only PATHspider ECN data, uncompressed,
-so we can associate the filetype with the campaign. Let's also add a description
-for the campaign, to illustrate the usage of freeform metadata:
-
-```
-$ curl -X PUT
-       -H "Authorization: APIKEY 12345"
-       -H "Content-type: application/json"
-       --data '{"_file_type": "ps-ecn-ndjson", "description": "an example campaign"}'
-       https://pto.example.com/raw/test
-```
-
-We can now retrieve the campaign to verify it was created:
-
-```
-$ curl -H "Authorization: APIKEY 12345" https://pto.example.com/raw/test
-
-{
-  "files": [],
-  "metadata": {
-    "_file_type": "ps-ecn-ndjson",
-    "description": "an example campaign"
-  },
-  "url": "https://pto.example.com/raw/test"
-}
-```
-
-Here we see the campaign, its metadata, and an empty list of files. 
+write me
 
 ## Uploading Raw Data
 
@@ -210,10 +181,73 @@ The following reserved and virtual metadata keys are presently supported:
 | Key             | Description                                                  |
 | --------------- | ------------------------------------------------------------ |
 | `_sources`      | Array of PTO URLs of raw data sources and observation sets   |
-| `_analyzer`     | PTO URL of analyzer                                         |
+| `_analyzer`     | URL of analyzer metadata                                     |
 | `__conditions`  | Array of all conditions present in the observation set       |
 | `__obs_count`   | Count of observations in the observation set                 |
 | `__data`        | URL of the resource containing observation set data          |
+
+## Analyzer Metadata
+
+Observations refer to how they were created via the `_analyzer` metadata key.
+This either contains a URL pointing at an analyzer metadata object, or a URL
+pointing at a source code repository, including tag referring to a specific
+revision or commit, which itself contains analyzer metadata in a file named
+`__pto_analyzer_metadata.json` in its root directory.
+
+Analyzer metadata is stored as a JSON object, which must have the following
+keys:
+
+| Key             | Description                                                             |
+| --------------- | ----------------------------------------------------------------------- |
+| `_repository`   | URL of source code repository, if not implicit                          |
+| `_owner`        | Identity (via email) of user or organization owning the analyzer        |
+| `_file_types`   | File types consumable by raw analyzer, as array, if present             |
+| `_invocation`   | Command to run in repository root to invoke the analyzer, if local      |
+
+As with raw and observation metadata, all keys not beginning with `_` are
+freeform, and may be used to store other information about the analyzer.
+
+An analyzer can be one of two types. A _raw_ analyzer (or _normalizer_) reads
+in raw data of one or more filetypes, and produces observations. A _derived_
+analyzer reads in observations from one or more sets, and produces
+observations. Raw analyzer metadata must contain a `_file_types` key, a JSON
+array listing PTO filetypes it can consume; derived analyzer metadata must not
+contain this key.
+
+Analyzers can take one of two forms. A _local_ analyzer is designed to run
+within the PTO, with direct access to raw data files or observations. It reads
+raw data or [observation files](OBSETS.md) on standard input, and produces
+observation files and observation set metadata on standard output. Local
+analyzer metadata must contain an `_invocation` key, which is a command to run
+in the repository root to invoke the analyzer. More on the interface for local
+analyzers is given [here](ANALYZER.md).
+
+A local analyzer runtime is not yet available in the PTO.
+
+A _client_ analyzer is designed to use the PTO API to retrieve raw data and
+observation sets and upload its results. As it cannot be automatically
+invoked, client analyzer repositories should contain human-readable
+documentation for invocation. Client analyzer metadata must not contain an
+`_invocation` key.
+
+## Observation API usage
+
+As above, we use [curl](https://curl.haxx.se) to illustrate the usage of the
+PTO observation API. We assume the API is rooted at
+`https://pto.example.com/`, and that the API key `12345` holds the permissions
+`read_obs` and `write_obs`.
+
+## Submitting and uploading an observation set
+
+write me
+
+## Listing observation sets
+
+write me
+
+## Downloading an observation set
+
+write me
 
 # Observation Query
 
@@ -288,8 +322,6 @@ A query can have one of following states:
 | `complete`      | Results are available                   |
 | `permanent`     | Results are available and cached results will be stored permanently |
 
-A query can be mo
-
 ## Results
 
 The type of the query determines the format of the results, as below:
@@ -301,7 +333,7 @@ without the `sets_only` option is a selection query. The observations returned
 by this query are those within the interval between the `time_start` and
 `time_end` parameters which match the selection parameters.
 
-[ISSUE: matching rules go here, describe condition wildcards.]
+*[EDITOR'S NOTE: matching rules go here, describe condition wildcards.]*
 
 The result of a selection query is a JSON object, the fields of which are as follows:
 
@@ -375,35 +407,8 @@ The result of an aggregation query is a JSON object, the fields of which are as 
 | -------------- | ----------------------------------------------------|
 | `prev`         | Link to previous page (see Pagination)              |
 | `next`         | Link to next page (see Pagination)                  |
-| `groups`       | [ISSUE: determine best way to represent this]       |
+| `groups`       | *[EDITOR'S NOTE: determine best way to represent this]* |
 
-# Data Analysis
-
-The data analysis API (resources under `/analysis`) allows the submission of
-*analysis requests* to the PTO, as well as retrieval of information about
-analyzers and analyses that have been run (the *analysis log*)
-
-Analyses are performed by *analyzers*, the interface to which is described in
-[ANALYSIS.md](ANALYSIS.md). 
-
-| Method   | Resource            | Permission      | Description                                            |
-| -------- | ------------------- | --------------- | ------------------------------------------------------ |
-| `GET`    | `/analysis`         | tbd             | Retrieve URLs for installed analyzers as JSON          |
-| `GET`    | `/analysis/<a>`     | tbd             | Retrieve metadata and log for installed analyzer *a*   |
-| `POST` or `GET`  | `/analysis/<a>/submit` | tbd             | Submit a request to <a> (see Analysis Requests)        |
-| `GET`    | `/analysis/<a>/<r>` | tbd             | Retrieve information about an analysis request         |
-
-## Analyzer Metadata
-
-write me
-
-## Analysis Requests
-
-write me
-
-## Analysis Log
-
-write me
 
 # Pagination
 
