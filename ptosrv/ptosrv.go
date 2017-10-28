@@ -20,6 +20,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+	log.Printf("ptosrv starting with configuration at %s...", *configPath)
 
 	// create an API key authorizer
 	azr, err := pto3.LoadAPIKeys(config.APIKeyFile)
@@ -38,6 +39,7 @@ func main() {
 			log.Fatal(err.Error())
 		}
 		rds.AddRoutes(r)
+		log.Printf("...will serve /raw from %s", config.RawRoot)
 	}
 
 	if config.ObsDatabase.Database != "" {
@@ -46,7 +48,12 @@ func main() {
 			log.Fatal(err.Error())
 		}
 		osr.AddRoutes(r)
+		log.Printf("...will serve /obs from postgresql://%s@%s/%s",
+			config.ObsDatabase.User, config.ObsDatabase.Addr, config.ObsDatabase.Database)
+
 	}
+
+	log.Printf("...listening on %s", config.BindTo)
 
 	log.Fatal(http.ListenAndServe(config.BindTo, r))
 }
