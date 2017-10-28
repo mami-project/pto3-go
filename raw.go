@@ -286,9 +286,11 @@ func (cam *RDSCampaign) reloadMetadata(force bool) error {
 	// now scan directory and load each metadata file
 	direntries, err := ioutil.ReadDir(cam.path)
 	for _, direntry := range direntries {
-		if strings.HasSuffix(direntry.Name(), FileMetadataSuffix) {
-			cam.fileMetadata[direntry.Name()], err =
-				ReadRDSMetadata(filepath.Join(cam.path, direntry.Name()), cam.campaignMetadata)
+		metafilename := direntry.Name()
+		if strings.HasSuffix(metafilename, FileMetadataSuffix) {
+			linkname := metafilename[len(metafilename)-len(FileMetadataSuffix) : len(metafilename)]
+			cam.fileMetadata[linkname], err =
+				ReadRDSMetadata(filepath.Join(cam.path, metafilename), cam.campaignMetadata)
 			if err != nil {
 				return err
 			}
