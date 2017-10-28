@@ -17,6 +17,10 @@ type ClientObservationSet struct {
 	Count    int      `json:"__obs_count"`
 }
 
+type ClientSetList struct {
+	Sets []string `json:"sets"`
+}
+
 func TestObsRoundtrip(t *testing.T) {
 	// create a new observation set and retrieve the set ID
 	set := ClientObservationSet{
@@ -34,6 +38,25 @@ func TestObsRoundtrip(t *testing.T) {
 
 	if cset.Link == "" {
 		t.Fatal("missing __link in /obs/create POST response")
+	}
+
+	// list observation sets to ensure it shows up in the list
+	res = executeRequest(TestRouter, t, "GET", "https://ptotest.mami-project.eu/obs", nil, "", GoodAPIKey, http.StatusOK)
+
+	var setlist ClientSetList
+	if err := json.Unmarshal(res.Body.Bytes(), &setlist); err != nil {
+		t.Fatal(err)
+	}
+
+	ok := false
+	for i := range setlist.Sets {
+		if setlist.Sets[i] == cset.Link {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		t.Fatal("created observation set not listed")
 	}
 
 	// retrieve observation set to ensure the metadata is properly stored

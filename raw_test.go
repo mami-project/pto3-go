@@ -94,7 +94,7 @@ func TestRawRoundtrip(t *testing.T) {
 		Owner:       "ptotest@mami-project.eu",
 		Description: "a campaign filled with uninteresting test data",
 	}
-	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test")
+	t.Log("attempting to create https://ptotest.mami-project.eu/raw/test")
 
 	res := executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test", cmd, GoodAPIKey, http.StatusCreated)
 
@@ -114,7 +114,7 @@ func TestRawRoundtrip(t *testing.T) {
 		TimeStart: "2010-01-01T00:00:00Z",
 		TimeEnd:   "2010-01-02T00:00:00Z",
 	}
-	t.Log("attempting to create http://ptotest.mami-project.eu/raw/test/file001.json")
+	t.Log("attempting to create https://ptotest.mami-project.eu/raw/test/file001.json")
 	res = executeWithJSON(TestRouter, t, "PUT", TestBaseURL+"/raw/test/file001.json", fmd, GoodAPIKey, http.StatusCreated)
 
 	// find the data link

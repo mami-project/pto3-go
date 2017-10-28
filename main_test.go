@@ -164,7 +164,7 @@ func executeWithFile(r *mux.Router, t *testing.T,
 	return executeRequest(r, t, method, url, f, bodytype, apikey, http.StatusCreated)
 }
 
-const TestBaseURL = "http://ptotest.mami-project.eu"
+const TestBaseURL = "https://ptotest.mami-project.eu"
 
 var TestConfig pto3.PTOServerConfig
 var TestRouter *mux.Router
