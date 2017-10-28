@@ -559,28 +559,30 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 	// force a campaign rescan
 	err := rds.scanCampaigns()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("raw data store error: cannot scan campaigns"), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("cannot scan campaigns"), http.StatusInternalServerError)
 	}
 
 	// construct URLs based on the campaign
-	out := campaignList{make([]string, 0)}
+	out := campaignList{make([]string, len(rds.campaigns))}
 
-	for k, _ := range rds.campaigns {
-		camurl, err := url.Parse(k)
+	i := 0
+	for k := range rds.campaigns {
+		camurl, err := url.Parse(fmt.Sprintf("raw/%s", k))
 		if err != nil {
-			http.Error(w, fmt.Sprintf("raw data store error: campaign %s not ok", k), http.StatusInternalServerError)
+			http.Error(w, "error generating campaign list", http.StatusInternalServerError)
 			return
 		}
-		out.Campaigns = append(out.Campaigns, camurl.String())
-	}
-
-	outb, err := json.Marshal(out)
-	if err != nil {
-		http.Error(w, "raw data store error: cannot marshal campaign list", http.StatusInternalServerError)
-		return
+		out.Campaigns[i] = rds.config.baseURL.ResolveReference(camurl).String()
+		i++
 	}
 
 	// FIXME pagination goes here
+
+	outb, err := json.Marshal(out)
+	if err != nil {
+		http.Error(w, "error generating campaign list", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(outb)

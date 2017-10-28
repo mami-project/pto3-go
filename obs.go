@@ -43,9 +43,34 @@ func (osr *ObservationStore) writeMetadataResponse(w http.ResponseWriter, set *O
 	w.Write(b)
 }
 
+type setList struct {
+	Sets []string `json:"sets"`
+}
+
 func (osr *ObservationStore) HandleListSets(w http.ResponseWriter, r *http.Request) {
-	// FIXME select observation set IDs and generate links
-	http.Error(w, "not done learning go-pg yet", http.StatusNotImplemented)
+	var set_ids []int
+
+	// select set IDs into an array
+	if err := osr.db.Model(&Observation{}).ColumnExpr("array_agg(id)").Select(pg.Array(&set_ids)); err != nil {
+		http.Error(w, "couldn't list set IDs", http.StatusInternalServerError)
+	}
+
+	// linkify them
+	sets := setList{make([]string, len(set_ids))}
+	for i, id := range set_ids {
+		sets.Sets[i] = LinkForSetID(osr.config.baseURL, id)
+	}
+
+	// FIXME pagination goes here
+
+	outb, err := json.Marshal(sets)
+	if err != nil {
+		http.Error(w, "raw data store error: cannot marshal set list", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(outb)
 }
 
 // HandleCreateSet handles POST /obs/create. It requires a JSON object with

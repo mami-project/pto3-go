@@ -164,11 +164,14 @@ func (set *ObservationSet) Update(db orm.DB) error {
 	return db.Update(set)
 }
 
+func LinkForSetID(baseurl *url.URL, setid int) string {
+	seturl, _ := url.Parse(fmt.Sprintf("obs/%016x", setid))
+	return baseurl.ResolveReference(seturl).String()
+}
+
 func (set *ObservationSet) LinkVia(baseurl *url.URL) {
-	seturl, _ := url.Parse(fmt.Sprintf("obs/%016x", set.ID))
-	set.link = baseurl.ResolveReference(seturl).String()
-	dataurl, _ := url.Parse(fmt.Sprintf("obs/%016x/data", set.ID))
-	set.datalink = baseurl.ResolveReference(dataurl).String()
+	set.link = LinkForSetID(baseurl, set.ID)
+	set.datalink = set.link + "/data"
 }
 
 func (set *ObservationSet) CountObservations(db orm.DB) int {
