@@ -70,14 +70,15 @@ func (p *Path) InsertOnce(db orm.DB) error {
 }
 
 type ObservationSet struct {
-	ID         int
-	Sources    []string `pg:",array"`
-	Analyzer   string
-	Conditions []Condition `pg:",many2many:observation_set_to_conditions,joinFK:Condition"`
-	Metadata   map[string]string
-	datalink   string
-	link       string
-	count      int
+	ID                int
+	Sources           []string `pg:",array"`
+	Analyzer          string
+	Conditions        []Condition `pg:",many2many:observation_set_to_conditions,joinFK:Condition"`
+	conditionDeclared map[int]bool
+	Metadata          map[string]string
+	datalink          string
+	link              string
+	count             int
 }
 
 // MarshalJSON turns this observation set into a JSON observation set metadata
@@ -179,10 +180,22 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 		set.ID = 0
 	}
 	if set.ID == 0 {
-		return db.Insert(set)
-	} else {
-		return nil
+		// main insertion
+		if err := db.Insert(set); err != nil {
+			return err
+		}
+
+		// now insert obset/condition links
+		// FIXME prepared statement?
+		// FIXME is this the best way to do this?
+		for i := range set.Conditions {
+			_, err := db.Exec("INSERT INTO observation_set_to_conditions VALUES (?, ?)", set.ID, set.Conditions[i].ID)
+			if err != nil {
+				return err
+			}
+		}
 	}
+	return nil
 }
 
 func (set *ObservationSet) SelectByID(db orm.DB) error {
@@ -281,6 +294,13 @@ func (obs *Observation) UnmarshalJSON(b []byte) error {
 }
 
 func (obs *Observation) InsertInSet(db orm.DB, set *ObservationSet) error {
+	if set.conditionDeclared == nil {
+		set.conditionDeclared = make(map[int]bool)
+		for i := range set.Conditions {
+			set.conditionDeclared[set.Conditions[i].ID] = true
+		}
+	}
+
 	if err := obs.Path.InsertOnce(db); err != nil {
 		return err
 	}
@@ -290,6 +310,11 @@ func (obs *Observation) InsertInSet(db orm.DB, set *ObservationSet) error {
 		return err
 	}
 	obs.ConditionID = obs.Condition.ID
+
+	if !set.conditionDeclared[obs.ConditionID] {
+		// FIXME figure out the best way to make this not a 500.
+		return fmt.Errorf("cannot insert observation with undeclared condition %s", obs.Condition.Name)
+	}
 
 	obs.Set = set
 	if err := obs.Set.Insert(db, false); err != nil {
@@ -370,6 +395,15 @@ func CreateTables(db *pg.DB) error {
 			return err
 		}
 
+		additional_tables := []string{
+			"CREATE TABLE IF NOT EXISTS observation_set_to_conditions (observation_set_id bigint, condition_id bigint)",
+		}
+		for _, q := range additional_tables {
+			if _, err := db.Exec(q); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 }
@@ -392,6 +426,15 @@ func DropTables(db *pg.DB) error {
 
 		if err := db.DropTable(&Path{}, nil); err != nil {
 			return err
+		}
+
+		additional_tables := []string{
+			"DROP TABLE observation_set_to_conditions",
+		}
+		for _, q := range additional_tables {
+			if _, err := db.Exec(q); err != nil {
+				return err
+			}
 		}
 
 		return nil

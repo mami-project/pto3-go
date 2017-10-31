@@ -53,6 +53,7 @@ func (osr *ObservationStore) HandleListSets(w http.ResponseWriter, r *http.Reque
 	var setIds []int
 
 	// select set IDs into an array
+	// FIXME this should go into model.go
 	if err := osr.db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&setIds)); err != nil && err != pg.ErrNoRows {
 		LogInternalServerError(w, "listing set IDs", err)
 		return
