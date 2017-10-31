@@ -182,7 +182,7 @@ The following reserved and virtual metadata keys are presently supported:
 | --------------- | ------------------------------------------------------------ |
 | `_sources`      | Array of PTO URLs of raw data sources and observation sets   |
 | `_analyzer`     | URL of analyzer metadata                                     |
-| `__conditions`  | Array of all conditions present in the observation set       |
+| `_conditions`   | Array of conditions declared in the observation set          |
 | `__obs_count`   | Count of observations in the observation set                 |
 | `__data`        | URL of the resource containing observation set data          |
 

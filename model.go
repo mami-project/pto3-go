@@ -70,13 +70,14 @@ func (p *Path) InsertOnce(db orm.DB) error {
 }
 
 type ObservationSet struct {
-	ID       int
-	Sources  []string `pg:",array"`
-	Analyzer string
-	Metadata map[string]string
-	datalink string
-	link     string
-	count    int
+	ID         int
+	Sources    []string `pg:",array"`
+	Analyzer   string
+	Conditions []Condition `pg:",many2many:observation_set_to_conditions,joinFK:Condition"`
+	Metadata   map[string]string
+	datalink   string
+	link       string
+	count      int
 }
 
 // MarshalJSON turns this observation set into a JSON observation set metadata
@@ -100,6 +101,14 @@ func (set *ObservationSet) MarshalJSON() ([]byte, error) {
 		jmap["__obs_count"] = set.count
 	}
 
+	conditionNames := make([]string, len(set.Conditions))
+	for i := range set.Conditions {
+		conditionNames[i] = set.Conditions[i].Name
+	}
+	if len(conditionNames) > 0 {
+		jmap["_conditions"] = conditionNames
+	}
+
 	for k, v := range set.Metadata {
 		jmap[k] = v
 	}
@@ -118,7 +127,7 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	// zero ID, it will be assigned on insertion or from the
+	// zero ID, it will be assigned on insertion or from the URI
 	set.ID = 0
 
 	var ok bool
@@ -130,9 +139,21 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 			}
 		} else if k == "_analyzer" {
 			set.Analyzer = AsString(v)
+		} else if k == "_conditions" {
+			// Create new condition objects with name only and zero ID.
+			// Caller will have to fill in condition names and create many2many links.
+			conditionNames, ok := AsStringArray(v)
+			if !ok {
+				return errors.New("_conditions not a string array")
+			}
+			set.Conditions = make([]Condition, len(conditionNames))
+			for i := range conditionNames {
+				set.Conditions[i].Name = conditionNames[i]
+			}
 		} else if strings.HasPrefix(k, "__") {
 			// Ignore all (incoming) __ keys instead of stuffing them in metadata
 		} else {
+			// Everything else is metadata
 			set.Metadata[k] = AsString(v)
 		}
 	}
@@ -144,6 +165,10 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 
 	if set.Analyzer == "" {
 		return errors.New("ObservationSet missing _analyzer")
+	}
+
+	if set.Conditions == nil {
+		return errors.New("ObservationSet missing _conditions")
 	}
 
 	return nil
@@ -158,6 +183,10 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 	} else {
 		return nil
 	}
+}
+
+func (set *ObservationSet) SelectByID(db orm.DB) error {
+	return db.Model(set).Column("observation_set.*, Conditions").Where("id = ?", set.ID).Select()
 }
 
 func (set *ObservationSet) Update(db orm.DB) error {

@@ -60,10 +60,10 @@ func setupOSR(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.Observat
 
 func teardownOSR(osr *pto3.ObservationStore) {
 	// (don't) delete tables
-	err := osr.DropTables()
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+	// err := osr.DropTables()
+	// if err != nil {
+	// 	log.Fatal(err.Error())
+	// }
 }
 
 // func setupQC(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.QueryCache {

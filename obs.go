@@ -47,23 +47,24 @@ type setList struct {
 	Sets []string `json:"sets"`
 }
 
+// HandleListSets handles GET /obs.
+// It returns a JSON object with links to current observation sets in the sets key.
 func (osr *ObservationStore) HandleListSets(w http.ResponseWriter, r *http.Request) {
-	var set_ids []int
+	var setIds []int
 
 	// select set IDs into an array
-	if err := osr.db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&set_ids)); err != nil && err != pg.ErrNoRows {
+	if err := osr.db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&setIds)); err != nil && err != pg.ErrNoRows {
 		LogInternalServerError(w, "listing set IDs", err)
 		return
 	}
 
 	// linkify them
-	sets := setList{make([]string, len(set_ids))}
-	for i, id := range set_ids {
+	sets := setList{make([]string, len(setIds))}
+	for i, id := range setIds {
 		sets.Sets[i] = LinkForSetID(osr.config.baseURL, id)
 	}
 
 	// FIXME pagination goes here
-
 	outb, err := json.Marshal(sets)
 	if err != nil {
 		LogInternalServerError(w, "marshaling set list", err)
@@ -106,6 +107,14 @@ func (osr *ObservationStore) HandleCreateSet(w http.ResponseWriter, r *http.Requ
 
 	// now insert the set in the database
 	err = osr.db.RunInTransaction(func(t *pg.Tx) error {
+		// first ensure any conditions have been inserted
+		for i := range set.Conditions {
+			if err := set.Conditions[i].InsertOnce(t); err != nil {
+				return err
+			}
+		}
+
+		// then insert the set itself
 		return set.Insert(t, true)
 	})
 	if err != nil {
@@ -135,11 +144,11 @@ func (osr *ObservationStore) HandleGetMetadata(w http.ResponseWriter, r *http.Re
 	}
 
 	set := ObservationSet{ID: int(setid)}
-	if err := osr.db.Select(&set); err != nil {
+	if err = set.SelectByID(osr.db); err != nil {
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {
-			LogInternalServerError(w, "retrieving set from database", err)
+			LogInternalServerError(w, "retrieving set", err)
 		}
 		return
 	}
@@ -224,7 +233,7 @@ func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Reque
 
 	// retrieve set metadata
 	set := ObservationSet{ID: int(setid)}
-	if err := osr.db.Select(&set); err != nil {
+	if err = set.SelectByID(osr.db); err != nil {
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {

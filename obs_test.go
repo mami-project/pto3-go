@@ -10,11 +10,12 @@ import (
 )
 
 type ClientObservationSet struct {
-	Sources  []string `json:"_sources"`
-	Analyzer string   `json:"_analyzer"`
-	Link     string   `json:"__link"`
-	Datalink string   `json:"__data"`
-	Count    int      `json:"__obs_count"`
+	Analyzer   string   `json:"_analyzer"`
+	Sources    []string `json:"_sources"`
+	Conditions []string `json:"_conditions"`
+	Link       string   `json:"__link"`
+	Datalink   string   `json:"__data"`
+	Count      int      `json:"__obs_count"`
 }
 
 type ClientSetList struct {
@@ -26,6 +27,11 @@ func TestObsRoundtrip(t *testing.T) {
 	set := ClientObservationSet{
 		Analyzer: "https://ptotest.mami-project.eu/analysis/passthrough",
 		Sources:  []string{"https://ptotest.mami-project.eu/raw/test001.json"},
+		Conditions: []string{
+			"pto.test.schroedinger",
+			"pto.test.failed",
+			"pto.test.succeeded",
+		},
 	}
 
 	res := executeWithJSON(TestRouter, t, "POST", "https://ptotest.mami-project.eu/obs/create",
