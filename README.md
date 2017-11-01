@@ -4,16 +4,16 @@ MAMI Path Transparency Observatory (PTO) version 3 [API](API.md) implementation 
 
 Backed by filesystem storage (for raw data) and PostgreSQL (for observation storage and query).
 
-To install in `GOROOT: 
+To install: 
 
 ```
-$ go install ptosrv
+$ go install github.com/mami-project/pto3-go/ptosrv
 ```
 
 To run, create a `ptoconfig.json` file and invoke
 
 ```
-$ ptosrv
+$ ptosrv -config <path_to_config_file>
 ```
 
 The following keys should appear the config file:
