@@ -17,7 +17,8 @@ import (
 	pto3 "github.com/mami-project/pto3-go"
 )
 
-const SuppressDropTables = true
+// set to true to allow inspection of tables after testing
+const SuppressDropTables = false
 
 func setupRDS(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.RawDataStore {
 	// create temporary RDS directory

@@ -304,7 +304,7 @@ func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request
 
 	// retrieve set metadata
 	set := ObservationSet{ID: int(setid)}
-	if err := osr.db.Select(&set); err != nil {
+	if err := set.SelectByID(osr.db); err != nil {
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {

@@ -10,12 +10,13 @@ import (
 )
 
 type ClientObservationSet struct {
-	Analyzer   string   `json:"_analyzer"`
-	Sources    []string `json:"_sources"`
-	Conditions []string `json:"_conditions"`
-	Link       string   `json:"__link"`
-	Datalink   string   `json:"__data"`
-	Count      int      `json:"__obs_count"`
+	Analyzer    string   `json:"_analyzer"`
+	Sources     []string `json:"_sources"`
+	Conditions  []string `json:"_conditions"`
+	Description string   `json:"description"`
+	Link        string   `json:"__link"`
+	Datalink    string   `json:"__data"`
+	Count       int      `json:"__obs_count"`
 }
 
 type ClientSetList struct {
@@ -24,7 +25,7 @@ type ClientSetList struct {
 
 func TestObsRoundtrip(t *testing.T) {
 	// create a new observation set and retrieve the set ID
-	set := ClientObservationSet{
+	setUp := ClientObservationSet{
 		Analyzer: "https://ptotest.mami-project.eu/analysis/passthrough",
 		Sources:  []string{"https://ptotest.mami-project.eu/raw/test001.json"},
 		Conditions: []string{
@@ -32,17 +33,18 @@ func TestObsRoundtrip(t *testing.T) {
 			"pto.test.failed",
 			"pto.test.succeeded",
 		},
+		Description: "An observation set to exercise observation set metdata and data storage",
 	}
 
 	res := executeWithJSON(TestRouter, t, "POST", "https://ptotest.mami-project.eu/obs/create",
-		set, GoodAPIKey, http.StatusCreated)
+		setUp, GoodAPIKey, http.StatusCreated)
 
-	var cset ClientObservationSet
-	if err := json.Unmarshal(res.Body.Bytes(), &cset); err != nil {
+	setDown := ClientObservationSet{}
+	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
 		t.Fatal(err)
 	}
 
-	if cset.Link == "" {
+	if setDown.Link == "" {
 		t.Fatal("missing __link in /obs/create POST response")
 	}
 
@@ -56,7 +58,7 @@ func TestObsRoundtrip(t *testing.T) {
 
 	ok := false
 	for i := range setlist.Sets {
-		if setlist.Sets[i] == cset.Link {
+		if setlist.Sets[i] == setDown.Link {
 			ok = true
 			break
 		}
@@ -66,21 +68,36 @@ func TestObsRoundtrip(t *testing.T) {
 	}
 
 	// retrieve observation set to ensure the metadata is properly stored
-	res = executeRequest(TestRouter, t, "GET", cset.Link, nil, "", GoodAPIKey, http.StatusOK)
+	res = executeRequest(TestRouter, t, "GET", setDown.Link, nil, "", GoodAPIKey, http.StatusOK)
 
-	if err := json.Unmarshal(res.Body.Bytes(), &cset); err != nil {
+	setDown = ClientObservationSet{}
+	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
 		t.Fatal(err)
 	}
 
-	if cset.Analyzer != set.Analyzer {
-		t.Fatalf("observation set metadata analyzer mismatch, sent %s got %s", set.Analyzer, cset.Analyzer)
+	if setDown.Analyzer != setUp.Analyzer {
+		t.Fatalf("observation set metadata analyzer mismatch, sent %s got %s", setUp.Analyzer, setDown.Analyzer)
 	}
 
-	if cset.Datalink == "" {
+	// compare condition lists order-independently
+	conditionSeen := make(map[string]bool)
+	for i := range setUp.Conditions {
+		conditionSeen[setUp.Conditions[i]] = false
+	}
+	for i := range setDown.Conditions {
+		conditionSeen[setDown.Conditions[i]] = true
+	}
+	for i := range conditionSeen {
+		if !conditionSeen[i] {
+			t.Fatalf("observation set metadata condition mismatch: sent %v got %v", setUp.Conditions, setDown.Conditions)
+		}
+	}
+
+	if setDown.Datalink == "" {
 		t.Fatal("missing __datalink in observation set")
 	}
 
-	datalink := cset.Datalink
+	datalink := setDown.Datalink
 
 	// now write some data to the observation set data link
 	observations_up_bytes := []byte(`[31337, "2017-10-01T10:06:00Z", "2017-10-01T10:06:00Z", "10.0.0.1 * 10.0.0.2", "pto.test.succeeded"]
@@ -97,12 +114,14 @@ func TestObsRoundtrip(t *testing.T) {
 	res = executeRequest(TestRouter, t, "PUT", datalink, bytes.NewBuffer(observations_up_bytes),
 		"application/vnd.mami.ndjson", GoodAPIKey, http.StatusCreated)
 
-	if err := json.Unmarshal(res.Body.Bytes(), &cset); err != nil {
+	// check count in resulting metadata
+	setDown = ClientObservationSet{}
+	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
 		t.Fatal(err)
 	}
 
-	if cset.Count != len(observations_up) {
-		t.Fatalf("bad observation set __obs_count after data PUT: expected %d got %d", len(observations_up), cset.Count)
+	if setDown.Count != len(observations_up) {
+		t.Fatalf("bad observation set __obs_count after data PUT: expected %d got %d", len(observations_up), setDown.Count)
 	}
 
 	// and try downloading it again
@@ -117,7 +136,8 @@ func TestObsRoundtrip(t *testing.T) {
 		t.Fatalf("observation count mismatch: sent %d got %d", len(observations_up), len(observations_down))
 	}
 
-	// fixme check timing too
+	// compate paths on observations
+	// FIXME check timing too
 	for i := range observations_up {
 		if observations_up[i].Path.String != observations_down[i].Path.String {
 			t.Errorf("path mismatch on observation %d sent %s got %s", i, observations_up[i].Path.String, observations_down[i].Path.String)
