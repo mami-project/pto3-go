@@ -25,14 +25,14 @@ func main() {
 
 	config, err := pto3.LoadConfig(*configPath)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatal(err)
 	}
 	log.Printf("ptosrv starting with configuration at %s...", *configPath)
 
 	// create an API key authorizer
 	azr, err := pto3.LoadAPIKeys(config.APIKeyFile)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatal(err)
 	}
 
 	// now hook up routes
@@ -43,7 +43,7 @@ func main() {
 	if config.RawRoot != "" {
 		rds, err := pto3.NewRawDataStore(config, azr)
 		if err != nil {
-			log.Fatal(err.Error())
+			log.Fatal(err)
 		}
 		rds.AddRoutes(r)
 		log.Printf("...will serve /raw from %s", config.RawRoot)
@@ -52,13 +52,13 @@ func main() {
 	if config.ObsDatabase.Database != "" {
 		osr, err := pto3.NewObservationStore(config, azr)
 		if err != nil {
-			log.Fatal(err.Error())
+			log.Fatal(err)
 		}
 
 		if *initdb {
 			err = osr.CreateTables()
 			if err != nil {
-				log.Fatal(err.Error())
+				log.Fatal(err)
 			}
 			log.Printf("...created observation tables")
 		}

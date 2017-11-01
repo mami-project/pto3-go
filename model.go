@@ -41,6 +41,10 @@ func (c *Condition) InsertOnce(db orm.DB) error {
 	return nil
 }
 
+func (c *Condition) SelectByID(db orm.DB) error {
+	return db.Select(c)
+}
+
 // ConditionsByName returns a slice of conditions matching a condition name.
 // If a single condition name is given, returns that condition (with ID). If a
 // wildcard name is given, returns all conditions (with ID) matching the
@@ -73,12 +77,17 @@ type ObservationSet struct {
 	ID                int
 	Sources           []string `pg:",array"`
 	Analyzer          string
-	Conditions        []Condition `pg:",many2many:observation_set_to_conditions,joinFK:Condition"`
+	Conditions        []Condition `pg:",many2many:observation_set_conditions"`
 	conditionDeclared map[int]bool
 	Metadata          map[string]string
 	datalink          string
 	link              string
 	count             int
+}
+
+type ObservationSetCondition struct {
+	ObservationSetID int
+	ConditionID      int
 }
 
 // MarshalJSON turns this observation set into a JSON observation set metadata
@@ -185,11 +194,10 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 			return err
 		}
 
-		// now insert obset/condition links
-		// FIXME prepared statement?
-		// FIXME is this the best way to do this?
+		// TODO file a bug against go-pg or its docs: this should be automatic.
+		// FIXME should we use a prepared statement here?
 		for i := range set.Conditions {
-			_, err := db.Exec("INSERT INTO observation_set_to_conditions VALUES (?, ?)", set.ID, set.Conditions[i].ID)
+			_, err := db.Exec("INSERT INTO observation_set_conditions VALUES (?, ?)", set.ID, set.Conditions[i].ID)
 			if err != nil {
 				return err
 			}
@@ -199,7 +207,30 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 }
 
 func (set *ObservationSet) SelectByID(db orm.DB) error {
-	return db.Model(set).Column("observation_set.*, Conditions").Where("id = ?", set.ID).Select()
+	// TODO file a bug against go-pg or its docs: this does not work, we have to brute force it instead.
+	// return db.Model(set).Column("observation_set.*", "Conditions").Where("id = ?", set.ID).First()
+
+	if err := db.Model(set).Column("observation_set.*").Where("id = ?", set.ID).First(); err != nil {
+		return err
+	}
+
+	var conditionIDs []int
+	err := db.Model(&ObservationSetCondition{}).
+		ColumnExpr("array_agg(condition_id)").
+		Where("observation_set_id = ?", set.ID).Select(pg.Array(&conditionIDs))
+	if err != nil {
+		return err
+	}
+
+	set.Conditions = make([]Condition, len(conditionIDs))
+	for i := range conditionIDs {
+		set.Conditions[i].ID = conditionIDs[i]
+		if err := set.Conditions[i].SelectByID(db); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (set *ObservationSet) Update(db orm.DB) error {
@@ -391,17 +422,12 @@ func CreateTables(db *pg.DB) error {
 			return err
 		}
 
-		if err := db.CreateTable(&Observation{}, &opts); err != nil {
+		if err := db.CreateTable(&ObservationSetCondition{}, &opts); err != nil {
 			return err
 		}
 
-		additional_tables := []string{
-			"CREATE TABLE IF NOT EXISTS observation_set_to_conditions (observation_set_id bigint, condition_id bigint)",
-		}
-		for _, q := range additional_tables {
-			if _, err := db.Exec(q); err != nil {
-				return err
-			}
+		if err := db.CreateTable(&Observation{}, &opts); err != nil {
+			return err
 		}
 
 		return nil
@@ -416,6 +442,10 @@ func DropTables(db *pg.DB) error {
 			return err
 		}
 
+		if err := db.DropTable(&ObservationSetCondition{}, nil); err != nil {
+			return err
+		}
+
 		if err := db.DropTable(&ObservationSet{}, nil); err != nil {
 			return err
 		}
@@ -426,15 +456,6 @@ func DropTables(db *pg.DB) error {
 
 		if err := db.DropTable(&Path{}, nil); err != nil {
 			return err
-		}
-
-		additional_tables := []string{
-			"DROP TABLE observation_set_to_conditions",
-		}
-		for _, q := range additional_tables {
-			if _, err := db.Exec(q); err != nil {
-				return err
-			}
 		}
 
 		return nil

@@ -17,18 +17,20 @@ import (
 	pto3 "github.com/mami-project/pto3-go"
 )
 
+const SuppressDropTables = true
+
 func setupRDS(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.RawDataStore {
 	// create temporary RDS directory
 	var err error
 	config.RawRoot, err = ioutil.TempDir("", "pto3-test-raw")
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatal(err)
 	}
 
 	// create an RDS
 	rds, err := pto3.NewRawDataStore(config, azr)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatal(err)
 	}
 
 	return rds
@@ -36,7 +38,7 @@ func setupRDS(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.RawDataS
 
 func teardownRDS(rds *pto3.RawDataStore) {
 	if err := rds.RemoveDirectories(); err != nil {
-		log.Fatal(err.Error())
+		log.Fatal(err)
 	}
 }
 
@@ -44,7 +46,7 @@ func setupOSR(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.Observat
 	// create an RDS
 	osr, err := pto3.NewObservationStore(config, azr)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatal(err)
 	}
 
 	// log everything
@@ -52,7 +54,7 @@ func setupOSR(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.Observat
 
 	// create tables
 	if err := osr.CreateTables(); err != nil {
-		log.Fatal(err.Error())
+		log.Fatal(err)
 	}
 
 	return osr
@@ -60,10 +62,11 @@ func setupOSR(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.Observat
 
 func teardownOSR(osr *pto3.ObservationStore) {
 	// (don't) delete tables
-	// err := osr.DropTables()
-	// if err != nil {
-	// 	log.Fatal(err.Error())
-	// }
+	if !SuppressDropTables {
+		if err := osr.DropTables(); err != nil {
+			log.Fatal(err)
+		}
+	}
 }
 
 // func setupQC(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.QueryCache {
@@ -71,13 +74,13 @@ func teardownOSR(osr *pto3.ObservationStore) {
 // 	var err error
 // 	config.QueryCacheRoot, err = ioutil.TempDir("", "pto3-test-queries")
 // 	if err != nil {
-// 		log.Fatal(err.Error())
+// 		log.Fatal(err)
 // 	}
 
 // 	// create a QC
 // 	qc, err := pto3.NewQueryCache(config, azr)
 // 	if err != nil {
-// 		log.Fatal(err.Error())
+// 		log.Fatal(err)
 // 	}
 
 // 	return qc
@@ -85,7 +88,7 @@ func teardownOSR(osr *pto3.ObservationStore) {
 
 // func teardownQC(qc *pto3.QueryCache) {
 // 	if err := qc.RemoveDirectories(); err != nil {
-// 		log.Fatal(err.Error())
+// 		log.Fatal(err)
 // 	}
 // }
 
