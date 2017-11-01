@@ -23,7 +23,7 @@ func main() {
 		return
 	}
 
-	config, err := pto3.LoadConfig(*configPath)
+	config, err := pto3.NewConfigFromFile(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
