@@ -3,10 +3,13 @@ package pto3
 import (
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 
 	"github.com/go-pg/pg"
+	"github.com/gorilla/mux"
 )
 
 // PTOServerConfig contains a configuration of a PTO server
@@ -33,6 +36,10 @@ type PTOServerConfig struct {
 
 	// PostgreSQL options for connection to observation database; leave default for no OBS.
 	ObsDatabase pg.Options
+
+	// Access logging file path
+	AccessLogPath string
+	accessLogger  *log.Logger
 }
 
 func (config *PTOServerConfig) ParseURL() error {
@@ -63,24 +70,43 @@ func (config *PTOServerConfig) HandleRoot(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	w.Write(linksj)
 }
 
-func LoadConfig(filename string) (*PTOServerConfig, error) {
+func (config *PTOServerConfig) AddRoutes(r *mux.Router) {
+	r.HandleFunc("/", LogAccess(config.accessLogger, config.HandleRoot)).Methods("GET")
+}
+
+func NewConfigFromJSON(b []byte) (*PTOServerConfig, error) {
 	var config PTOServerConfig
 
+	if err := json.Unmarshal(b, &config); err != nil {
+		return nil, err
+	}
+
+	if err := config.ParseURL(); err != nil {
+		return nil, err
+	}
+
+	if config.AccessLogPath == "" {
+		config.accessLogger = log.New(os.Stderr, "", log.LstdFlags)
+	} else {
+		accessLogFile, err := os.Open(config.AccessLogPath)
+		if err != nil {
+			return nil, err
+		}
+		config.accessLogger = log.New(accessLogFile, "access: ", log.LstdFlags)
+	}
+
+	return &config, nil
+}
+
+func NewConfigFromFile(filename string) (*PTOServerConfig, error) {
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = json.Unmarshal(b, &config); err != nil {
-		return nil, err
-	}
-
-	if err = config.ParseURL(); err != nil {
-		return nil, err
-	}
-
-	return &config, nil
+	return NewConfigFromJSON(b)
 }

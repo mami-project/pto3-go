@@ -73,6 +73,7 @@ func (osr *ObservationStore) HandleListSets(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	w.Write(outb)
 }
 
@@ -365,10 +366,11 @@ func (osr *ObservationStore) EnableQueryLogging() {
 }
 
 func (osr *ObservationStore) AddRoutes(r *mux.Router) {
-	r.HandleFunc("/obs", osr.HandleListSets).Methods("GET")
-	r.HandleFunc("/obs/create", osr.HandleCreateSet).Methods("POST")
-	r.HandleFunc("/obs/{set}", osr.HandleGetMetadata).Methods("GET")
-	r.HandleFunc("/obs/{set}", osr.HandlePutMetadata).Methods("PUT")
-	r.HandleFunc("/obs/{set}/data", osr.HandleDownload).Methods("GET")
-	r.HandleFunc("/obs/{set}/data", osr.HandleUpload).Methods("PUT")
+	l := osr.config.accessLogger
+	r.HandleFunc("/obs", LogAccess(l, osr.HandleListSets)).Methods("GET")
+	r.HandleFunc("/obs/create", LogAccess(l, osr.HandleCreateSet)).Methods("POST")
+	r.HandleFunc("/obs/{set}", LogAccess(l, osr.HandleGetMetadata)).Methods("GET")
+	r.HandleFunc("/obs/{set}", LogAccess(l, osr.HandlePutMetadata)).Methods("PUT")
+	r.HandleFunc("/obs/{set}/data", LogAccess(l, osr.HandleDownload)).Methods("GET")
+	r.HandleFunc("/obs/{set}/data", LogAccess(l, osr.HandleUpload)).Methods("PUT")
 }

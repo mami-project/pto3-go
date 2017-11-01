@@ -606,6 +606,7 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	w.Write(outb)
 }
 
@@ -666,6 +667,7 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	w.Write(outb)
 }
 
@@ -789,6 +791,7 @@ func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Re
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	w.Write(outb)
 }
 
@@ -933,6 +936,8 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	}
 	defer rawfile.Close()
 
+	w.WriteHeader(http.StatusOK)
+
 	buf := make([]byte, 65536)
 	for {
 		n, err := rawfile.Read(buf)
@@ -1054,8 +1059,8 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	w.Write(outb)
 }
 
@@ -1071,14 +1076,15 @@ func (rds *RawDataStore) RemoveDirectories() error {
 }
 
 func (rds *RawDataStore) AddRoutes(r *mux.Router) {
-	r.HandleFunc("/raw", rds.HandleListCampaigns).Methods("GET")
-	r.HandleFunc("/raw/{campaign}", rds.HandleGetCampaignMetadata).Methods("GET")
-	r.HandleFunc("/raw/{campaign}", rds.HandlePutCampaignMetadata).Methods("PUT")
-	r.HandleFunc("/raw/{campaign}/{file}", rds.HandleGetFileMetadata).Methods("GET")
-	r.HandleFunc("/raw/{campaign}/{file}", rds.HandlePutFileMetadata).Methods("PUT")
-	r.HandleFunc("/raw/{campaign}/{file}", rds.HandleDeleteFile).Methods("DELETE")
-	r.HandleFunc("/raw/{campaign}/{file}/data", rds.HandleFileDownload).Methods("GET")
-	r.HandleFunc("/raw/{campaign}/{file}/data", rds.HandleFileUpload).Methods("PUT")
+	l := rds.config.accessLogger
+	r.HandleFunc("/raw", LogAccess(l, rds.HandleListCampaigns)).Methods("GET")
+	r.HandleFunc("/raw/{campaign}", LogAccess(l, rds.HandleGetCampaignMetadata)).Methods("GET")
+	r.HandleFunc("/raw/{campaign}", LogAccess(l, rds.HandlePutCampaignMetadata)).Methods("PUT")
+	r.HandleFunc("/raw/{campaign}/{file}", LogAccess(l, rds.HandleGetFileMetadata)).Methods("GET")
+	r.HandleFunc("/raw/{campaign}/{file}", LogAccess(l, rds.HandlePutFileMetadata)).Methods("PUT")
+	r.HandleFunc("/raw/{campaign}/{file}", LogAccess(l, rds.HandleDeleteFile)).Methods("DELETE")
+	r.HandleFunc("/raw/{campaign}/{file}/data", LogAccess(l, rds.HandleFileDownload)).Methods("GET")
+	r.HandleFunc("/raw/{campaign}/{file}/data", LogAccess(l, rds.HandleFileUpload)).Methods("PUT")
 }
 
 // NewRawDataStore encapsulates a raw data store, given a pathname of a

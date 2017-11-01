@@ -12,7 +12,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/go-pg/pg"
 	"github.com/gorilla/mux"
 	pto3 "github.com/mami-project/pto3-go"
 )
@@ -170,25 +169,29 @@ func executeWithFile(r *mux.Router, t *testing.T,
 
 const TestBaseURL = "https://ptotest.mami-project.eu"
 
-var TestConfig pto3.PTOServerConfig
+var TestConfig *pto3.PTOServerConfig
 var TestRouter *mux.Router
 
 func TestMain(m *testing.M) {
 	// define a configuration
-	TestConfig = pto3.PTOServerConfig{
-		BaseURL: TestBaseURL,
-		ContentTypes: map[string]string{
-			"test": "application/json",
-			"osf":  "applicaton/vnd.mami.ndjson",
-		},
-		ObsDatabase: pg.Options{
-			Addr:     "localhost:5432",
-			User:     "ptotest",
-			Database: "ptotest",
-			Password: "helpful guide sheep train",
-		},
+	testConfigJSON := []byte(`
+{ 	
+	"BaseURL" : "https://ptotest.mami-project.eu",
+	"ContentTypes" : {
+		"test" : "application/json",
+		"osf" :  "applicaton/vnd.mami.ndjson"
+	},
+	"ObsDatabase" : {
+		"Addr":     "localhost:5432",
+		"User":     "ptotest",
+		"Database": "ptotest",
+		"Password": "helpful guide sheep train"
 	}
-	if err := TestConfig.ParseURL(); err != nil {
+}`)
+
+	var err error
+	TestConfig, err = pto3.NewConfigFromJSON(testConfigJSON)
+	if err != nil {
 		log.Fatal(err)
 	}
 
@@ -198,11 +201,11 @@ func TestMain(m *testing.M) {
 		azr := setupAZR()
 
 		// build a raw data store  (and prepare to clean up after it)
-		rds := setupRDS(&TestConfig, azr)
+		rds := setupRDS(TestConfig, azr)
 		defer teardownRDS(rds)
 
 		// build an observation store (and prepare to clean up after it)
-		osr := setupOSR(&TestConfig, azr)
+		osr := setupOSR(TestConfig, azr)
 		defer teardownOSR(osr)
 
 		// build a query cache (and prepare to clean up after it)
@@ -211,7 +214,7 @@ func TestMain(m *testing.M) {
 
 		// set up routes
 		TestRouter = mux.NewRouter()
-		TestRouter.HandleFunc("/", TestConfig.HandleRoot)
+		TestConfig.AddRoutes(TestRouter)
 		rds.AddRoutes(TestRouter)
 		osr.AddRoutes(TestRouter)
 		// qc.AddRoutes(TestRouter)
