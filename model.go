@@ -255,7 +255,7 @@ func (set *ObservationSet) CountObservations(db orm.DB) int {
 }
 
 type Observation struct {
-	ID          int
+	ID          int `sql:",pk"`
 	SetID       int
 	Set         *ObservationSet
 	Start       time.Time
@@ -271,7 +271,7 @@ type Observation struct {
 // line in an Observation Set File.
 func (obs *Observation) MarshalJSON() ([]byte, error) {
 	jslice := []interface{}{
-		obs.SetID,
+		fmt.Sprintf("%x", obs.SetID),
 		obs.Start.UTC().Format(time.RFC3339),
 		obs.End.UTC().Format(time.RFC3339),
 		obs.Path.String,
@@ -300,7 +300,11 @@ func (obs *Observation) UnmarshalJSON(b []byte) error {
 	}
 
 	obs.ID = 0
-	obs.SetID, err = strconv.Atoi(AsString(jslice[0])) // fill in Set ID, will be ignored by force insert
+	setid, err := strconv.ParseUint(AsString(jslice[0]), 16, 64) // fill in Set ID, will be ignored by force insert
+	if err != nil {
+		return nil
+	}
+	obs.SetID = int(setid)
 
 	obs.Start, err = time.Parse(time.RFC3339, AsString(jslice[1]))
 	if err != nil {
@@ -354,6 +358,20 @@ func (obs *Observation) InsertInSet(db orm.DB, set *ObservationSet) error {
 	obs.SetID = obs.Set.ID
 
 	return db.Insert(obs)
+}
+
+func ObservationsBySetID(db orm.DB, setid int) ([]Observation, error) {
+	var obsdat []Observation
+
+	err := db.Model(&obsdat).
+		Column("observation.*", "Condition", "Path").
+		Where("set_id = ?", setid).
+		Select()
+	if err != nil {
+		return nil, err
+	}
+
+	return obsdat, nil
 }
 
 func WriteObservations(obsdat []Observation, out io.Writer) error {

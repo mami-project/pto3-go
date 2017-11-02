@@ -139,7 +139,7 @@ func (osr *ObservationStore) HandleGetMetadata(w http.ResponseWriter, r *http.Re
 	vars := mux.Vars(r)
 
 	// get set ID
-	setid, err := strconv.ParseInt(vars["set"], 16, 64)
+	setid, err := strconv.ParseUint(vars["set"], 16, 64)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("bad or missing set ID %s: %s", vars["set"], err.Error()), http.StatusBadRequest)
 		return
@@ -170,7 +170,7 @@ func (osr *ObservationStore) HandlePutMetadata(w http.ResponseWriter, r *http.Re
 	vars := mux.Vars(r)
 
 	// fill in set ID from URL
-	setid, err := strconv.ParseInt(vars["set"], 16, 64)
+	setid, err := strconv.ParseUint(vars["set"], 16, 64)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("bad or missing set ID %s: %s", vars["set"], err.Error()), http.StatusBadRequest)
 		return
@@ -227,7 +227,7 @@ func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Reque
 	vars := mux.Vars(r)
 
 	// fill in set ID from URL
-	setid, err := strconv.ParseInt(vars["set"], 16, 64)
+	setid, err := strconv.ParseUint(vars["set"], 16, 64)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("bad or missing set ID %s: %s", vars["set"], err.Error()), http.StatusBadRequest)
 		return
@@ -255,33 +255,21 @@ func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Reque
 	// Figure out how to stream this. Might require another library
 
 	// FIXME shouldn't this funtionality be in model.go?
-	var obsdat []Observation
 
-	err = osr.db.Model(&obsdat).
-		Column("observation.*", "Condition", "Path").
-		Where("set_id = ?", setid).
-		Select()
+	obsdat, err := ObservationsBySetID(osr.db, int(setid))
 	if err != nil {
 		LogInternalServerError(w, "retrieving observation set", err)
 		return
 	}
 
-	// and serialize them to NDJSON
 	w.Header().Set("Content-type", "application/vnd.mami.ndjson")
 	w.WriteHeader(http.StatusOK)
 
-	for _, obs := range obsdat {
-		b, err := json.Marshal(&obs)
-		if err != nil {
-			log.Printf("aborting download of observation set %s due to error: %v", vars["set"], err)
-			w.Write([]byte("\"error during download\"\n"))
-			return
-		}
-
-		w.Write(b)
-		w.Write([]byte("\n"))
+	if err := WriteObservations(obsdat, w); err != nil {
+		LogInternalServerError(w, "writing observation set on download", err)
+		w.Write([]byte("\"error during download\"\n"))
+		return
 	}
-
 }
 
 // HandleUpload handles PUT /obs/<set>/data. It requires a newline-delimited
@@ -297,7 +285,7 @@ func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request
 	vars := mux.Vars(r)
 
 	// fill in set ID from URL
-	setid, err := strconv.ParseInt(vars["set"], 16, 64)
+	setid, err := strconv.ParseUint(vars["set"], 16, 64)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("bad or missing set ID %s: %s", vars["set"], err.Error()), http.StatusBadRequest)
 		return
