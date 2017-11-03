@@ -109,13 +109,6 @@ func (osr *ObservationStore) HandleCreateSet(w http.ResponseWriter, r *http.Requ
 
 	// now insert the set in the database
 	err = osr.db.RunInTransaction(func(t *pg.Tx) error {
-		// first ensure any conditions have been inserted
-		for i := range set.Conditions {
-			if err := set.Conditions[i].InsertOnce(t); err != nil {
-				return err
-			}
-		}
-
 		// then insert the set itself
 		return set.Insert(t, true)
 	})

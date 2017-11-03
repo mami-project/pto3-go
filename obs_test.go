@@ -48,6 +48,8 @@ func TestObsRoundtrip(t *testing.T) {
 		t.Fatal("missing __link in /obs/create POST response")
 	}
 
+	setlink := setDown.Link
+
 	// list observation sets to ensure it shows up in the list
 	res = executeRequest(TestRouter, t, "GET", "https://ptotest.mami-project.eu/obs", nil, "", GoodAPIKey, http.StatusOK)
 
@@ -68,7 +70,7 @@ func TestObsRoundtrip(t *testing.T) {
 	}
 
 	// retrieve observation set to ensure the metadata is properly stored
-	res = executeRequest(TestRouter, t, "GET", setDown.Link, nil, "", GoodAPIKey, http.StatusOK)
+	res = executeRequest(TestRouter, t, "GET", setlink, nil, "", GoodAPIKey, http.StatusOK)
 
 	setDown = ClientObservationSet{}
 	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
@@ -98,6 +100,20 @@ func TestObsRoundtrip(t *testing.T) {
 	}
 
 	datalink := setDown.Datalink
+
+	// change the description and update the database
+	setDown.Description = "An updated observation set to exercise observation set metdata and data storage"
+
+	res = executeWithJSON(TestRouter, t, "PUT", setlink, setDown, GoodAPIKey, http.StatusCreated)
+
+	setDown = ClientObservationSet{}
+	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
+		t.Fatal(err)
+	}
+
+	if setDown.Description != "An updated observation set to exercise observation set metdata and data storage" {
+		t.Fatal("failed to update description via PUT")
+	}
 
 	// now write some data to the observation set data link
 	observations_up_bytes := []byte(`[31337, "2017-10-01T10:06:00Z", "2017-10-01T10:06:00Z", "10.0.0.1 * 10.0.0.2", "pto.test.succeeded"]

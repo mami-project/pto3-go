@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/url"
 	"strconv"
 	"strings"
@@ -140,6 +141,9 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 	// zero ID, it will be assigned on insertion or from the URI
 	set.ID = 0
 
+	// invalidate declared condition cache
+	set.conditionDeclared = nil
+
 	var ok bool
 	for k, v := range jmap {
 		if k == "_sources" {
@@ -184,11 +188,25 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+func (set *ObservationSet) ValidateConditions(db orm.DB) error {
+	for i := range set.Conditions {
+		if err := set.Conditions[i].InsertOnce(db); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 	if force {
 		set.ID = 0
 	}
 	if set.ID == 0 {
+		// ensure conditions have IDs
+		if err := set.ValidateConditions(db); err != nil {
+			return err
+		}
+
 		// main insertion
 		if err := db.Insert(set); err != nil {
 			return err
@@ -222,6 +240,8 @@ func (set *ObservationSet) SelectByID(db orm.DB) error {
 		return err
 	}
 
+	log.Printf("set ID %x has conditions %v", set.ID, conditionIDs)
+
 	set.Conditions = make([]Condition, len(conditionIDs))
 	for i := range conditionIDs {
 		set.Conditions[i].ID = conditionIDs[i]
@@ -234,7 +254,31 @@ func (set *ObservationSet) SelectByID(db orm.DB) error {
 }
 
 func (set *ObservationSet) Update(db orm.DB) error {
-	return db.Update(set)
+	// ensure new conditions are in the database
+	if err := set.ValidateConditions(db); err != nil {
+		return err
+	}
+
+	// main update
+	if err := db.Update(set); err != nil {
+		return err
+	}
+
+	// now delete and restore conditions
+	// See https://github.com/mami-project/pto3-go/issues/20
+	_, err := db.Exec("DELETE FROM observation_set_conditions WHERE observation_set_id = ?", set.ID)
+	if err != nil {
+		return err
+	}
+
+	for i := range set.Conditions {
+		_, err := db.Exec("INSERT INTO observation_set_conditions VALUES (?, ?)", set.ID, set.Conditions[i].ID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func LinkForSetID(baseurl *url.URL, setid int) string {
@@ -252,6 +296,14 @@ func (set *ObservationSet) CountObservations(db orm.DB) int {
 		set.count, _ = db.Model(&Observation{}).Where("set_id = ?", set.ID).Count()
 	}
 	return set.count
+}
+
+type UndeclaredErrorCondition struct {
+	condition string
+}
+
+func (uec *UndeclaredErrorCondition) Error() string {
+	return fmt.Sprintf("observation has condition %s not declared in set", uec.condition)
 }
 
 type Observation struct {
@@ -332,8 +384,10 @@ func (obs *Observation) InsertInSet(db orm.DB, set *ObservationSet) error {
 	if set.conditionDeclared == nil {
 		set.conditionDeclared = make(map[int]bool)
 		for i := range set.Conditions {
+
 			set.conditionDeclared[set.Conditions[i].ID] = true
 		}
+		log.Printf("rebuilt declared condition map for set %x: %d conditions", set.ID, len(set.conditionDeclared))
 	}
 
 	if err := obs.Path.InsertOnce(db); err != nil {
@@ -347,8 +401,7 @@ func (obs *Observation) InsertInSet(db orm.DB, set *ObservationSet) error {
 	obs.ConditionID = obs.Condition.ID
 
 	if !set.conditionDeclared[obs.ConditionID] {
-		// FIXME figure out the best way to make this not a 500.
-		return fmt.Errorf("cannot insert observation with undeclared condition %s", obs.Condition.Name)
+		return &UndeclaredErrorCondition{obs.Condition.Name}
 	}
 
 	obs.Set = set

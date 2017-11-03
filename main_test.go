@@ -62,7 +62,7 @@ func setupOSR(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.Observat
 
 func teardownOSR(osr *pto3.ObservationStore) {
 	// (don't) delete tables
-	if !SuppressDropTables {
+	if !SuppressDropTables && TestRC == 0 {
 		if err := osr.DropTables(); err != nil {
 			log.Fatal(err)
 		}
@@ -172,6 +172,8 @@ const TestBaseURL = "https://ptotest.mami-project.eu"
 var TestConfig *pto3.PTOServerConfig
 var TestRouter *mux.Router
 
+var TestRC int
+
 func TestMain(m *testing.M) {
 	// define a configuration
 	testConfigJSON := []byte(`
@@ -219,7 +221,8 @@ func TestMain(m *testing.M) {
 		osr.AddRoutes(TestRouter)
 		// qc.AddRoutes(TestRouter)
 
-		return m.Run()
+		TestRC = m.Run()
+		return TestRC
 	}())
 }
 

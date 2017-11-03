@@ -24,8 +24,9 @@ func CatMetadata(db orm.DB, setID int) error {
 		return err
 	}
 
-	_, err = os.Stdout.Write(b)
-	return err
+	os.Stdout.Write(b)
+	fmt.Fprint(os.Stdout, "\n")
+	return nil
 }
 
 func CatObservations(db orm.DB, setID int) error {

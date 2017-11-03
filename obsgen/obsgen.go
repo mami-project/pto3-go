@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -25,14 +26,37 @@ type testObservationSpec struct {
 	ConditionPrevalence map[string]int
 }
 
-func generateTestObservations(spec *testObservationSpec, count int, out io.Writer) {
+type observationSetMetadata struct {
+	Analyzer   string   `json:"_analyzer"`
+	Sources    []string `json:"_sources"`
+	Conditions []string `json:"_conditions"`
+}
 
-	// generate a condition die we can roll
+func generateTestObservations(spec *testObservationSpec, withMetadata bool, count int, out io.Writer) {
+
+	// generate a metadata record
+	md := observationSetMetadata{
+		Analyzer:   "https://raw.githubusercontent.com/mami-project/pto3-go/master/obsgen/ptoanalyzer.json",
+		Sources:    []string{},
+		Conditions: make([]string, len(spec.ConditionPrevalence)),
+	}
+
+	// generate condition die and fill in metadata
 	conditions := make([]string, 0)
+	i := 0
 	for k, v := range spec.ConditionPrevalence {
-		for i := 0; i < v; i++ {
+		md.Conditions[i] = k
+		i++
+		for j := 0; j < v; j++ {
 			conditions = append(conditions, k)
 		}
+	}
+
+	// emit metadata record
+	if withMetadata {
+		b, _ := json.Marshal(md)
+		out.Write(b)
+		fmt.Fprint(out, "\n")
 	}
 
 	// start the clock
@@ -115,15 +139,17 @@ func main() {
 		"2001:db8:eaa:a::",
 	}
 
+	count := 14400
+
 	for i := range sources4 {
 		spec.SourceIP4 = sources4[i]
 		spec.SourceIP6 = sources6[i]
-		file, err := os.Create(fmt.Sprintf("testdata/7200_testobs_%d.ndjson", i))
+		file, err := os.Create(fmt.Sprintf("testdata/%d_testobs_%d.ndjson", count, i))
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer file.Close()
-		generateTestObservations(&spec, 7200, file)
+		generateTestObservations(&spec, true, count, file)
 	}
 
 }
