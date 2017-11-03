@@ -201,7 +201,7 @@ keys:
 | --------------- | ----------------------------------------------------------------------- |
 | `_repository`   | URL of source code repository, if not implicit                          |
 | `_owner`        | Identity (via email) of user or organization owning the analyzer        |
-| `_file_types`   | File types consumable by raw analyzer, as array, if present             |
+| `_file_types`   | File types consumable by raw analyzer, as array                         |
 | `_invocation`   | Command to run in repository root to invoke the analyzer, if local      |
 
 As with raw and observation metadata, all keys not beginning with `_` are
