@@ -203,6 +203,7 @@ keys:
 | `_owner`        | Identity (via email) of user or organization owning the analyzer        |
 | `_file_types`   | File types consumable by raw analyzer, as array                         |
 | `_invocation`   | Command to run in repository root to invoke the analyzer, if local      |
+| `_platform`     | Platform identifier; see [interface description](ANALYZER.md)           |
 
 As with raw and observation metadata, all keys not beginning with `_` are
 freeform, and may be used to store other information about the analyzer.
@@ -229,6 +230,8 @@ observation sets and upload its results. As it cannot be automatically
 invoked, client analyzer repositories should contain human-readable
 documentation for invocation. Client analyzer metadata must not contain an
 `_invocation` key.
+
+See [the analyzer interface description](ANALYZER.md) for more.
 
 ## Observation API usage
 

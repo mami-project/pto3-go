@@ -41,7 +41,6 @@ func PtoLoad(config *pto3.PTOServerConfig, db *pg.DB, r io.Reader) *pto3.Observa
 		setid = set.ID
 
 		// now scan standard input
-		// FIXME line numbers
 		for in.Scan() {
 			lineno++
 			line := strings.TrimSpace(in.Text())

@@ -3,6 +3,7 @@ package pto3
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 )
 
@@ -48,5 +49,31 @@ func AsTime(v interface{}) (time.Time, error) {
 		return time.Unix(int64(cv), 0), nil
 	default:
 		return time.Parse(time.RFC3339, AsString(cv))
+	}
+}
+
+func AsInt(v interface{}) int {
+	switch cv := v.(type) {
+	case int:
+		return cv
+	case int64:
+		return int(cv)
+	case uint64:
+		return int(cv)
+	case int32:
+		return int(cv)
+	case uint32:
+		return int(cv)
+	case int16:
+		return int(cv)
+	case uint16:
+		return int(cv)
+	case int8:
+		return int(cv)
+	case uint8:
+		return int(cv)
+	default:
+		i, _ := strconv.ParseInt(AsString(cv), 10, 64)
+		return int(i)
 	}
 }
