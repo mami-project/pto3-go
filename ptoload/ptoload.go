@@ -1,3 +1,5 @@
+// ptoload is a command-line utility to load an observation set file into a PTO observation database.
+
 package main
 
 import (

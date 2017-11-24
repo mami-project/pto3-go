@@ -1,3 +1,5 @@
+// ptocat is a command-line utility to retrieve
+
 package main
 
 import (

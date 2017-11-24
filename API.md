@@ -104,8 +104,6 @@ are listed below:
 | ------------------- | ------------------------------|---------------------------------------------- |
 | `obs-bz2`           | `application/bzip2`           | Compressed observations in [OSF](OBSETS.md) |
 | `obs`               | `application/vnd.mami.ndjson` | Uncompressed observations in [OSF](OBSETS.md) |
-| `ps-ndjson-bz2` | `application/bzip2`           | Compressed [PATHspider](https://pathspider.net) results             |
-| `ps-ndjson`     | `application/vnd.mami.ndjson` | Uncompressed [PATHspider](https://pathspider.net) results           |
 
 ## Raw data API usage
 
