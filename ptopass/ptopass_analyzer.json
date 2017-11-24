@@ -1,0 +1,7 @@
+{
+    "_owner": "brian@trammell.ch",
+    "description": "A passthrough normalizer for observation files and compressed observation files",
+    "_file_types" : ["obs", "obs-bz2"],
+    "_platform" : "golang-1.9",
+    "_invocation" : "ptopass"
+}

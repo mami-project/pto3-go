@@ -190,9 +190,10 @@ func (md *RDSMetadata) Filetype() string {
 	}
 }
 
-func ReadRDSMetadata(pathname string, parent *RDSMetadata) (*RDSMetadata, error) {
+func RDSMetadataFromReader(r io.Reader, parent *RDSMetadata) (*RDSMetadata, error) {
 	var md RDSMetadata
-	b, err := ioutil.ReadFile(pathname)
+
+	b, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
@@ -204,6 +205,15 @@ func ReadRDSMetadata(pathname string, parent *RDSMetadata) (*RDSMetadata, error)
 	// link to campaign metadata for inheritance
 	md.Parent = parent
 	return &md, nil
+}
+
+func RDSMetadataFromFile(pathname string, parent *RDSMetadata) (*RDSMetadata, error) {
+	f, err := os.Open(pathname)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return RDSMetadataFromReader(f, parent)
 }
 
 // RDSFiletype encapsulates a filetype in the raw data store FIXME not quite the right type
@@ -296,7 +306,7 @@ func (cam *RDSCampaign) reloadMetadata(force bool) error {
 	}
 
 	// load the campaign metadata file
-	cam.campaignMetadata, err = ReadRDSMetadata(filepath.Join(cam.path, CampaignMetadataFilename), nil)
+	cam.campaignMetadata, err = RDSMetadataFromFile(filepath.Join(cam.path, CampaignMetadataFilename), nil)
 	if err != nil {
 		return err
 	}
@@ -308,7 +318,7 @@ func (cam *RDSCampaign) reloadMetadata(force bool) error {
 		if strings.HasSuffix(metafilename, FileMetadataSuffix) {
 			linkname := metafilename[0 : len(metafilename)-len(FileMetadataSuffix)]
 			cam.fileMetadata[linkname], err =
-				ReadRDSMetadata(filepath.Join(cam.path, metafilename), cam.campaignMetadata)
+				RDSMetadataFromFile(filepath.Join(cam.path, metafilename), cam.campaignMetadata)
 			if err != nil {
 				return err
 			}
