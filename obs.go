@@ -16,11 +16,11 @@ import (
 
 type ObservationStore struct {
 	config *PTOServerConfig
-	azr    *Authorizer
+	azr    Authorizer
 	db     *pg.DB
 }
 
-func NewObservationStore(config *PTOServerConfig, azr *Authorizer) (*ObservationStore, error) {
+func NewObservationStore(config *PTOServerConfig, azr Authorizer) (*ObservationStore, error) {
 	osr := ObservationStore{config: config, azr: azr}
 
 	// Connect to database

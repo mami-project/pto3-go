@@ -57,7 +57,7 @@ func TestScanCampaigns(t *testing.T) {
 	mdmap := testCampaignMetadata{
 		FileType:    "test",
 		Owner:       "ptotest@mami-project.eu",
-		Description: "An empty campaign designed to force a scanCampaigns() to run",
+		Description: "An empty campaign designed to force a ScanCampaigns() to run",
 	}
 
 	mdfile, err := os.Create(filepath.Join(TestConfig.RawRoot, "scantest", pto3.CampaignMetadataFilename))

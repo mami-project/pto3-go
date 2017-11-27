@@ -19,7 +19,7 @@ import (
 // set to true to allow inspection of tables after testing
 const SuppressDropTables = false
 
-func setupRDS(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.RawDataStore {
+func setupRDS(config *pto3.PTOServerConfig, azr pto3.Authorizer) *pto3.RawDataStore {
 	// create temporary RDS directory
 	var err error
 	config.RawRoot, err = ioutil.TempDir("", "pto3-test-raw")
@@ -42,7 +42,7 @@ func teardownRDS(rds *pto3.RawDataStore) {
 	}
 }
 
-func setupOSR(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.ObservationStore {
+func setupOSR(config *pto3.PTOServerConfig, azr pto3.Authorizer) *pto3.ObservationStore {
 	// create an RDS
 	osr, err := pto3.NewObservationStore(config, azr)
 	if err != nil {
@@ -69,7 +69,7 @@ func teardownOSR(osr *pto3.ObservationStore) {
 	}
 }
 
-// func setupQC(config *pto3.PTOServerConfig, azr *pto3.Authorizer) *pto3.QueryCache {
+// func setupQC(config *pto3.PTOServerConfig, azr pto3.Authorizer) *pto3.QueryCache {
 // 	// create temporary QC directory
 // 	var err error
 // 	config.QueryCacheRoot, err = ioutil.TempDir("", "pto3-test-queries")
@@ -94,8 +94,8 @@ func teardownOSR(osr *pto3.ObservationStore) {
 
 const GoodAPIKey = "07e57ab18e70"
 
-func setupAZR() *pto3.Authorizer {
-	return &pto3.Authorizer{
+func setupAZR() pto3.Authorizer {
+	return &pto3.APIKeyAuthorizer{
 		APIKeys: map[string]map[string]bool{
 			GoodAPIKey: map[string]bool{
 				"list_raw":       true,

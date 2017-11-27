@@ -20,13 +20,16 @@ import (
 // If not, return false and fill in a 403 response.
 //
 
-type Authorizer struct {
+type Authorizer interface {
+	IsAuthorized(http.ResponseWriter, *http.Request, string) bool
+}
+
+type APIKeyAuthorizer struct {
 	// Map of API key strings to maps of permission strings to boolean permissions
 	APIKeys map[string]map[string]bool
 }
 
-func (azr *Authorizer) IsAuthorized(w http.ResponseWriter, r *http.Request, permission string) bool {
-
+func (azr *APIKeyAuthorizer) IsAuthorized(w http.ResponseWriter, r *http.Request, permission string) bool {
 	authstr := strings.Fields(r.Header.Get("Authorization"))
 
 	if len(authstr) < 2 {
@@ -57,8 +60,8 @@ func (azr *Authorizer) IsAuthorized(w http.ResponseWriter, r *http.Request, perm
 	}
 }
 
-func LoadAPIKeys(filename string) (*Authorizer, error) {
-	var azr Authorizer
+func LoadAPIKeys(filename string) (*APIKeyAuthorizer, error) {
+	var azr APIKeyAuthorizer
 
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -71,4 +74,10 @@ func LoadAPIKeys(filename string) (*Authorizer, error) {
 	}
 
 	return &azr, nil
+}
+
+type NullAuthorizer struct{}
+
+func (azr *NullAuthorizer) IsAuthorized(w http.ResponseWriter, r *http.Request, permission string) bool {
+	return false
 }

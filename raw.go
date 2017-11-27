@@ -392,7 +392,7 @@ func (cam *RDSCampaign) putCampaignMetadata(md *RDSMetadata) error {
 	return nil
 }
 
-func (cam *RDSCampaign) getFileMetadata(filename string) (*RDSMetadata, error) {
+func (cam *RDSCampaign) GetFileMetadata(filename string) (*RDSMetadata, error) {
 	// reload if stale
 	err := cam.reloadMetadata(false)
 	if err != nil {
@@ -491,7 +491,7 @@ type RawDataStore struct {
 	config *PTOServerConfig
 
 	// authorizer
-	azr *Authorizer
+	azr Authorizer
 
 	// base path
 	path string
@@ -788,7 +788,7 @@ func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	out, err := cam.getFileMetadata(filename)
+	out, err := cam.GetFileMetadata(filename)
 	if err != nil {
 		rdsHTTPError(w, err)
 		return
@@ -866,7 +866,7 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 	}
 
 	// now reflect it back
-	out, err := cam.getFileMetadata(filename)
+	out, err := cam.GetFileMetadata(filename)
 	if err != nil {
 		rdsHTTPError(w, err)
 		return
@@ -1057,7 +1057,7 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	// and now a reply... return file metadata
-	out, err := cam.getFileMetadata(filename)
+	out, err := cam.GetFileMetadata(filename)
 	if err != nil {
 		rdsHTTPError(w, err)
 		return
@@ -1097,13 +1097,31 @@ func (rds *RawDataStore) AddRoutes(r *mux.Router) {
 	r.HandleFunc("/raw/{campaign}/{file}/data", LogAccess(l, rds.HandleFileUpload)).Methods("PUT")
 }
 
+func (rds *RawDataStore) CampaignForName(camname string) (*RDSCampaign, error) {
+	// force a campaign rescan
+	err := rds.scanCampaigns()
+	if err != nil {
+		return nil, err
+	}
+
+	// die if campaign not found
+	cam, ok := rds.campaigns[camname]
+	if !ok {
+		return nil, fmt.Errorf("campaign %s does not exist")
+	}
+
+	return cam, nil
+}
+
 // NewRawDataStore encapsulates a raw data store, given a pathname of a
 // directory containing its files.
-func NewRawDataStore(config *PTOServerConfig, azr *Authorizer) (*RawDataStore, error) {
+func NewRawDataStore(config *PTOServerConfig, azr Authorizer) (*RawDataStore, error) {
 	rds := RawDataStore{config: config, azr: azr, path: config.RawRoot}
 
 	// scan the directory for campaigns
-	rds.scanCampaigns()
+	if err := rds.scanCampaigns(); err != nil {
+		return nil, err
+	}
 
 	return &rds, nil
 }
