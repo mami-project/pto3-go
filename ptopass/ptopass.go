@@ -78,7 +78,8 @@ func ObsPassthrough(in io.Reader, metain io.Reader, out io.Writer) error {
 	}
 	mdout["_conditions"] = mdcond
 
-	// add start and end time, since we have it
+	// add start and end time and owner, since we have it
+	mdout["_owner"] = md.Owner
 	mdout["_time_start"] = md.TimeStart.Format(time.RFC3339)
 	mdout["_time_end"] = md.TimeStart.Format(time.RFC3339)
 
@@ -101,8 +102,6 @@ func ObsPassthrough(in io.Reader, metain io.Reader, out io.Writer) error {
 }
 
 func main() {
-	// FIXME throw all this into a obscopy function that takes three files...
-
 	// wrap a file around the metadata stream
 	mdfile := os.NewFile(3, ".piped_metadata.json")
 

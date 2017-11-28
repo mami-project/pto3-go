@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -14,6 +15,29 @@ import (
 
 	pto3 "github.com/mami-project/pto3-go"
 )
+
+func copyData(from io.Reader, to io.WriteCloser, errchan chan error) {
+	defer to.Close()
+	buf := make([]byte, 65536)
+	for {
+		n, err := from.Read(buf)
+		if err == nil {
+			_, err2 := to.Write(buf[0:n])
+			if err2 != nil {
+				errchan <- err2
+				log.Fatal(err)
+				return
+			}
+		} else if err == io.EOF {
+			break
+		} else {
+			log.Fatal(err)
+			errchan <- err
+			return
+		}
+	}
+	errchan <- nil
+}
 
 func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, filename string) error {
 
@@ -49,7 +73,6 @@ func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, file
 	if err != nil {
 		return err
 	}
-	defer datapipe.Close()
 
 	// pass through stdout and stderr
 	cmd.Stdout = os.Stdout
@@ -60,14 +83,13 @@ func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, file
 	if err != nil {
 		return err
 	}
-	defer metapipeCmd.Close()
-	defer metapipe.Close()
 
 	cmd.ExtraFiles = make([]*os.File, 1)
 	cmd.ExtraFiles[0] = metapipeCmd
 
 	// start the command
 	if err := cmd.Start(); err != nil {
+		log.Fatal(err)
 		return err
 	}
 
@@ -76,49 +98,23 @@ func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, file
 	cmderr := make(chan error, 1)
 
 	// start a goroutine to fill the metadata pipe
-	go func() {
-		b, err := md.DumpJSONObject(true)
-		if err != nil {
-			metaerr <- err
-			return
-		}
+	b, err := md.DumpJSONObject(true)
+	if err != nil {
+		return err
+	}
 
-		_, err = metapipe.Write(b)
-		if err != nil {
-			metaerr <- err
-			return
-		}
-
-		metaerr <- nil
-	}()
+	// start a goroutine to fill the metadata pipe
+	go copyData(bytes.NewReader(b), metapipe, metaerr)
 
 	// start a goroutine to fill the data pipe
-	go func() {
-		buf := make([]byte, 65536)
-		for {
-			n, err := rawfile.Read(buf)
-			if err == nil {
-				_, err2 := datapipe.Write(buf[0:n])
-				if err2 != nil {
-					dataerr <- err2
-					return
-				}
-			} else if err == io.EOF {
-				break
-			} else {
-				dataerr <- err
-				return
-			}
-		}
-		dataerr <- nil
-	}()
+	go copyData(rawfile, datapipe, dataerr)
 
 	// start a goroutine to wait for the process to finish
 	go func() {
 		cmderr <- cmd.Wait()
 	}()
 
-	// now wait on the exit channels, return as soon as command complete
+	// now wait on the exit channels, return as soon as command completes
 	for {
 		select {
 		case err := <-dataerr:
