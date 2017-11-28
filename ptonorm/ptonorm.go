@@ -5,13 +5,16 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 
 	pto3 "github.com/mami-project/pto3-go"
 )
@@ -36,6 +39,42 @@ func copyData(from io.Reader, to io.WriteCloser, errchan chan error) {
 			return
 		}
 	}
+	errchan <- nil
+}
+
+func filterMetadata(from io.ReadCloser, to io.Writer, sourceurl string, errchan chan error) {
+	defer from.Close()
+	scanner := bufio.NewScanner(from)
+	var lineno int
+	md := make(map[string]interface{})
+
+	for scanner.Scan() {
+		lineno++
+		line := strings.TrimSpace(scanner.Text())
+		switch line[0] {
+		case '{':
+			// metadata. coalesce
+			err := json.Unmarshal([]byte(line), &md)
+			if err != nil {
+				errchan <- err
+				return
+			}
+
+		case '[':
+			// data. pass.
+			fmt.Fprintln(to, line)
+		}
+	}
+
+	// At EOF. Add source URL to metadata and emit.
+	md["_sources"] = []string{sourceurl}
+
+	b, err := json.Marshal(md)
+	if err != nil {
+		errchan <- err
+		return
+	}
+	fmt.Fprintf(to, "%s\n", b)
 	errchan <- nil
 }
 
@@ -74,8 +113,13 @@ func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, file
 		return err
 	}
 
-	// pass through stdout and stderr
-	cmd.Stdout = os.Stdout
+	// observations on stdout
+	obspipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+
+	// pass through stderr
 	cmd.Stderr = os.Stderr
 
 	// metadata on fd 3
@@ -95,9 +139,10 @@ func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, file
 
 	metaerr := make(chan error, 1)
 	dataerr := make(chan error, 1)
+	obserr := make(chan error, 1)
 	cmderr := make(chan error, 1)
 
-	// start a goroutine to fill the metadata pipe
+	// get metadata
 	b, err := md.DumpJSONObject(true)
 	if err != nil {
 		return err
@@ -108,6 +153,11 @@ func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, file
 
 	// start a goroutine to fill the data pipe
 	go copyData(rawfile, datapipe, dataerr)
+
+	// start a goroutine to filter metadata in output
+	// and add a source URL
+	sourceurl := fmt.Sprintf("%s%s/%s/%s", config.BaseURL, "raw", campaign, filename)
+	go filterMetadata(obspipe, os.Stdout, sourceurl, obserr)
 
 	// start a goroutine to wait for the process to finish
 	go func() {
@@ -125,6 +175,10 @@ func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, file
 			if err != nil {
 				return err
 			}
+		case err := <-obserr:
+			if err != nil {
+				return err
+			}
 		case err := <-cmderr:
 			return err
 		}
@@ -132,7 +186,7 @@ func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, file
 }
 
 var helpFlag = flag.Bool("h", false, "display a help message")
-var configFlag = flag.String("config", "ptoconfig.json", "path to PTO configuration `file` with raw data store information")
+var configFlag = flag.String("config", "ptoconfig.json", "path to PTO configuration `file`")
 
 func main() {
 	flag.Usage = func() {
