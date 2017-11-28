@@ -484,6 +484,18 @@ func (cam *RDSCampaign) getFiletype(filename string) *RDSFiletype {
 	return &RDSFiletype{ftname, ctype}
 }
 
+func (cam *RDSCampaign) ReadFileData(filename string) (io.ReadCloser, error) {
+
+	// build a local filesystem path and validate it
+	rawpath := filepath.Clean(filepath.Join(cam.path, filename))
+	if pathok, _ := filepath.Match(filepath.Join(cam.path, "*"), rawpath); !pathok {
+		return nil, fmt.Errorf("path %s is not ok", rawpath)
+	}
+
+	// open the file
+	return os.Open(rawpath)
+}
+
 // A RawDataStore encapsulates a pile of PTO data and metadata files as a set of
 // campaigns.
 type RawDataStore struct {
@@ -928,24 +940,16 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 		LogInternalServerError(w, fmt.Sprintf("determining filetype for %s", filename), nil)
 	}
 
-	// build a local filesystem path for downloading and validate it
-	rawpath := filepath.Clean(filepath.Join(rds.path, camname, filename))
-	if pathok, _ := filepath.Match(filepath.Join(rds.path, "*", "*"), rawpath); !pathok {
-		http.Error(w, fmt.Sprintf("path %s is not ok", rawpath), http.StatusBadRequest)
-		return
-	}
-
-	// write MIME type to header
-	w.Header().Set("Content-Type", ft.ContentType)
-
-	// now stream the file to the writer
-	rawfile, err := os.Open(rawpath)
+	// try to open raw data file
+	rawfile, err := cam.ReadFileData(filename)
 	if err != nil {
 		LogInternalServerError(w, "opening data file", err)
 		return
 	}
 	defer rawfile.Close()
 
+	// write MIME type to header
+	w.Header().Set("Content-Type", ft.ContentType)
 	w.WriteHeader(http.StatusOK)
 
 	buf := make([]byte, 65536)

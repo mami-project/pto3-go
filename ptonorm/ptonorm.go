@@ -7,13 +7,15 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"os/exec"
 
 	pto3 "github.com/mami-project/pto3-go"
 )
 
-func PtoNorm(config *pto3.PTOServerConfig, normalizerCommand string, campaign string, filename string) error {
+func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, filename string) error {
 
 	// create a raw data store (no need for an authorizer)
 	rds, err := pto3.NewRawDataStore(config, &pto3.NullAuthorizer{})
@@ -34,17 +36,103 @@ func PtoNorm(config *pto3.PTOServerConfig, normalizerCommand string, campaign st
 	}
 
 	// open raw data file
-	// FIXME need an method on cam to do this
+	rawfile, err := cam.ReadFileData(filename)
+	if err != nil {
+		return err
+	}
 
-	// create pipes and start subprocess
+	// create subprocess and pipes
+	cmd := exec.Command(normCmd)
+
+	// data file on stdtin
+	datapipe, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	defer datapipe.Close()
+
+	// pass through stdout and stderr
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// metadata on fd 3
+	metapipeCmd, metapipe, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	defer metapipeCmd.Close()
+	defer metapipe.Close()
+
+	cmd.ExtraFiles = make([]*os.File, 1)
+	cmd.ExtraFiles[0] = metapipeCmd
+
+	// start the command
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	metaerr := make(chan error, 1)
+	dataerr := make(chan error, 1)
+	cmderr := make(chan error, 1)
 
 	// start a goroutine to fill the metadata pipe
+	go func() {
+		b, err := md.DumpJSONObject(true)
+		if err != nil {
+			metaerr <- err
+			return
+		}
+
+		_, err = metapipe.Write(b)
+		if err != nil {
+			metaerr <- err
+			return
+		}
+
+		metaerr <- nil
+	}()
 
 	// start a goroutine to fill the data pipe
+	go func() {
+		buf := make([]byte, 65536)
+		for {
+			n, err := rawfile.Read(buf)
+			if err == nil {
+				_, err2 := datapipe.Write(buf[0:n])
+				if err2 != nil {
+					dataerr <- err2
+					return
+				}
+			} else if err == io.EOF {
+				break
+			} else {
+				dataerr <- err
+				return
+			}
+		}
+		dataerr <- nil
+	}()
 
-	// wait for everything to finish
+	// start a goroutine to wait for the process to finish
+	go func() {
+		cmderr <- cmd.Wait()
+	}()
 
-	return nil
+	// now wait on the exit channels, return as soon as command complete
+	for {
+		select {
+		case err := <-dataerr:
+			if err != nil {
+				return err
+			}
+		case err := <-metaerr:
+			if err != nil {
+				return err
+			}
+		case err := <-cmderr:
+			return err
+		}
+	}
 }
 
 var helpFlag = flag.Bool("h", false, "display a help message")
