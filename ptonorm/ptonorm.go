@@ -42,7 +42,7 @@ func copyData(from io.Reader, to io.WriteCloser, errchan chan error) {
 	errchan <- nil
 }
 
-func filterMetadata(from io.ReadCloser, to io.Writer, sourceurl string, errchan chan error) {
+func filterMetadata(from io.ReadCloser, to io.Writer, sourceurl string, errchan chan error, donechan chan struct{}) {
 	defer from.Close()
 	scanner := bufio.NewScanner(from)
 	var lineno int
@@ -76,9 +76,11 @@ func filterMetadata(from io.ReadCloser, to io.Writer, sourceurl string, errchan 
 	}
 	fmt.Fprintf(to, "%s\n", b)
 	errchan <- nil
+	close(donechan)
 }
 
-func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, filename string) error {
+func PtoNorm(config *pto3.PTOServerConfig, outfile io.Writer,
+	normCmd string, campaign string, filename string) error {
 
 	// create a raw data store (no need for an authorizer)
 	rds, err := pto3.NewRawDataStore(config, &pto3.NullAuthorizer{})
@@ -141,6 +143,7 @@ func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, file
 	dataerr := make(chan error, 1)
 	obserr := make(chan error, 1)
 	cmderr := make(chan error, 1)
+	outdone := make(chan struct{})
 
 	// get metadata
 	b, err := md.DumpJSONObject(true)
@@ -157,7 +160,7 @@ func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, file
 	// start a goroutine to filter metadata in output
 	// and add a source URL
 	sourceurl := fmt.Sprintf("%s%s/%s/%s", config.BaseURL, "raw", campaign, filename)
-	go filterMetadata(obspipe, os.Stdout, sourceurl, obserr)
+	go filterMetadata(obspipe, outfile, sourceurl, obserr, outdone)
 
 	// start a goroutine to wait for the process to finish
 	go func() {
@@ -180,13 +183,20 @@ func PtoNorm(config *pto3.PTOServerConfig, normCmd string, campaign string, file
 				return err
 			}
 		case err := <-cmderr:
-			return err
+			if err == nil {
+				// wait on output completion
+				<-outdone
+				return nil
+			} else {
+				return err
+			}
 		}
 	}
 }
 
 var helpFlag = flag.Bool("h", false, "display a help message")
 var configFlag = flag.String("config", "ptoconfig.json", "path to PTO configuration `file`")
+var outFlag = flag.String("out", "", "path to output `file` [stdout if omitted]")
 
 func main() {
 	flag.Usage = func() {
@@ -207,6 +217,17 @@ func main() {
 		log.Fatal(err)
 	}
 
+	var outfile *os.File
+	if *outFlag == "" {
+		outfile = os.Stdout
+	} else {
+		outfile, err = os.Create(*outFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer outfile.Close()
+	}
+
 	args := flag.Args()
 
 	if len(args) < 3 {
@@ -214,7 +235,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := PtoNorm(config, args[0], args[1], args[2]); err != nil {
+	if err := PtoNorm(config, outfile, args[0], args[1], args[2]); err != nil {
 		log.Fatal(err)
 	}
 
