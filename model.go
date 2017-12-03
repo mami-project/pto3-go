@@ -310,8 +310,8 @@ type Observation struct {
 	ID          int `sql:",pk"`
 	SetID       int
 	Set         *ObservationSet
-	Start       time.Time
-	End         time.Time
+	Start       *time.Time
+	End         *time.Time
 	PathID      int
 	Path        *Path
 	ConditionID int
@@ -358,14 +358,17 @@ func (obs *Observation) UnmarshalJSON(b []byte) error {
 	}
 	obs.SetID = int(setid)
 
-	obs.Start, err = time.Parse(time.RFC3339, AsString(jslice[1]))
+	starttime, err := time.Parse(time.RFC3339, AsString(jslice[1]))
 	if err != nil {
 		return err
 	}
-	obs.End, err = time.Parse(time.RFC3339, AsString(jslice[2]))
+	obs.Start = &starttime
+
+	endtime, err := time.Parse(time.RFC3339, AsString(jslice[2]))
 	if err != nil {
 		return err
 	}
+	obs.End = &endtime
 
 	obs.Path = &Path{String: AsString(jslice[3])}
 	obs.Condition = &Condition{Name: AsString(jslice[4])}

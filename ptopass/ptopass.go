@@ -23,7 +23,7 @@ import (
 // ObsPassthrough implements a simple passthrough analyzer taking input and metadata on
 func ObsPassthrough(in io.Reader, metain io.Reader, out io.Writer) error {
 
-	// unmarshal metadata into an string interface map
+	// unmarshal metadata into an RDS metadata object
 	md, err := pto3.RDSMetadataFromReader(metain, nil)
 	if err != nil {
 		return fmt.Errorf("could not read metadata: %s", err.Error())
@@ -36,6 +36,8 @@ func ObsPassthrough(in io.Reader, metain io.Reader, out io.Writer) error {
 		scanner = bufio.NewScanner(in)
 	case "obs-bz2":
 		scanner = bufio.NewScanner(bzip2.NewReader(in))
+	default:
+		return fmt.Errorf("unsupported filetype %s", md.Filetype())
 	}
 
 	// track conditions in the input
