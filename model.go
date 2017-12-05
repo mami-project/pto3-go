@@ -310,8 +310,8 @@ type Observation struct {
 	ID          int `sql:",pk"`
 	SetID       int
 	Set         *ObservationSet
-	Start       *time.Time
-	End         *time.Time
+	StartTime   *time.Time
+	EndTime     *time.Time
 	PathID      int
 	Path        *Path
 	ConditionID int
@@ -324,8 +324,8 @@ type Observation struct {
 func (obs *Observation) MarshalJSON() ([]byte, error) {
 	jslice := []string{
 		fmt.Sprintf("%x", obs.SetID),
-		obs.Start.UTC().Format(time.RFC3339),
-		obs.End.UTC().Format(time.RFC3339),
+		obs.StartTime.UTC().Format(time.RFC3339),
+		obs.EndTime.UTC().Format(time.RFC3339),
 		obs.Path.String,
 		obs.Condition.Name,
 	}
@@ -352,29 +352,33 @@ func (obs *Observation) UnmarshalJSON(b []byte) error {
 	}
 
 	obs.ID = 0
-	setid, err := strconv.ParseUint(AsString(jslice[0]), 16, 64) // fill in Set ID, will be ignored by force insert
-	if err != nil {
-		return nil
+	if len(jslice[0]) > 0 {
+		setid, err := strconv.ParseUint(jslice[0], 16, 64) // fill in Set ID, will be ignored by force insert
+		if err != nil {
+			return err
+		}
+		obs.SetID = int(setid)
+	} else {
+		obs.SetID = 0
 	}
-	obs.SetID = int(setid)
 
-	starttime, err := time.Parse(time.RFC3339, AsString(jslice[1]))
-	if err != nil {
-		return err
-	}
-	obs.Start = &starttime
-
-	endtime, err := time.Parse(time.RFC3339, AsString(jslice[2]))
+	starttime, err := time.Parse(time.RFC3339, jslice[1])
 	if err != nil {
 		return err
 	}
-	obs.End = &endtime
+	obs.StartTime = &starttime
 
-	obs.Path = &Path{String: AsString(jslice[3])}
-	obs.Condition = &Condition{Name: AsString(jslice[4])}
+	endtime, err := time.Parse(time.RFC3339, jslice[2])
+	if err != nil {
+		return err
+	}
+	obs.EndTime = &endtime
+
+	obs.Path = &Path{String: jslice[3]}
+	obs.Condition = &Condition{Name: jslice[4]}
 
 	if len(jslice) >= 6 {
-		obs.Value, err = strconv.Atoi(AsString(jslice[5]))
+		obs.Value, err = strconv.Atoi(jslice[5])
 		if err != nil {
 			return err
 		}

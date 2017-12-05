@@ -104,10 +104,10 @@ func writeObsToCSV(setID int, cidCache map[string]int, pidCache map[string]int, 
 	jslice[0] = fmt.Sprintf("%d", setID)
 
 	// replace path string with path ID
-	jslice[2] = fmt.Sprintf("%d", cidCache[jslice[3]])
+	jslice[3] = fmt.Sprintf("%d", pidCache[jslice[3]])
 
 	// replace condition name with condition ID
-	jslice[3] = fmt.Sprintf("%d", cidCache[jslice[3]])
+	jslice[4] = fmt.Sprintf("%d", cidCache[jslice[4]])
 
 	// write as CSV to output writer
 	return out.Write(jslice)
@@ -145,7 +145,7 @@ func loadObservations(cidCache map[string]int, pidCache map[string]int, t *pg.Tx
 	}()
 
 	// now copy from the CSV pipe
-	if _, err := t.CopyFrom(dbpipe, "COPY observations (set_id, ) FROM STDIN WITH FORMAT CSV"); err != nil {
+	if _, err := t.CopyFrom(dbpipe, "COPY observations (set_id, start_time, end_time, path_id, condition_id, value) FROM STDIN WITH CSV"); err != nil {
 		return err
 	}
 
@@ -180,6 +180,8 @@ func loadObservationFile(filename string, db *pg.DB) (*pto3.ObservationSet, erro
 		return nil, err
 	}
 
+	log.Printf("%s: first pass complete, cached %d conditions and %d paths", filename, len(cidCache), len(pidCache))
+
 	err = db.RunInTransaction(func(t *pg.Tx) error {
 
 		if err := set.Insert(t, true); err != nil {
@@ -188,6 +190,7 @@ func loadObservationFile(filename string, db *pg.DB) (*pto3.ObservationSet, erro
 
 		return loadObservations(cidCache, pidCache, t, set, obsfile)
 	})
+
 	if err != nil {
 		return nil, err
 	}

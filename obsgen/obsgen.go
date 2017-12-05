@@ -89,7 +89,7 @@ func generateTestObservations(spec *testObservationSpec, withMetadata bool, coun
 		end, clock = randomTime(clock)
 
 		// now print a row
-		fmt.Fprintf(out, "[0, \"%s\", \"%s\", \"%s\", \"%s\"]\n",
+		fmt.Fprintf(out, "[\"\", \"%s\", \"%s\", \"%s\", \"%s\"]\n",
 			start.Format(time.RFC3339), end.Format(time.RFC3339), path, condition)
 	}
 
