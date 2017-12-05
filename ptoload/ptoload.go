@@ -73,62 +73,64 @@ func cacheConditionIDs(db orm.DB, set *pto3.ObservationSet) (map[string]int, err
 	return cidCache, nil
 }
 
-func cachePathIDs(db orm.DB, pathSet map[string]struct{}) (map[string]int, error) {
-	pidCache := make(map[string]int)
+type PathCache map[string]int
 
-	dbpipe, pathpipe, err := os.Pipe()
-	if err != nil {
-		return nil, err
+func (cache PathCache) CacheNewPaths(db orm.DB, pathSet map[string]struct{}) error {
+	// first, reduce to paths not already in the cache
+	for ps := range pathSet {
+		if cache[ps] > 0 {
+			delete(pathSet, ps)
+		}
 	}
-	defer dbpipe.Close()
 
-	converr := make(chan error, 1)
-
-	// get an initial sequence number
+	// allocate a range of IDs in the database
 	var nv struct {
 		Nextval int
 	}
+
 	if _, err := db.QueryOne(&nv, "SELECT nextval('paths_id_seq')"); err != nil {
-		return nil, err
+		return err
 	}
 	pidseq := nv.Nextval
 
-	// and set the sequence number after this group of paths
 	if _, err := db.Exec("SELECT setval('paths_id_seq', ?)", pidseq+len(pathSet)); err != nil {
-		return nil, err
+		return err
 	}
 
-	// start a goroutine to build the pidcache and stream it to the database
+	// now add entries to the path cache while streaming into the database
+	streamerr := make(chan error, 1)
+	dbpipe, pathpipe, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	defer dbpipe.Close()
+
 	go func() {
 		out := csv.NewWriter(pathpipe)
 		defer pathpipe.Close()
 
 		for pathstring := range pathSet {
 			p := []string{fmt.Sprintf("%d", pidseq), pathstring}
-			pidCache[pathstring] = pidseq
+			cache[pathstring] = pidseq
 
 			if err := out.Write(p); err != nil {
-				converr <- err
+				streamerr <- err
 			}
 
 			pidseq++
 		}
 
 		out.Flush()
-		converr <- nil
+		streamerr <- nil
 	}()
 
 	// copy from the goroutine to the database
 	if _, err = db.CopyFrom(dbpipe, "COPY paths (id, string) FROM STDIN WITH CSV"); err != nil {
-		return nil, err
+		return err
 	}
 
 	// wait for goroutine to complete and return its error
-	if err := <-converr; err != nil {
-		return nil, err
-	}
-
-	return pidCache, nil
+	return <-streamerr
 }
 
 func writeObsToCSV(setID int, cidCache map[string]int, pidCache map[string]int, line string, out *csv.Writer) error {
@@ -196,7 +198,7 @@ func loadObservations(cidCache map[string]int, pidCache map[string]int, t *pg.Tx
 	return <-converr
 }
 
-func loadObservationFile(filename string, db *pg.DB) (*pto3.ObservationSet, error) {
+func loadObservationFile(filename string, db *pg.DB, pidCache PathCache) (*pto3.ObservationSet, error) {
 
 	obsfile, err := os.Open(filename)
 	if err != nil {
@@ -209,27 +211,28 @@ func loadObservationFile(filename string, db *pg.DB) (*pto3.ObservationSet, erro
 		return nil, err
 	}
 
-	cidCache, err := cacheConditionIDs(db, set)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("%s: first pass cached %d conditions", filename, len(cidCache))
-
-	pidCache, err := cachePathIDs(db, pathSet)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("%s: first pass cached %d paths", filename, len(pidCache))
-
 	if _, err := obsfile.Seek(0, 0); err != nil {
 		return nil, err
 	}
 
 	err = db.RunInTransaction(func(t *pg.Tx) error {
 
+		cidCache, err := cacheConditionIDs(t, set)
+		if err != nil {
+			return err
+		}
+		log.Printf("%s: first pass cached %d conditions", filename, len(cidCache))
+
+		if err := pidCache.CacheNewPaths(t, pathSet); err != nil {
+			return err
+		}
+
+		log.Printf("%s: first pass cached %d paths", filename, len(pidCache))
+
 		if err := set.Insert(t, true); err != nil {
 			return err
 		}
+		log.Printf("%s: allocated set id %x, loading observations", filename, set.ID)
 
 		return loadObservations(cidCache, pidCache, t, set, obsfile)
 	})
@@ -274,9 +277,12 @@ func main() {
 		}
 	}
 
+	// share a pid cache across all files
+	pidCache := make(PathCache)
+
 	for _, filename := range args {
 		var set *pto3.ObservationSet
-		set, err = loadObservationFile(filename, db)
+		set, err = loadObservationFile(filename, db, pidCache)
 		if err != nil {
 			log.Fatal(err)
 		}
