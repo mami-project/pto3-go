@@ -52,10 +52,6 @@ func extractFirstPass(r *os.File) (*pto3.ObservationSet, map[string]struct{}, er
 			}
 			pathSeen[obs[3]] = struct{}{}
 		}
-
-		if (lineno % 10000) == 0 {
-			log.Printf("first pass at %s line %d", filename, lineno)
-		}
 	}
 
 	// done
@@ -87,6 +83,10 @@ func cachePathIDs(db *pg.DB, pathSet map[string]struct{}) (map[string]int, error
 		}
 
 		pidCache[p.String] = p.ID
+
+		if (len(pidCache) % 10000) == 0 {
+			log.Printf("....have cached %d paths", len(pidCache))
+		}
 	}
 
 	return pidCache, nil
@@ -174,17 +174,17 @@ func loadObservationFile(filename string, db *pg.DB) (*pto3.ObservationSet, erro
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("%s: first pass cached %d conditions", filename, len(cidCache))
 
 	pidCache, err := cachePathIDs(db, pathSet)
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("%s: first pass cached %d path", filename, len(pidCache))
 
 	if _, err := obsfile.Seek(0, 0); err != nil {
 		return nil, err
 	}
-
-	log.Printf("%s: first pass complete, cached %d conditions and %d paths", filename, len(cidCache), len(pidCache))
 
 	err = db.RunInTransaction(func(t *pg.Tx) error {
 
