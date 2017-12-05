@@ -52,6 +52,10 @@ func extractFirstPass(r *os.File) (*pto3.ObservationSet, map[string]struct{}, er
 			}
 			pathSeen[obs[3]] = struct{}{}
 		}
+
+		if (lineno % 10000) == 0 {
+			log.Printf("first pass at %s line %d", filename, lineno)
+		}
 	}
 
 	// done
