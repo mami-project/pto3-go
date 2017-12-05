@@ -127,10 +127,9 @@ func loadObservations(cidCache map[string]int, pidCache map[string]int, t *pg.Tx
 	// start a reader goroutine to convert observations to CSV
 	// and write them to a pipe we'll COPY FROM
 	go func() {
-		defer obspipe.Close()
-
 		in := bufio.NewScanner(r)
 		out := csv.NewWriter(obspipe)
+		defer obspipe.Close()
 
 		for in.Scan() {
 			lineno++
@@ -141,6 +140,7 @@ func loadObservations(cidCache map[string]int, pidCache map[string]int, t *pg.Tx
 				}
 			}
 		}
+		out.Flush()
 		converr <- nil
 	}()
 
