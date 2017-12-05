@@ -84,7 +84,7 @@ func cachePathIDs(db *pg.DB, pathSet map[string]struct{}) (map[string]int, error
 
 		pidCache[p.String] = p.ID
 
-		if (len(pidCache) % 10000) == 0 {
+		if (len(pidCache) % 100) == 0 {
 			log.Printf("....have cached %d paths", len(pidCache))
 		}
 	}
