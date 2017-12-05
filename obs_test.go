@@ -116,11 +116,11 @@ func TestObsRoundtrip(t *testing.T) {
 	}
 
 	// now write some data to the observation set data link
-	observations_up_bytes := []byte(`[31337, "2017-10-01T10:06:00Z", "2017-10-01T10:06:00Z", "10.0.0.1 * 10.0.0.2", "pto.test.succeeded"]
-	[31337, "2017-10-01T10:06:01Z", "2017-10-01T10:06:02Z", "10.0.0.1 AS1 * AS2 10.0.0.2", "pto.test.schroedinger"]
-	[31337, "2017-10-01T10:06:03Z", "2017-10-01T10:06:05Z", "* AS2 10.0.0.0/24", "pto.test.failed"]
-	[31337, "2017-10-01T10:06:07Z", "2017-10-01T10:06:11Z", "[2001:db8::33:a4] * [2001:db8:3]/64", "pto.test.succeeded"]
-	[31337, "2017-10-01T10:06:09Z", "2017-10-01T10:06:14Z", "[2001:db8::33:a4] * [2001:db8:3]/64", "pto.test.succeeded"]`)
+	observations_up_bytes := []byte(`["e1337", "2017-10-01T10:06:00Z", "2017-10-01T10:06:00Z", "10.0.0.1 * 10.0.0.2", "pto.test.succeeded"]
+	["e1337", "2017-10-01T10:06:01Z", "2017-10-01T10:06:02Z", "10.0.0.1 AS1 * AS2 10.0.0.2", "pto.test.schroedinger"]
+	["e1337", "2017-10-01T10:06:03Z", "2017-10-01T10:06:05Z", "* AS2 10.0.0.0/24", "pto.test.failed"]
+	["e1337", "2017-10-01T10:06:07Z", "2017-10-01T10:06:11Z", "[2001:db8::33:a4] * [2001:db8:3]/64", "pto.test.succeeded"]
+	["e1337", "2017-10-01T10:06:09Z", "2017-10-01T10:06:14Z", "[2001:db8::33:a4] * [2001:db8:3]/64", "pto.test.succeeded"]`)
 
 	observations_up, err := pto3.UnmarshalObservations(observations_up_bytes)
 	if err != nil {

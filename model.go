@@ -322,7 +322,7 @@ type Observation struct {
 // MarshalJSON turns this observation into a JSON array suitable for use as a
 // line in an Observation Set File.
 func (obs *Observation) MarshalJSON() ([]byte, error) {
-	jslice := []interface{}{
+	jslice := []string{
 		fmt.Sprintf("%x", obs.SetID),
 		obs.Start.UTC().Format(time.RFC3339),
 		obs.End.UTC().Format(time.RFC3339),
@@ -331,7 +331,7 @@ func (obs *Observation) MarshalJSON() ([]byte, error) {
 	}
 
 	if obs.Value != 0 {
-		jslice = append(jslice, obs.Value)
+		jslice = append(jslice, fmt.Sprintf("%d", obs.Value))
 	}
 
 	return json.Marshal(&jslice)
@@ -340,7 +340,7 @@ func (obs *Observation) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON fills in this observation from a JSON array line in an
 // Observation Set File.
 func (obs *Observation) UnmarshalJSON(b []byte) error {
-	var jslice []interface{}
+	var jslice []string
 
 	err := json.Unmarshal(b, &jslice)
 	if err != nil {

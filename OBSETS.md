@@ -12,9 +12,9 @@ elements, with the following semantics and format:
 
 | Position | Description                                               |
 | -------- | --------------------------------------------------------- |
-| 0        | Observation Set Identifier, an integer                    |
-| 1        | Start time in ISO8601 format                              |
-| 2        | End time in ISO8601 format                                |
+| 0        | Observation Set Identifier, a string                      |
+| 1        | Start time in RFC 3339 format                             |
+| 2        | End time in RFC 3339 format                               |
 | 3        | Path, as defined below                                    |
 | 4        | Condition, as a JSON string                               |
 | 5        | Value associated with condition, optional                 |
