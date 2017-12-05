@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/go-pg/pg"
+	"github.com/go-pg/pg/orm"
 
 	pto3 "github.com/mami-project/pto3-go"
 )
@@ -58,7 +59,7 @@ func extractFirstPass(r *os.File) (*pto3.ObservationSet, map[string]struct{}, er
 	return &set, pathSeen, nil
 }
 
-func cacheConditionIDs(db *pg.DB, set *pto3.ObservationSet) (map[string]int, error) {
+func cacheConditionIDs(db orm.DB, set *pto3.ObservationSet) (map[string]int, error) {
 	cidCache := make(map[string]int)
 
 	for _, c := range set.Conditions {
@@ -72,21 +73,59 @@ func cacheConditionIDs(db *pg.DB, set *pto3.ObservationSet) (map[string]int, err
 	return cidCache, nil
 }
 
-func cachePathIDs(db *pg.DB, pathSet map[string]struct{}) (map[string]int, error) {
+func cachePathIDs(db orm.DB, pathSet map[string]struct{}) (map[string]int, error) {
 	pidCache := make(map[string]int)
 
-	for pathstring := range pathSet {
-		p := pto3.Path{String: pathstring}
+	dbpipe, pathpipe, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	defer dbpipe.Close()
 
-		if err := p.InsertOnce(db); err != nil {
-			return nil, err
+	converr := make(chan error, 1)
+
+	// get an initial sequence number
+	var nv struct {
+		Nextval int
+	}
+	if _, err := db.QueryOne(&nv, "SELECT nextval('paths_id_seq')"); err != nil {
+		return nil, err
+	}
+	pidseq := nv.Nextval
+
+	// and set the sequence number after this group of paths
+	if _, err := db.Exec("SELECT setval('paths_id_seq', ?)", pidseq+len(pathSet)); err != nil {
+		return nil, err
+	}
+
+	// start a goroutine to build the pidcache and stream it to the database
+	go func() {
+		out := csv.NewWriter(pathpipe)
+		defer pathpipe.Close()
+
+		for pathstring := range pathSet {
+			p := []string{fmt.Sprintf("%d", pidseq), pathstring}
+			pidCache[pathstring] = pidseq
+
+			if err := out.Write(p); err != nil {
+				converr <- err
+			}
+
+			pidseq++
 		}
 
-		pidCache[p.String] = p.ID
+		out.Flush()
+		converr <- nil
+	}()
 
-		if (len(pidCache) % 100) == 0 {
-			log.Printf("....have cached %d paths", len(pidCache))
-		}
+	// copy from the goroutine to the database
+	if _, err = db.CopyFrom(dbpipe, "COPY paths (id, string) FROM STDIN WITH CSV"); err != nil {
+		return nil, err
+	}
+
+	// wait for goroutine to complete and return its error
+	if err := <-converr; err != nil {
+		return nil, err
 	}
 
 	return pidCache, nil
@@ -180,7 +219,7 @@ func loadObservationFile(filename string, db *pg.DB) (*pto3.ObservationSet, erro
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("%s: first pass cached %d path", filename, len(pidCache))
+	log.Printf("%s: first pass cached %d paths", filename, len(pidCache))
 
 	if _, err := obsfile.Seek(0, 0); err != nil {
 		return nil, err
