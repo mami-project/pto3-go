@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/csv"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -13,10 +12,6 @@ import (
 	"github.com/go-pg/pg"
 	"github.com/go-pg/pg/orm"
 )
-
-var helpFlag = flag.Bool("h", false, "display a help message")
-var configFlag = flag.String("config", "ptoconfig.json", "path to PTO configuration `file` with DB connection information")
-var initdbFlag = flag.Bool("initdb", false, "Create database tables on startup")
 
 // extractFirstPass scans a file, getting metadata (in the form of an observation set) and a set of paths
 func extractFirstPass(r *os.File) (*ObservationSet, map[string]struct{}, error) {
