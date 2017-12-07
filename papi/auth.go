@@ -1,6 +1,6 @@
 // Path Transparency Observatory JWT-based authorization
 
-package pto3
+package papi
 
 import (
 	"encoding/json"

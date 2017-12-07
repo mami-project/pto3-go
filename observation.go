@@ -3,12 +3,14 @@ package pto3
 import (
 	"bufio"
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -19,60 +21,6 @@ import (
 
 // Observation data model for PTO3 obs and query
 // including PostgreSQL object-relational mapping
-
-// Time format for ISO8601 without timezone (everything is always UTC)
-const ISO8601Format = "2006-01-02T15:04:05"
-
-type Condition struct {
-	ID   int
-	Name string
-}
-
-func (c *Condition) InsertOnce(db orm.DB) error {
-	if c.ID == 0 {
-		_, err := db.Model(c).
-			Column("id").
-			Where("name=?name").
-			Returning("id").
-			SelectOrInsert()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (c *Condition) SelectByID(db orm.DB) error {
-	return db.Select(c)
-}
-
-// ConditionsByName returns a slice of conditions matching a condition name.
-// If a single condition name is given, returns that condition (with ID). If a
-// wildcard name is given, returns all conditions (with ID) matching the
-// wildcard.
-func ConditionsByName(name string, db orm.DB) ([]Condition, error) {
-	panic("ConditionsByName() not yet implemented")
-	return nil, nil
-}
-
-type Path struct {
-	ID     int
-	String string
-}
-
-func (p *Path) InsertOnce(db orm.DB) error {
-	if p.ID == 0 {
-		_, err := db.Model(p).
-			Column("id").
-			Where("string=?string").
-			Returning("id").
-			SelectOrInsert()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 type ObservationSet struct {
 	ID                int
@@ -538,4 +486,153 @@ func DropTables(db *pg.DB) error {
 
 		return nil
 	})
+}
+
+// extractFirstPass scans a file, getting metadata (in the form of an observation set) and a set of paths
+func extractFirstPass(r *os.File) (*ObservationSet, map[string]struct{}, error) {
+	filename := r.Name()
+
+	// create an observation set to hold metadata
+	set := ObservationSet{}
+
+	// and a map to hold the set of paths
+	pathSeen := make(map[string]struct{})
+
+	// now scan the file for metadata and paths
+	var lineno = 0
+	in := bufio.NewScanner(r)
+	for in.Scan() {
+		lineno++
+		line := strings.TrimSpace(in.Text())
+		switch line[0] {
+		case '{':
+			if err := set.UnmarshalJSON([]byte(line)); err != nil {
+				return nil, nil, fmt.Errorf("error in metadata at %s line %d: %s", filename, lineno, err.Error())
+			}
+		case '[':
+			var obs []string
+			if err := json.Unmarshal([]byte(line), &obs); err != nil {
+				return nil, nil, fmt.Errorf("error looking for path at %s line %d: %s", filename, lineno, err.Error())
+			}
+			if len(obs) < 4 {
+				return nil, nil, fmt.Errorf("short observation looking for path at %s line %d", filename, lineno)
+			}
+			pathSeen[obs[3]] = struct{}{}
+		}
+	}
+
+	// done
+	return &set, pathSeen, nil
+}
+
+func writeObsToCSV(setID int, cidCache map[string]int, pidCache map[string]int, line string, out *csv.Writer) error {
+	var jslice []string
+
+	if err := json.Unmarshal([]byte(line), &jslice); err != nil {
+		return err
+	}
+
+	// add zero value if missing
+	if len(jslice) == 5 {
+		jslice = append(jslice, "0")
+	}
+
+	// replace set ID
+	jslice[0] = fmt.Sprintf("%d", setID)
+
+	// replace path string with path ID
+	jslice[3] = fmt.Sprintf("%d", pidCache[jslice[3]])
+
+	// replace condition name with condition ID
+	jslice[4] = fmt.Sprintf("%d", cidCache[jslice[4]])
+
+	// write as CSV to output writer
+	return out.Write(jslice)
+}
+
+func loadObservations(cidCache map[string]int, pidCache map[string]int, t *pg.Tx, set *ObservationSet, r *os.File) error {
+	lineno := 0
+
+	dbpipe, obspipe, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	defer dbpipe.Close()
+
+	converr := make(chan error, 1)
+
+	// start a reader goroutine to convert observations to CSV
+	// and write them to a pipe we'll COPY FROM
+	go func() {
+		in := bufio.NewScanner(r)
+		out := csv.NewWriter(obspipe)
+		defer obspipe.Close()
+
+		for in.Scan() {
+			lineno++
+			line := strings.TrimSpace(in.Text())
+			if line[0] == '[' {
+				if err := writeObsToCSV(set.ID, cidCache, pidCache, line, out); err != nil {
+					converr <- err
+				}
+			}
+		}
+		out.Flush()
+		converr <- nil
+	}()
+
+	// now copy from the CSV pipe
+	if _, err := t.CopyFrom(dbpipe, "COPY observations (set_id, start_time, end_time, path_id, condition_id, value) FROM STDIN WITH CSV"); err != nil {
+		return err
+	}
+
+	// wait on the converter goroutine
+	return <-converr
+}
+
+// LoadObservationFile loads an observation file into a database, using a given cache to cache path IDs.
+func LoadObservationFile(filename string, db *pg.DB, pidCache PathCache) (*ObservationSet, error) {
+
+	obsfile, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer obsfile.Close()
+
+	set, pathSet, err := extractFirstPass(obsfile)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := obsfile.Seek(0, 0); err != nil {
+		return nil, err
+	}
+
+	err = db.RunInTransaction(func(t *pg.Tx) error {
+
+		cidCache, err := cacheConditionIDs(t, set)
+		if err != nil {
+			return err
+		}
+		log.Printf("%s: first pass cached %d conditions", filename, len(cidCache))
+
+		if err := pidCache.CacheNewPaths(t, pathSet); err != nil {
+			return err
+		}
+
+		log.Printf("%s: first pass cached %d paths", filename, len(pidCache))
+
+		if err := set.Insert(t, true); err != nil {
+			return err
+		}
+		log.Printf("%s: allocated set id %x, loading observations", filename, set.ID)
+
+		return loadObservations(cidCache, pidCache, t, set, obsfile)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return set, nil
 }
