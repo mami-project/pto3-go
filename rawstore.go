@@ -505,18 +505,8 @@ func (cam *Campaign) ReadFileDataToStream(filename string, out io.Writer) error 
 	defer in.Close()
 
 	// now copy to the writer until EOF
-	buf := make([]byte, 65536)
-	for {
-		n, err := in.Read(buf)
-		if err == nil {
-			if _, err = out.Write(buf[0:n]); err != nil {
-				return err
-			}
-		} else if err == io.EOF {
-			break
-		} else {
-			return err
-		}
+	if err := StreamCopy(in, out); err != nil {
+		return err
 	}
 
 	return nil
@@ -555,18 +545,8 @@ func (cam *Campaign) WriteFileDataFromStream(filename string, force bool, in io.
 	defer out.Close()
 
 	// now copy from the reader until EOF
-	buf := make([]byte, 65536)
-	for {
-		n, err := in.Read(buf)
-		if err == nil {
-			if _, err = out.Write(buf[0:n]); err != nil {
-				return err
-			}
-		} else if err == io.EOF {
-			break
-		} else {
-			return err
-		}
+	if err := StreamCopy(in, out); err != nil {
+		return err
 	}
 
 	// update virtual metadata, as the underlying file size will have changed
@@ -695,4 +675,21 @@ func (rds *RawDataStore) CreateDirectories() error {
 // all their contents. Used for testing.
 func (rds *RawDataStore) RemoveDirectories() error {
 	return os.RemoveAll(rds.path)
+}
+
+// StreamCopy copies bytes from in to out until EOF.
+func StreamCopy(in io.Reader, out io.Writer) error {
+	buf := make([]byte, 65536)
+	for {
+		n, err := in.Read(buf)
+		if err == nil {
+			if _, err = out.Write(buf[0:n]); err != nil {
+				return err
+			}
+		} else if err == io.EOF {
+			break
+		} else {
+			return err
+		}
+	}
 }

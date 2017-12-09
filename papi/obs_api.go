@@ -1,12 +1,12 @@
 package papi
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -219,12 +219,12 @@ func (oa *ObsAPI) handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// retrieve set metadata
-	set := ObservationSet{ID: int(setid)}
+	set := pto3.ObservationSet{ID: int(setid)}
 	if err = set.SelectByID(oa.db); err != nil {
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {
-			LogInternalServerError(w, "retrieving set", err)
+			pto3.HandleErrorHTTP(w, "retrieving set", err)
 		}
 		return
 	}
@@ -235,25 +235,11 @@ func (oa *ObsAPI) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// now select all the observations
-	// FIXME this sucks the whole obset into RAM, which is fast but probably not great.
-	// Figure out how to stream this. Might require another library
-
-	// FIXME shouldn't this funtionality be in model.go?
-
-	obsdat, err := ObservationsBySetID(oa.db, int(setid))
-	if err != nil {
-		LogInternalServerError(w, "retrieving observation set", err)
-		return
-	}
-
 	w.Header().Set("Content-type", "application/vnd.mami.ndjson")
 	w.WriteHeader(http.StatusOK)
-
-	if err := WriteObservations(obsdat, w); err != nil {
-		LogInternalServerError(w, "writing observation set on download", err)
-		w.Write([]byte("\"error during download\"\n"))
-		return
+	if err := set.CopyDataToStream(oa.db, w); err != nil {
+		pto3.HandleErrorHTTP(w, "downloading observation set", err)
+		w.Write([]byte("\n\"error during download\"\n"))
 	}
 }
 
@@ -293,23 +279,34 @@ func (oa *ObsAPI) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// now scan the input looking for observations, streaming them into the database
-	in := bufio.NewScanner(r.Body)
-	var obs Observation
-
-	err = oa.db.RunInTransaction(func(t *pg.Tx) error {
-		for in.Scan() {
-			if err := json.Unmarshal([]byte(in.Text()), &obs); err != nil {
-				return err
-			}
-			if err = obs.InsertInSet(t, &set); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	// create a temporary file to hold observations
+	tf, err := ioutil.TempFile("", "pto3_obs")
 	if err != nil {
-		LogInternalServerError(w, "inserting observation data", err)
+		pto3.HandleErrorHTTP(w, "creating temporary observation file", err)
+		return
+	}
+	defer tf.Close()
+	defer os.Remove(tf.Name())
+
+	// copy observation data to the tempfile
+	if err := pto3.StreamCopy(r.Body, tf); err != nil {
+		pto3.HandleErrorHTTP(w, "uploading to temporary observation file", err)
+		return
+	}
+	tf.Sync()
+
+	// create condition and path caches
+	cidCache, err := pto3.LoadConditionCache(oa.db)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "loading condition cache", err)
+		return
+	}
+	pidCache := make(pto3.PathCache)
+
+	// now insert the tempfile into the database
+	if err := pto3.CopyDataFromObsFile(tf.Name(), oa.db, set, cidCache, pidCache); err != nil {
+		pto3.HandleErrorHTTP(w, "inserting observations", err)
+		return
 	}
 
 	// now update observation count

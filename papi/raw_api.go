@@ -359,7 +359,9 @@ func (ra *RawAPI) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 
 	// and copy the file
 	if err := cam.ReadFileDataToStream(filename, w); err != nil {
-		pto3.HandleErrorHTTP(w, "opening data file", err)
+		pto3.HandleErrorHTTP(w, "downloading data file", err)
+		w.Write([]byte("\n\"error during download\"\n"))
+
 	}
 }
 
