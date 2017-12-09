@@ -401,6 +401,11 @@ func CreateTables(db *pg.DB) error {
 			return err
 		}
 
+		// index to select observations by set ID
+		if _, err := db.Exec("CREATE INDEX ON observations (set_id)"); err != nil {
+			return err
+		}
+
 		return nil
 	})
 }
