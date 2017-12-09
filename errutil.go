@@ -83,7 +83,11 @@ func HandleErrorHTTP(w http.ResponseWriter, during string, err error) {
 			http.Error(w, m, s)
 		}
 	default:
-		handleInternalServerErrorHTTP(w, during, err.Error())
+		if err == nil {
+			handleInternalServerErrorHTTP(w, during, "[nil]")
+		} else {
+			handleInternalServerErrorHTTP(w, during, err.Error())
+		}
 	}
 
 }

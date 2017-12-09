@@ -358,7 +358,8 @@ func (cam *Campaign) unloadMetadata() {
 	cam.stale = true
 }
 
-func (cam *Campaign) getCampaignMetadata() (*RawMetadata, error) {
+// GetCampaignMetadata returns the metadata for this campaign.
+func (cam *Campaign) GetCampaignMetadata() (*RawMetadata, error) {
 	// reload if stale
 	err := cam.reloadMetadata(false)
 	if err != nil {
@@ -487,7 +488,7 @@ func (cam *Campaign) ReadFileData(filename string) (*os.File, error) {
 	// build a local filesystem path and validate it
 	rawpath := filepath.Clean(filepath.Join(cam.path, filename))
 	if pathok, _ := filepath.Match(filepath.Join(cam.path, "*"), rawpath); !pathok {
-		return nil, PTOErrorf("path %s is not ok", rawpath).StatusIs(http.StatusBadRequest)
+		return nil, PTOErrorf("path %s is not ok", rawpath).StatusIs(http.StatusInternalServerError)
 	}
 
 	// open the file
@@ -521,14 +522,14 @@ func (cam *Campaign) ReadFileDataToStream(filename string, out io.Writer) error 
 	return nil
 }
 
-// WriteFileData creates, open and returns the data file associated with a
+// WriteDataFile creates, open and returns the data file associated with a
 // filename on this campaign for writing.If force is true, replaces the data
 // file if it exists; otherwise, returns an error if the data file exists.
 func (cam *Campaign) WriteFileData(filename string, force bool) (*os.File, error) {
 	// build a local filesystem path and validate it
 	rawpath := filepath.Clean(filepath.Join(cam.path, filename))
 	if pathok, _ := filepath.Match(filepath.Join(cam.path, "*"), rawpath); !pathok {
-		return nil, PTOErrorf("path %s is not ok", rawpath).StatusIs(http.StatusBadRequest)
+		return nil, PTOErrorf("path %s is not ok", rawpath).StatusIs(http.StatusInternalServerError)
 	}
 
 	// ensure file isn't there unless we're forcing overwrite

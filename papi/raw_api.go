@@ -3,12 +3,10 @@ package papi
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 
 	"github.com/mami-project/pto3-go"
@@ -20,6 +18,30 @@ type RawAPI struct {
 	config *pto3.PTOConfiguration
 	rds    *pto3.RawDataStore
 	azr    Authorizer
+}
+
+func metadataResponse(w http.ResponseWriter, status int, cam *pto3.Campaign, filename string) {
+	var md *RawMetadata
+	var err error
+	if filename == "" {
+		md, err = cam.GetCampaignMetadata()
+	} else {
+		md, err = cam.GetFileMetadata(filename)
+	}
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "retrieving metadata", err)
+		return
+	}
+
+	b, err := json.Marshal(md)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "marshalling metadata", err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(b)
 }
 
 // handleListCampaigns handles GET /raw, returning a list of campaigns in the
@@ -35,7 +57,7 @@ func (ra *RawAPI) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 	// force a campaign rescan
 	err := ra.ra.rds.ScanCampaigns()
 	if err != nil {
-		LogInternalServerError(w, "scanning campaigns", err)
+		pto3.HandleErrorHTTP(w, "scanning campaigns", err)
 		return
 	}
 
@@ -46,7 +68,7 @@ func (ra *RawAPI) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 	for k := range ra.ra.rds.campaigns {
 		camurl, err := url.Parse(fmt.Sprintf("raw/%s", k))
 		if err != nil {
-			LogInternalServerError(w, "generating campaign link", err)
+			pto3.HandleErrorHTTP(w, "generating campaign link", err)
 			return
 		}
 		out.Campaigns[i] = ra.config.baseURL.ResolveReference(camurl).String()
@@ -57,7 +79,7 @@ func (ra *RawAPI) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		LogInternalServerError(w, "marshaling campaign list", err)
+		pto3.HandleErrorHTTP(w, "marshaling campaign list", err)
 		return
 	}
 
@@ -98,9 +120,9 @@ func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Reque
 
 	var out campaignFileList
 	var err error
-	out.Metadata, err = cam.getCampaignMetadata()
+	out.Metadata, err = cam.GetCampaignMetadata()
 	if err != nil {
-		rdsHTTPError(w, err)
+		pto3.HandleErrorHTTP(w, "getting file metadata", err)
 		return
 	}
 
@@ -110,7 +132,7 @@ func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Reque
 		filepath, err := url.Parse("/raw/" + filepath.Base(cam.path) + "/" + filename)
 		if err != nil {
 			log.Print(err)
-			LogInternalServerError(w, "generating file link", err)
+			pto3.HandleErrorHTTP(w, "generating file link", err)
 		}
 		out.Files[i] = ra.config.baseURL.ResolveReference(filepath).String()
 		i++
@@ -118,7 +140,7 @@ func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Reque
 
 	outb, err := json.Marshal(out)
 	if err != nil {
-		LogInternalServerError(w, "marshaling campaign metadata", err)
+		pto3.HandleErrorHTTP(w, "marshaling campaign metadata", err)
 		return
 	}
 
@@ -174,7 +196,7 @@ func (ra *RawAPI) handlePutCampaignMetadata(w http.ResponseWriter, r *http.Reque
 		// Campaign doesn't exist. We have to create it.
 		cam, err = ra.rds.CreateCampaign(camname, &in)
 		if err != nil {
-			LogInternalServerError(w, fmt.Sprintf("creating campaign %s", camname), err)
+			pto3.HandleErrorHTTP(w, fmt.Sprintf("creating campaign %s", camname), err)
 			return
 		}
 	}
@@ -182,26 +204,11 @@ func (ra *RawAPI) handlePutCampaignMetadata(w http.ResponseWriter, r *http.Reque
 	// overwrite metadata
 	err = cam.PutCampaignMetadata(&in)
 	if err != nil {
-		rdsHTTPError(w, err)
+		pto3.HandleErrorHTTP(w, "writing metadata", err)
 		return
 	}
 
-	// now reflect it back
-	out, err := cam.getCampaignMetadata()
-	if err != nil {
-		rdsHTTPError(w, err)
-		return
-	}
-
-	outb, err := json.Marshal(out)
-	if err != nil {
-		LogInternalServerError(w, "marshalling campaign metadata", err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	w.Write(outb)
+	metadataResponse(w, http.StatusCreated, cam, "")
 }
 
 // handleGetFileMetadata handles GET /raw/<campaign>/<file>, returning
@@ -234,21 +241,7 @@ func (ra *RawAPI) handleGetFileMetadata(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	out, err := cam.GetFileMetadata(filename)
-	if err != nil {
-		rdsHTTPError(w, err)
-		return
-	}
-
-	outb, err := json.Marshal(out)
-	if err != nil {
-		LogInternalServerError(w, "marshalling file metadata", err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(outb)
+	metadataResponse(w, http.StatusOK, cam, filename)
 }
 
 // handlePutFileMetadata handles PUT /raw/<campaign>/<file>, overwriting metadata for
@@ -307,26 +300,11 @@ func (ra *RawAPI) handlePutFileMetadata(w http.ResponseWriter, r *http.Request) 
 	// overwrite metadata for file
 	err = cam.PutFileMetadata(filename, &in)
 	if err != nil {
-		rdsHTTPError(w, err)
+		pto3.HandleErrorHTTP(w, "writing file metadata", err)
 		return
 	}
 
-	// now reflect it back
-	out, err := cam.GetFileMetadata(filename)
-	if err != nil {
-		rdsHTTPError(w, err)
-		return
-	}
-
-	outb, err := json.Marshal(out)
-	if err != nil {
-		LogInternalServerError(w, "marshalling file metadata", err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	w.Write(outb) // FIXME log error here
+	metadataResponse(w, http.StatusCreated, cam, filename)
 }
 
 // handleDeleteFile handles DELETE /raw/<campaign>/<file>, deleting a file's
@@ -371,32 +349,17 @@ func (ra *RawAPI) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 	// determine MIME type
 	ft := cam.getFiletype(filename)
 	if ft == nil {
-		LogInternalServerError(w, fmt.Sprintf("determining filetype for %s", filename), nil)
-	}
-
-	// try to open raw data file
-	rawfile, err := cam.ReadFileData(filename)
-	if err != nil {
-		LogInternalServerError(w, "opening data file", err)
+		pto3.HandleErrorHTTP(w, fmt.Sprintf("determining filetype for %s", filename), nil)
 		return
 	}
-	defer rawfile.Close()
 
 	// write MIME type to header
 	w.Header().Set("Content-Type", ft.ContentType)
 	w.WriteHeader(http.StatusOK)
 
-	buf := make([]byte, 65536)
-	for {
-		n, err := rawfile.Read(buf)
-		if err == nil {
-			w.Write(buf[0:n]) // FIXME log error here
-		} else if err == io.EOF {
-			break
-		} else {
-			LogInternalServerError(w, "reading data file", err)
-			return
-		}
+	// and copy the file
+	if err := cam.ReadFileDataToStream(filename, w); err != nil {
+		pto3.HandleErrorHTTP(w, "opening data file", err)
 	}
 }
 
@@ -429,87 +392,31 @@ func (ra *RawAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// build a local filesystem path for uploading and validate it
-	rawpath := filepath.Clean(filepath.Join(ra.rds.path, camname, filename))
-	if pathok, _ := filepath.Match(filepath.Join(ra.rds.path, "*", "*"), rawpath); !pathok {
-		http.Error(w, fmt.Sprintf("path %s is not ok", rawpath), http.StatusBadRequest)
-		return
-	}
-
-	// fail if file exists
-	_, err := os.Stat(rawpath)
-	if (err == nil) || !os.IsNotExist(err) {
-		http.Error(w, fmt.Sprintf("file %s/%s already exists", camname, filename), http.StatusBadRequest)
-	}
-
 	// determine and verify MIME type
 	ft := cam.getFiletype(filename)
 	if ft == nil {
-		LogInternalServerError(w, fmt.Sprintf("getting filetype for %s", filename), nil)
+		// fixme another way to do this?
+		pto3.HandleErrorHTTP(w, fmt.Sprintf("getting filetype for %s", filename), nil)
 		return
 	}
 	if ft.ContentType != r.Header.Get("Content-Type") {
 		http.Error(w, fmt.Sprintf("Content-Type for %s/%s must be %s", camname, filename, ft.ContentType), http.StatusBadRequest)
-	}
-
-	// write MIME type to header
-	w.Header().Set("Content-Type", ft.ContentType)
-
-	// now stream the file from the reader on to disk
-	rawfile, err := os.Create(rawpath)
-	if err != nil {
-		LogInternalServerError(w, "creating data file", err)
 		return
 	}
-	defer rawfile.Close()
 
 	reqreader, err := r.GetBody()
 	if err != nil {
-		LogInternalServerError(w, "reading upload data", err)
+		pto3.HandleErrorHTTP(w, "reading upload data", err)
 		return
 	}
 
-	buf := make([]byte, 65536)
-	for {
-		n, err := reqreader.Read(buf)
-		if err == nil {
-			_, err = rawfile.Write(buf[0:n])
-			if err != nil {
-				LogInternalServerError(w, "writing upload data", err)
-				return
-			}
-		} else if err == io.EOF {
-			break
-		} else {
-			LogInternalServerError(w, "reading upload data", err)
-			return
-		}
-	}
-
-	// update file metadata to reflect size
-	rawfile.Sync()
-	err = cam.updateFileVirtualMetadata(filename)
-	if err != nil {
-		LogInternalServerError(w, "updating virtual metadata", err)
+	if err := cam.WriteFileDataFromStream(filename, false, reqreader); err != nil {
+		pto3.HandleErrorHTTP(w, "writing uploaded data", err)
 		return
 	}
 
 	// and now a reply... return file metadata
-	out, err := cam.GetFileMetadata(filename)
-	if err != nil {
-		rdsHTTPError(w, err)
-		return
-	}
-
-	outb, err := json.Marshal(out)
-	if err != nil {
-		LogInternalServerError(w, "marshalling file metadata", err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	w.Write(outb)
+	metadataResponse(w, http.StatusCreated, cam, filename)
 }
 
 func (ra *RawAPI) addRoutes(r *mux.Router) {
