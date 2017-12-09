@@ -1,13 +1,13 @@
 # pto3-go
 
-MAMI Path Transparency Observatory (PTO) version 3 [API](API.md) implementation in golang.
+MAMI Path Transparency Observatory (PTO) version 3 [API](doc/API.md) implementation in golang.
 
 Backed by filesystem storage (for raw data) and PostgreSQL (for observation storage and query).
 
 To install: 
 
 ```
-$ go install github.com/mami-project/pto3-go/ptosrv
+$ go install github.com/mami-project/pto3-go/papi/ptosrv
 ```
 
 To run, create a `ptoconfig.json` file and invoke
@@ -40,3 +40,7 @@ The ObsDatabase object should have the following keys:
 The APIKeyFile is a JSON file mapping API key strings to an object mapping
 permission strings to a boolean, true if the key has that permission, false
 otherwise. 
+
+## Local Analyzer Utilities
+
+This package also contains command-line utilities for 

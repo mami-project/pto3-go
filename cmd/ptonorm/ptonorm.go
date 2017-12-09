@@ -1,7 +1,6 @@
 // ptonorm is a command-line utility to run a specified normalizer with a
 // specified raw data file, passing the observation data and metadata produced
 // by the normalizer to standard output.
-
 package main
 
 import (

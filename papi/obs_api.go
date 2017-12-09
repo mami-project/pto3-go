@@ -4,40 +4,26 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/go-pg/pg"
 	"github.com/gorilla/mux"
+	pto3 "github.com/mami-project/pto3-go"
 )
 
-
-// FIXME observation store, here, is a
-type ObservationStore struct {
-	config *PTOConfiguration
+type ObsAPI struct {
+	config *pto3.PTOConfiguration
 	azr    Authorizer
 	db     *pg.DB
 }
 
-func NewObservationStore(config *PTOConfiguration, azr Authorizer) (*ObservationStore, error) {
-	osr := ObservationStore{config: config, azr: azr}
-
-	// Connect to database
-	osr.db = pg.Connect(&config.ObsDatabase)
-
-	return &osr, nil
-}
-
-func (osr *ObservationStore) writeMetadataResponse(w http.ResponseWriter, set *ObservationSet, status int) {
+func (oa *ObsAPI) writeMetadataResponse(w http.ResponseWriter, set *pto3.ObservationSet, status int) {
 	// compute a link for the observation set
-	set.LinkVia(osr.config.baseURL)
+	set.LinkVia(oa.config.baseURL)
 
 	// now write it to the response
 	b, err := json.Marshal(&set)
@@ -53,14 +39,14 @@ type setList struct {
 	Sets []string `json:"sets"`
 }
 
-// HandleListSets handles GET /obs.
+// handleListSets handles GET /obs.
 // It returns a JSON object with links to current observation sets in the sets key.
-func (osr *ObservationStore) HandleListSets(w http.ResponseWriter, r *http.Request) {
+func (oa *ObsAPI) handleListSets(w http.ResponseWriter, r *http.Request) {
 	var setIds []int
 
 	// select set IDs into an array
 	// FIXME this should go into model.go
-	if err := osr.db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&setIds)); err != nil && err != pg.ErrNoRows {
+	if err := oa.db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&setIds)); err != nil && err != pg.ErrNoRows {
 		LogInternalServerError(w, "listing set IDs", err)
 		return
 	}
@@ -68,7 +54,7 @@ func (osr *ObservationStore) HandleListSets(w http.ResponseWriter, r *http.Reque
 	// linkify them
 	sets := setList{make([]string, len(setIds))}
 	for i, id := range setIds {
-		sets.Sets[i] = LinkForSetID(osr.config.baseURL, id)
+		sets.Sets[i] = LinkForSetID(oa.config.baseURL, id)
 	}
 
 	// FIXME pagination goes here
@@ -83,13 +69,13 @@ func (osr *ObservationStore) HandleListSets(w http.ResponseWriter, r *http.Reque
 	w.Write(outb)
 }
 
-// HandleCreateSet handles POST /obs/create. It requires a JSON object with
+// handleCreateSet handles POST /obs/create. It requires a JSON object with
 // observation set metadata in the request. It echoes back the metadata as a
 // JSON object in the response, with a link to the created object in the __link
 // metadata key.
-func (osr *ObservationStore) HandleCreateSet(w http.ResponseWriter, r *http.Request) {
+func (oa *ObsAPI) handleCreateSet(w http.ResponseWriter, r *http.Request) {
 	// fail if not authorized
-	if !osr.azr.IsAuthorized(w, r, "write_obs") {
+	if !oa.azr.IsAuthorized(w, r, "write_obs") {
 		return
 	}
 
@@ -114,7 +100,7 @@ func (osr *ObservationStore) HandleCreateSet(w http.ResponseWriter, r *http.Requ
 	}
 
 	// now insert the set in the database
-	err = osr.db.RunInTransaction(func(t *pg.Tx) error {
+	err = oa.db.RunInTransaction(func(t *pg.Tx) error {
 		// then insert the set itself
 		return set.Insert(t, true)
 	})
@@ -124,14 +110,14 @@ func (osr *ObservationStore) HandleCreateSet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	osr.writeMetadataResponse(w, &set, http.StatusCreated)
+	oa.writeMetadataResponse(w, &set, http.StatusCreated)
 }
 
-// HandleGetMetadata handles Get /obs/<set>. It writes a JSON object with
+// handleGetMetadata handles Get /obs/<set>. It writes a JSON object with
 // observation set metadata in the response.
-func (osr *ObservationStore) HandleGetMetadata(w http.ResponseWriter, r *http.Request) {
+func (oa *ObsAPI) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
 	// fail if not authorized
-	if !osr.azr.IsAuthorized(w, r, "read_obs") {
+	if !oa.azr.IsAuthorized(w, r, "read_obs") {
 		return
 	}
 
@@ -145,7 +131,7 @@ func (osr *ObservationStore) HandleGetMetadata(w http.ResponseWriter, r *http.Re
 	}
 
 	set := ObservationSet{ID: int(setid)}
-	if err = set.SelectByID(osr.db); err != nil {
+	if err = set.SelectByID(oa.db); err != nil {
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {
@@ -154,15 +140,15 @@ func (osr *ObservationStore) HandleGetMetadata(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	osr.writeMetadataResponse(w, &set, http.StatusOK)
+	oa.writeMetadataResponse(w, &set, http.StatusOK)
 }
 
-// HandlePutMetadata handles POST /obs/create. It requires a JSON object with
+// handlePutMetadata handles POST /obs/create. It requires a JSON object with
 // observation set metadata in the request. It echoes back the metadata as a
 // JSON object in the response,
-func (osr *ObservationStore) HandlePutMetadata(w http.ResponseWriter, r *http.Request) {
+func (oa *ObsAPI) handlePutMetadata(w http.ResponseWriter, r *http.Request) {
 	// fail if not authorized
-	if !osr.azr.IsAuthorized(w, r, "write_obs") {
+	if !oa.azr.IsAuthorized(w, r, "write_obs") {
 		return
 	}
 
@@ -197,7 +183,7 @@ func (osr *ObservationStore) HandlePutMetadata(w http.ResponseWriter, r *http.Re
 	set.ID = int(setid)
 
 	// now update
-	err = osr.db.RunInTransaction(func(t *pg.Tx) error {
+	err = oa.db.RunInTransaction(func(t *pg.Tx) error {
 		return set.Update(t)
 	})
 	if err != nil {
@@ -209,17 +195,17 @@ func (osr *ObservationStore) HandlePutMetadata(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	osr.writeMetadataResponse(w, &set, http.StatusCreated)
+	oa.writeMetadataResponse(w, &set, http.StatusCreated)
 }
 
-// HandleDownload handles GET /obs/<set>/data. It requires  Set IDs in the input are ignored. It writes a response
+// handleDownload handles GET /obs/<set>/data. It requires  Set IDs in the input are ignored. It writes a response
 // containing the all the observations in the set as a newline-delimited
 // JSON stream (of content-type application/vnd.mami.ndjson) in observation set
 // file format.
 
-func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Request) {
+func (oa *ObsAPI) handleDownload(w http.ResponseWriter, r *http.Request) {
 	// fail if not authorized
-	if !osr.azr.IsAuthorized(w, r, "write_obs") {
+	if !oa.azr.IsAuthorized(w, r, "write_obs") {
 		return
 	}
 
@@ -234,7 +220,7 @@ func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Reque
 
 	// retrieve set metadata
 	set := ObservationSet{ID: int(setid)}
-	if err = set.SelectByID(osr.db); err != nil {
+	if err = set.SelectByID(oa.db); err != nil {
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {
@@ -244,7 +230,7 @@ func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Reque
 	}
 
 	// fail if no observations exist
-	if set.CountObservations(osr.db) == 0 {
+	if set.CountObservations(oa.db) == 0 {
 		http.Error(w, fmt.Sprintf("Observation set %s has no observations", vars["set"]), http.StatusNotFound)
 		return
 	}
@@ -255,7 +241,7 @@ func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Reque
 
 	// FIXME shouldn't this funtionality be in model.go?
 
-	obsdat, err := ObservationsBySetID(osr.db, int(setid))
+	obsdat, err := ObservationsBySetID(oa.db, int(setid))
 	if err != nil {
 		LogInternalServerError(w, "retrieving observation set", err)
 		return
@@ -271,13 +257,13 @@ func (osr *ObservationStore) HandleDownload(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-// HandleUpload handles PUT /obs/<set>/data. It requires a newline-delimited
+// handleUpload handles PUT /obs/<set>/data. It requires a newline-delimited
 // JSON stream (of content-type application/vnd.mami.ndjson) in observation set
 // file format. Set IDs in the input are ignored. It writes a response
 // containing the set's metadata.
-func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request) {
+func (oa *ObsAPI) handleUpload(w http.ResponseWriter, r *http.Request) {
 	// fail if not authorized
-	if !osr.azr.IsAuthorized(w, r, "write_obs") {
+	if !oa.azr.IsAuthorized(w, r, "write_obs") {
 		return
 	}
 
@@ -292,7 +278,7 @@ func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request
 
 	// retrieve set metadata
 	set := ObservationSet{ID: int(setid)}
-	if err := set.SelectByID(osr.db); err != nil {
+	if err := set.SelectByID(oa.db); err != nil {
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {
@@ -302,7 +288,7 @@ func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	// fail if observations exist
-	if set.CountObservations(osr.db) != 0 {
+	if set.CountObservations(oa.db) != 0 {
 		http.Error(w, fmt.Sprintf("Observation set %s already uploaded", vars["set"]), http.StatusBadRequest)
 		return
 	}
@@ -311,7 +297,7 @@ func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request
 	in := bufio.NewScanner(r.Body)
 	var obs Observation
 
-	err = osr.db.RunInTransaction(func(t *pg.Tx) error {
+	err = oa.db.RunInTransaction(func(t *pg.Tx) error {
 		for in.Scan() {
 			if err := json.Unmarshal([]byte(in.Text()), &obs); err != nil {
 				return err
@@ -327,22 +313,22 @@ func (osr *ObservationStore) HandleUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	// now update observation count
-	set.CountObservations(osr.db)
+	set.CountObservations(oa.db)
 
 	// and write
-	osr.writeMetadataResponse(w, &set, http.StatusCreated)
+	oa.writeMetadataResponse(w, &set, http.StatusCreated)
 }
 
-func (osr *ObservationStore) CreateTables() error {
-	return CreateTables(osr.db)
+func (oa *ObsAPI) CreateTables() error {
+	return pto3.CreateTables(oa.db)
 }
 
-func (osr *ObservationStore) DropTables() error {
-	return DropTables(osr.db)
+func (oa *ObsAPI) DropTables() error {
+	return pto3.DropTables(oa.db)
 }
 
-func (osr *ObservationStore) EnableQueryLogging() {
-	osr.db.OnQueryProcessed(func(event *pg.QueryProcessedEvent) {
+func (oa *ObsAPI) EnableQueryLogging() {
+	oa.db.OnQueryProcessed(func(event *pg.QueryProcessedEvent) {
 		query, err := event.FormattedQuery()
 		if err != nil {
 			panic(err)
@@ -352,12 +338,26 @@ func (osr *ObservationStore) EnableQueryLogging() {
 	})
 }
 
-func (osr *ObservationStore) AddRoutes(r *mux.Router) {
-	l := osr.config.accessLogger
-	r.HandleFunc("/obs", LogAccess(l, osr.HandleListSets)).Methods("GET")
-	r.HandleFunc("/obs/create", LogAccess(l, osr.HandleCreateSet)).Methods("POST")
-	r.HandleFunc("/obs/{set}", LogAccess(l, osr.HandleGetMetadata)).Methods("GET")
-	r.HandleFunc("/obs/{set}", LogAccess(l, osr.HandlePutMetadata)).Methods("PUT")
-	r.HandleFunc("/obs/{set}/data", LogAccess(l, osr.HandleDownload)).Methods("GET")
-	r.HandleFunc("/obs/{set}/data", LogAccess(l, osr.HandleUpload)).Methods("PUT")
+func (oa *ObsAPI) addRoutes(r *mux.Router, l *log.Logger) {
+	r.handleFunc("/obs", LogAccess(l, oa.handleListSets)).Methods("GET")
+	r.handleFunc("/obs/create", LogAccess(l, oa.handleCreateSet)).Methods("POST")
+	r.handleFunc("/obs/{set}", LogAccess(l, oa.handleGetMetadata)).Methods("GET")
+	r.handleFunc("/obs/{set}", LogAccess(l, oa.handlePutMetadata)).Methods("PUT")
+	r.handleFunc("/obs/{set}/data", LogAccess(l, oa.handleDownload)).Methods("GET")
+	r.handleFunc("/obs/{set}/data", LogAccess(l, oa.handleUpload)).Methods("PUT")
+}
+
+func NewObsAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router, l *log.Logger) *ObsAPI {
+	if config.ObsDatabase.Database == "" {
+		return nil, nil
+	}
+
+	oa := new(ObsAPI)
+	oa.config = config
+	oa.azr = azr
+	oa.db = pg.Connect(&config.ObsDatabase)
+
+	oa.addRoutes(r, l)
+
+	return oa
 }

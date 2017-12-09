@@ -3,7 +3,6 @@
 // metadata. It is meant to allow the storage of preprocessed observations as
 // raw data in the PTO, as well as to provide for self-contained testing of
 // the local analysis runtime.
-
 package main
 
 import (
@@ -29,7 +28,7 @@ func ObsPassthrough(in io.Reader, metain io.Reader, out io.Writer) error {
 	// unmarshal metadata into an RDS metadata object
 	md, err := pto3.RawMetadataFromReader(metain, nil)
 	if err != nil {
-		return fmt.Errorf("could not read metadata: %s", err.Error())t
+		return fmt.Errorf("could not read metadata: %s", err.Error())
 	}
 
 	// check filetype and select scanner

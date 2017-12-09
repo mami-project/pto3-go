@@ -1,4 +1,5 @@
-// ptoload loads an observation file into a database; run `ptoload -help` for help.
+// ptoload loads an observation file in the form produced by normalizers and
+// derived analyzers into the database.
 package main
 
 import (

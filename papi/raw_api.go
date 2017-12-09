@@ -11,37 +11,45 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mami-project/pto3-go"
+
 	"github.com/gorilla/mux"
 )
 
-// HandleListCampaigns handles GET /raw, returning a list of campaigns in the
+type RawAPI struct {
+	config *pto3.PTOConfiguration
+	rds    *pto3.RawDataStore
+	azr    Authorizer
+}
+
+// handleListCampaigns handles GET /raw, returning a list of campaigns in the
 // raw data store. It writes a JSON object to the response with a single key,
 // "campaigns", whose content is an array of campaign URL as strings.
-func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Request) {
+func (ra *RawAPI) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 
 	// fail if not authorized
-	if !rds.azr.IsAuthorized(w, r, "list_raw") {
+	if !ra.azr.IsAuthorized(w, r, "list_raw") {
 		return
 	}
 
 	// force a campaign rescan
-	err := rds.ScanCampaigns()
+	err := ra.ra.rds.ScanCampaigns()
 	if err != nil {
 		LogInternalServerError(w, "scanning campaigns", err)
 		return
 	}
 
 	// construct URLs based on the campaign
-	out := campaignList{make([]string, len(rds.campaigns))}
+	out := campaignList{make([]string, len(ra.rds.campaigns))}
 
 	i := 0
-	for k := range rds.campaigns {
+	for k := range ra.ra.rds.campaigns {
 		camurl, err := url.Parse(fmt.Sprintf("raw/%s", k))
 		if err != nil {
 			LogInternalServerError(w, "generating campaign link", err)
 			return
 		}
-		out.Campaigns[i] = rds.config.baseURL.ResolveReference(camurl).String()
+		out.Campaigns[i] = ra.config.baseURL.ResolveReference(camurl).String()
 		i++
 	}
 
@@ -59,14 +67,14 @@ func (rds *RawDataStore) HandleListCampaigns(w http.ResponseWriter, r *http.Requ
 }
 
 type campaignFileList struct {
-	Metadata *RawMetadata `json:"metadata"`
-	Files    []string     `json:"files"`
+	Metadata *pto3.RawMetadata `json:"metadata"`
+	Files    []string          `json:"files"`
 }
 
-// HandleGetCampaignMetadata handles GET /raw/<campaign>, returning metadata for
+// handleGetCampaignMetadata handles GET /raw/<campaign>, returning metadata for
 // a campaign. It writes a JSON object to the response containing campaign
 // metadata.
-func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *http.Request) {
+func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	// get campaign name
@@ -77,12 +85,12 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 	}
 
 	// fail if not authorized
-	if !rds.azr.IsAuthorized(w, r, "read_raw:"+camname) {
+	if !ra.azr.IsAuthorized(w, r, "read_raw:"+camname) {
 		return
 	}
 
 	// look up campaign
-	cam, ok := rds.campaigns[camname]
+	cam, ok := ra.rds.campaigns[camname]
 	if !ok {
 		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
 		return
@@ -104,7 +112,7 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 			log.Print(err)
 			LogInternalServerError(w, "generating file link", err)
 		}
-		out.Files[i] = rds.config.baseURL.ResolveReference(filepath).String()
+		out.Files[i] = ra.config.baseURL.ResolveReference(filepath).String()
 		i++
 	}
 
@@ -119,11 +127,11 @@ func (rds *RawDataStore) HandleGetCampaignMetadata(w http.ResponseWriter, r *htt
 	w.Write(outb)
 }
 
-// HandlePutCampaignMetadata handles PUT /raw/<campaign>, overwriting metadata for
+// handlePutCampaignMetadata handles PUT /raw/<campaign>, overwriting metadata for
 // a campaign, creating it if necessary. It requires a JSON object in the
 // request body containing campaign metadata. It echoes the written metadata
 // back in the response.
-func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *http.Request) {
+func (ra *RawAPI) handlePutCampaignMetadata(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	// get campaign name
@@ -134,7 +142,7 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 	}
 
 	// fail if not authorized
-	if !rds.azr.IsAuthorized(w, r, "write_raw:"+camname) {
+	if !ra.azr.IsAuthorized(w, r, "write_raw:"+camname) {
 		return
 	}
 
@@ -161,10 +169,10 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 	}
 
 	// now look up the campaign
-	cam, ok := rds.campaigns[camname]
+	cam, ok := ra.rds.campaigns[camname]
 	if !ok {
 		// Campaign doesn't exist. We have to create it.
-		cam, err = rds.CreateCampaign(camname, &in)
+		cam, err = ra.rds.CreateCampaign(camname, &in)
 		if err != nil {
 			LogInternalServerError(w, fmt.Sprintf("creating campaign %s", camname), err)
 			return
@@ -196,11 +204,11 @@ func (rds *RawDataStore) HandlePutCampaignMetadata(w http.ResponseWriter, r *htt
 	w.Write(outb)
 }
 
-// HandleGetFileMetadata handles GET /raw/<campaign>/<file>, returning
+// handleGetFileMetadata handles GET /raw/<campaign>/<file>, returning
 // metadata for a file, including virtual metadata (file size and data URL) and
 // any metadata inherited from the campaign. It writes a JSON object to the
 // response containing file metadata.
-func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Request) {
+func (ra *RawAPI) handleGetFileMetadata(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	camname, ok := vars["campaign"]
@@ -216,11 +224,11 @@ func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Re
 	}
 
 	// fail if not authorized
-	if !rds.azr.IsAuthorized(w, r, "read_raw:"+camname) {
+	if !ra.azr.IsAuthorized(w, r, "read_raw:"+camname) {
 		return
 	}
 
-	cam, ok := rds.campaigns[vars["campaign"]]
+	cam, ok := ra.rds.campaigns[vars["campaign"]]
 	if !ok {
 		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
 		return
@@ -243,11 +251,11 @@ func (rds *RawDataStore) HandleGetFileMetadata(w http.ResponseWriter, r *http.Re
 	w.Write(outb)
 }
 
-// HandlePutFileMetadata handles PUT /raw/<campaign>/<file>, overwriting metadata for
+// handlePutFileMetadata handles PUT /raw/<campaign>/<file>, overwriting metadata for
 // a file, creating it if necessary. It requires a JSON object in the
 // request body containing file metadata. It echoes the full file metadata
 // back in the response, including inherited campaign metadata and any virtual metadata.
-func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Request) {
+func (ra *RawAPI) handlePutFileMetadata(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	camname, ok := vars["campaign"]
@@ -263,7 +271,7 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 	}
 
 	// fail if not authorized
-	if !rds.azr.IsAuthorized(w, r, "write_raw:"+camname) {
+	if !ra.azr.IsAuthorized(w, r, "write_raw:"+camname) {
 		return
 	}
 
@@ -290,7 +298,7 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 	}
 
 	// now look up the campaign
-	cam, ok := rds.campaigns[camname]
+	cam, ok := ra.rds.campaigns[camname]
 	if !ok {
 		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
 		return
@@ -321,18 +329,18 @@ func (rds *RawDataStore) HandlePutFileMetadata(w http.ResponseWriter, r *http.Re
 	w.Write(outb) // FIXME log error here
 }
 
-// HandleDeleteFile handles DELETE /raw/<campaign>/<file>, deleting a file's
+// handleDeleteFile handles DELETE /raw/<campaign>/<file>, deleting a file's
 // metadata and content by marking it pending deletion in the raw data store.
 // Deletion is not yet fully specified or implemented, so this just returns a
 // StatusNotImplemented response for now.
-func (rds *RawDataStore) HandleDeleteFile(w http.ResponseWriter, r *http.Request) {
+func (ra *RawAPI) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "delete not implemented, come back later", http.StatusNotImplemented)
 }
 
-// HandleFileDownload handles GET /raw/<campaign>/<file>/data, returning a file's
+// handleFileDownload handles GET /raw/<campaign>/<file>/data, returning a file's
 // content. It writes a response of the appropriate MIME type for the file (as
 // determined by the filetypes map and the _file_type metadata key).
-func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Request) {
+func (ra *RawAPI) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
 
@@ -349,12 +357,12 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	}
 
 	// fail if not authorized
-	if !rds.azr.IsAuthorized(w, r, "read_raw:"+camname) {
+	if !ra.azr.IsAuthorized(w, r, "read_raw:"+camname) {
 		return
 	}
 
 	// now look up the campaign
-	cam, ok := rds.campaigns[camname]
+	cam, ok := ra.rds.campaigns[camname]
 	if !ok {
 		http.Error(w, fmt.Sprintf("campaign %s not found", camname), http.StatusNotFound)
 		return
@@ -392,9 +400,9 @@ func (rds *RawDataStore) HandleFileDownload(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-// HandleFileUpload handles PUT /raw/<campaign>/<file>/data. It requires a request of the appropriate MIME type for the file (as
+// handleFileUpload handles PUT /raw/<campaign>/<file>/data. It requires a request of the appropriate MIME type for the file (as
 // determined by the filetypes map and the _file_type metadata key) whose body is the file's content. It writes a response containing the file's metadata.
-func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request) {
+func (ra *RawAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	camname, ok := vars["campaign"]
@@ -410,20 +418,20 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	// fail if not authorized
-	if !rds.azr.IsAuthorized(w, r, "write_raw:"+camname) {
+	if !ra.azr.IsAuthorized(w, r, "write_raw:"+camname) {
 		return
 	}
 
 	// now look up the campaign
-	cam, ok := rds.campaigns[camname]
+	cam, ok := ra.rds.campaigns[camname]
 	if !ok {
 		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
 		return
 	}
 
 	// build a local filesystem path for uploading and validate it
-	rawpath := filepath.Clean(filepath.Join(rds.path, camname, filename))
-	if pathok, _ := filepath.Match(filepath.Join(rds.path, "*", "*"), rawpath); !pathok {
+	rawpath := filepath.Clean(filepath.Join(ra.rds.path, camname, filename))
+	if pathok, _ := filepath.Match(filepath.Join(ra.rds.path, "*", "*"), rawpath); !pathok {
 		http.Error(w, fmt.Sprintf("path %s is not ok", rawpath), http.StatusBadRequest)
 		return
 	}
@@ -504,14 +512,33 @@ func (rds *RawDataStore) HandleFileUpload(w http.ResponseWriter, r *http.Request
 	w.Write(outb)
 }
 
-func (rds *RawDataStore) AddRoutes(r *mux.Router) {
-	l := rds.config.accessLogger
-	r.HandleFunc("/raw", LogAccess(l, rds.HandleListCampaigns)).Methods("GET")
-	r.HandleFunc("/raw/{campaign}", LogAccess(l, rds.HandleGetCampaignMetadata)).Methods("GET")
-	r.HandleFunc("/raw/{campaign}", LogAccess(l, rds.HandlePutCampaignMetadata)).Methods("PUT")
-	r.HandleFunc("/raw/{campaign}/{file}", LogAccess(l, rds.HandleGetFileMetadata)).Methods("GET")
-	r.HandleFunc("/raw/{campaign}/{file}", LogAccess(l, rds.HandlePutFileMetadata)).Methods("PUT")
-	r.HandleFunc("/raw/{campaign}/{file}", LogAccess(l, rds.HandleDeleteFile)).Methods("DELETE")
-	r.HandleFunc("/raw/{campaign}/{file}/data", LogAccess(l, rds.HandleFileDownload)).Methods("GET")
-	r.HandleFunc("/raw/{campaign}/{file}/data", LogAccess(l, rds.HandleFileUpload)).Methods("PUT")
+func (ra *RawAPI) addRoutes(r *mux.Router) {
+	l := ra.config.accessLogger
+	r.handleFunc("/raw", LogAccess(l, ra.rds.handleListCampaigns)).Methods("GET")
+	r.handleFunc("/raw/{campaign}", LogAccess(l, ra.rds.handleGetCampaignMetadata)).Methods("GET")
+	r.handleFunc("/raw/{campaign}", LogAccess(l, ra.rds.handlePutCampaignMetadata)).Methods("PUT")
+	r.handleFunc("/raw/{campaign}/{file}", LogAccess(l, ra.rds.handleGetFileMetadata)).Methods("GET")
+	r.handleFunc("/raw/{campaign}/{file}", LogAccess(l, ra.rds.handlePutFileMetadata)).Methods("PUT")
+	r.handleFunc("/raw/{campaign}/{file}", LogAccess(l, ra.rds.handleDeleteFile)).Methods("DELETE")
+	r.handleFunc("/raw/{campaign}/{file}/data", LogAccess(l, ra.rds.handleFileDownload)).Methods("GET")
+	r.handleFunc("/raw/{campaign}/{file}/data", LogAccess(l, ra.rds.handleFileUpload)).Methods("PUT")
+}
+
+func NewRawAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router, l *log.Logger) (*RawAPI, error) {
+	var err error
+
+	if config.RawRoot == "" {
+		return nil, nil
+	}
+
+	ra := new(RawAPI)
+	ra.config = config
+	ra.azr = azr
+	if ra.rds, err = pto3.NewRawDataStore(config); err != nil {
+		return nil, err
+	}
+
+	ra.addRoutes(r, l)
+
+	return ra, nil
 }

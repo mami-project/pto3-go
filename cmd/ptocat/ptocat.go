@@ -1,5 +1,6 @@
-// ptocat is a command-line utility to retrieve
-
+// ptocat is a command-line utility to retrieve observations from one or more
+// observation sets and write them to standard output in the appropriate form
+// for a derived analyzer.
 package main
 
 import (
