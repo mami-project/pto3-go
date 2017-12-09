@@ -2,7 +2,6 @@ package pto3
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -31,25 +30,36 @@ func init() {
 	DataRelativeURL, _ = url.Parse("data")
 }
 
-type RDSMetadata struct {
-	Parent    *RDSMetadata
-	filetype  string
-	Owner     string
+// RawMetadata represents metadata for a raw data object (file or campaign)
+type RawMetadata struct {
+	// Parent metadata object (campaign metadata, for files)
+	Parent *RawMetadata
+	// Name of filetype
+	filetype string
+	// Owner identifier
+	Owner string
+	// Start time for records in the file
 	TimeStart *time.Time
-	TimeEnd   *time.Time
-	Metadata  map[string]string
-	datalink  string
-	datasize  int
+	// End time for records in the file
+	TimeEnd *time.Time
+	// Arbitrary metadata
+	Metadata map[string]string
+	// Link to data object
+	datalink string
+	// Size of data object
+	datasize int
 }
 
-func (md *RDSMetadata) DumpJSONObject(inherit bool) ([]byte, error) {
-
+// DumpJSONObject serializes a RawMetadata object to JSON. If inherit is true,
+// this inherits data and metadata items from the parent; if false, it only
+// dumps information in this object itself.
+func (md *RawMetadata) DumpJSONObject(inherit bool) ([]byte, error) {
 	jmap := make(map[string]interface{})
 
 	// first inherit from parent
 	if inherit && md.Parent != nil {
 		if md.Parent.filetype != "" {
-			jmap["_file_type"] = md.Parent.filetype
+			jmap["_file_type"] = md.Parent.Filetype
 		}
 
 		if md.Parent.Owner != "" {
@@ -71,7 +81,7 @@ func (md *RDSMetadata) DumpJSONObject(inherit bool) ([]byte, error) {
 
 	// then overwrite with own values
 	if md.filetype != "" {
-		jmap["_file_type"] = md.filetype
+		jmap["_file_type"] = md.Filetype
 	}
 
 	if md.Owner != "" {
@@ -102,12 +112,16 @@ func (md *RDSMetadata) DumpJSONObject(inherit bool) ([]byte, error) {
 	return json.Marshal(jmap)
 }
 
-func (md *RDSMetadata) MarshalJSON() ([]byte, error) {
+// MarshalJSON serializes a RawMetadata object to JSON. All values inherited
+// from the parent, if present, are also serialized see DumpJSONObject for
+// control over inheritance.
+func (md *RawMetadata) MarshalJSON() ([]byte, error) {
 	// by default, serialize object with all inherited information
 	return md.DumpJSONObject(true)
 }
 
-func (md *RDSMetadata) UnmarshalJSON(b []byte) error {
+// UnmarshalJSON fills in a RawMetadata object from JSON.
+func (md *RawMetadata) UnmarshalJSON(b []byte) error {
 	md.Metadata = make(map[string]string)
 
 	var jmap map[string]interface{}
@@ -144,8 +158,8 @@ func (md *RDSMetadata) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// WriteToFile writes this metadata object as JSON to a file, ignoring virual metadata keys
-func (md *RDSMetadata) WriteToFile(pathname string) error {
+// writeToFile writes this RawMetadata object as JSON to a file.
+func (md *RawMetadata) writeToFile(pathname string) error {
 	b, err := md.DumpJSONObject(false)
 	if err != nil {
 		return err
@@ -154,10 +168,10 @@ func (md *RDSMetadata) WriteToFile(pathname string) error {
 	return ioutil.WriteFile(pathname, b, 0644)
 }
 
-// Validate returns nil if the metadata is valid (i.e., it or its parent has all required keys), or an error if not
-func (md *RDSMetadata) Validate(isCampaign bool) error {
+// validate returns nil if the metadata is valid (i.e., it or its parent has all required keys), or an error if not
+func (md *RawMetadata) validate(isCampaign bool) error {
 	if md.Owner == "" && (md.Parent == nil || md.Parent.Owner == "") {
-		return RDSMissingMetadataError("missing _owner")
+		return PTOMissingMetadataError("_owner")
 	}
 
 	// short circuit file-only checks
@@ -166,30 +180,33 @@ func (md *RDSMetadata) Validate(isCampaign bool) error {
 	}
 
 	if md.filetype == "" && (md.Parent == nil || md.Parent.filetype == "") {
-		return RDSMissingMetadataError("missing _file_type")
+		return PTOMissingMetadataError("_file_type")
 	}
 
 	if md.TimeStart == nil && (md.Parent == nil || md.Parent.TimeStart == nil) {
-		return RDSMissingMetadataError("missing _time_start")
+		return PTOMissingMetadataError("_time_start")
 	}
 
 	if md.TimeEnd == nil && (md.Parent == nil || md.Parent.TimeEnd == nil) {
-		return RDSMissingMetadataError("missing _time_end")
+		return PTOMissingMetadataError("_time_end")
 	}
 
 	return nil
 }
 
-func (md *RDSMetadata) Filetype() string {
+// Filetype returns the filetype associated with a given metadata object, or inherited from its parent.
+func (md *RawMetadata) Filetype() string {
 	if md.filetype == "" && md.Parent != nil {
 		return md.Parent.filetype
-	} else {
-		return md.filetype
 	}
+
+	return md.filetype
 }
 
-func RDSMetadataFromReader(r io.Reader, parent *RDSMetadata) (*RDSMetadata, error) {
-	var md RDSMetadata
+// RawMetadataFromReader reads metadata for a raw data file from a stream. It
+// creates a new RawMetadata object bound to an optional parent.
+func RawMetadataFromReader(r io.Reader, parent *RawMetadata) (*RawMetadata, error) {
+	var md RawMetadata
 
 	b, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -205,62 +222,30 @@ func RDSMetadataFromReader(r io.Reader, parent *RDSMetadata) (*RDSMetadata, erro
 	return &md, nil
 }
 
-func RDSMetadataFromFile(pathname string, parent *RDSMetadata) (*RDSMetadata, error) {
+// RawMetadataFromFile reads metadata for a raw data file from a file. It
+// creates a new RawMetadata object bound to an optional parent.
+func RawMetadataFromFile(pathname string, parent *RawMetadata) (*RawMetadata, error) {
 	f, err := os.Open(pathname)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return RDSMetadataFromReader(f, parent)
+	return RawMetadataFromReader(f, parent)
 }
 
-// RDSFiletype encapsulates a filetype in the raw data store FIXME not quite the right type
-type RDSFiletype struct {
+// RawFiletype encapsulates a filetype in the raw data store FIXME not quite the right type
+type RawFiletype struct {
 	// PTO filetype name
 	Filetype string `json:"file_type"`
 	// Associated MIME type
 	ContentType string `json:"mime_type"`
 }
 
-// RDSError encapsulates a raw data store error, containing a subject
-// identifying what is broken and an HTTP status code identifying how.
-type RDSError struct {
-	// Subject (filename, campaign, key, etc.) of the error
-	subject string
-	// HTTP status code
-	Status int
-}
-
-func (e *RDSError) Error() string {
-	switch e.Status {
-	case http.StatusBadRequest:
-		return fmt.Sprintf("metadata key %s", e.subject)
-	case http.StatusForbidden:
-		return fmt.Sprintf("operation forbidden on %s", e.subject)
-	case http.StatusNotFound:
-		return fmt.Sprintf("%s not found", e.subject)
-	case http.StatusUnsupportedMediaType:
-		return fmt.Sprintf("wrong Content-Type: %s required", e.subject)
-	}
-
-	return fmt.Sprintf("unknown error %d: %s is not ok", e.Status, e.subject)
-}
-
-// RDSNotFoundError returns a 404 error for a missing campaign and/or file
-func RDSNotFoundError(name string) error {
-	return &RDSError{name, http.StatusNotFound}
-}
-
-// RDSMissingMetadataError returns a 400 error for a missing metadata key in upload
-func RDSMissingMetadataError(key string) error {
-	return &RDSError{key, http.StatusBadRequest}
-}
-
-// RDSCampaign encapsulates a single campaign in a raw data store,
+// Campaign encapsulates a single campaign in a raw data store,
 // and caches metadata for the campaign and files within it.
-type RDSCampaign struct {
+type Campaign struct {
 	// application configuration
-	config *PTOServerConfig
+	config *PTOConfiguration
 
 	// path to campaign directory
 	path string
@@ -269,30 +254,65 @@ type RDSCampaign struct {
 	stale bool
 
 	// campaign metadata cache
-	campaignMetadata *RDSMetadata
+	campaignMetadata *RawMetadata
 
 	// file metadata cache; keys of this define known filenames
-	fileMetadata map[string]*RDSMetadata
+	fileMetadata map[string]*RawMetadata
 
 	// lock on metadata structures
 	lock sync.RWMutex
 }
 
-// NewRDSCampaign creates a new campaign object bound the path of a directory on
-// disk containing the campaign's files.
-func NewRDSCampaign(config *PTOServerConfig, path string) *RDSCampaign {
-	cam := RDSCampaign{
+// newCampaign creates a new campaign object bound the path of a directory on
+// disk containing the campaign's files. If a pointer to metadata is given, it
+// creates a new campaign directory on disk with the given metadata. Error can
+// be ignored if metadata is nil.
+func newCampaign(config *PTOConfiguration, name string, md *RawMetadata) (*Campaign, error) {
+
+	cam := &Campaign{
 		config:       config,
-		path:         path,
+		path:         filepath.Join(config.RawRoot, name),
 		stale:        true,
-		fileMetadata: make(map[string]*RDSMetadata),
+		fileMetadata: make(map[string]*RawMetadata),
 	}
 
-	return &cam
+	// metadata means try to create new campaign
+	if md != nil {
+
+		// okay, we're trying to make a new campaign. first, make sure campaign metadata is ok
+		if err := md.validate(true); err != nil {
+			return nil, err
+		}
+
+		// then check to see if the campaign directory exists
+		_, err := os.Stat(cam.path)
+		if (err == nil) || !os.IsNotExist(err) {
+			return nil, PTOExistsError("campaign", name)
+		}
+
+		// create directory
+		if err := os.Mkdir(cam.path, 0755); err != nil {
+			return nil, err
+		}
+
+		// write metadata to campaign metadata file
+		if err := md.writeToFile(filepath.Join(cam.path, CampaignMetadataFilename)); err != nil {
+			return nil, err
+		}
+
+		// and force a rescan
+		if err := cam.reloadMetadata(true); err != nil {
+			return nil, err
+		}
+
+	}
+
+	return cam, nil
+
 }
 
 // reloadMetadata reloads the metadata for this campaign and its files from disk
-func (cam *RDSCampaign) reloadMetadata(force bool) error {
+func (cam *Campaign) reloadMetadata(force bool) error {
 	var err error
 
 	cam.lock.Lock()
@@ -304,7 +324,7 @@ func (cam *RDSCampaign) reloadMetadata(force bool) error {
 	}
 
 	// load the campaign metadata file
-	cam.campaignMetadata, err = RDSMetadataFromFile(filepath.Join(cam.path, CampaignMetadataFilename), nil)
+	cam.campaignMetadata, err = RawMetadataFromFile(filepath.Join(cam.path, CampaignMetadataFilename), nil)
 	if err != nil {
 		return err
 	}
@@ -316,7 +336,7 @@ func (cam *RDSCampaign) reloadMetadata(force bool) error {
 		if strings.HasSuffix(metafilename, FileMetadataSuffix) {
 			linkname := metafilename[0 : len(metafilename)-len(FileMetadataSuffix)]
 			cam.fileMetadata[linkname], err =
-				RDSMetadataFromFile(filepath.Join(cam.path, metafilename), cam.campaignMetadata)
+				RawMetadataFromFile(filepath.Join(cam.path, metafilename), cam.campaignMetadata)
 			if err != nil {
 				return err
 			}
@@ -329,7 +349,7 @@ func (cam *RDSCampaign) reloadMetadata(force bool) error {
 }
 
 // unloadMetadata allows a campaign's metadata to be garbage-collected, requiring reload on access.
-func (cam *RDSCampaign) unloadMetadata() {
+func (cam *Campaign) unloadMetadata() {
 	cam.lock.Lock()
 	defer cam.lock.Unlock()
 
@@ -338,7 +358,7 @@ func (cam *RDSCampaign) unloadMetadata() {
 	cam.stale = true
 }
 
-func (cam *RDSCampaign) getCampaignMetadata() (*RDSMetadata, error) {
+func (cam *Campaign) getCampaignMetadata() (*RawMetadata, error) {
 	// reload if stale
 	err := cam.reloadMetadata(false)
 	if err != nil {
@@ -348,40 +368,18 @@ func (cam *RDSCampaign) getCampaignMetadata() (*RDSMetadata, error) {
 	return cam.campaignMetadata, nil
 }
 
-func (cam *RDSCampaign) creat(md *RDSMetadata) error {
-	if err := os.Mkdir(cam.path, 0755); err != nil {
-		return err
-	}
-
-	// make sure campaign metadata is ok
-	if err := md.Validate(true); err != nil {
-		return err
-	}
-
-	// write it directly to the file
-	if err := md.WriteToFile(filepath.Join(cam.path, CampaignMetadataFilename)); err != nil {
-		return err
-	}
-
-	// and force a rescan
-	if err := cam.reloadMetadata(true); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (cam *RDSCampaign) putCampaignMetadata(md *RDSMetadata) error {
+// PutCampaignMetadata overwrites the metadata for this campaign with the given metadata.
+func (cam *Campaign) PutCampaignMetadata(md *RawMetadata) error {
 	cam.lock.Lock()
 	defer cam.lock.Unlock()
 
 	// make sure campaign metadata is ok
-	if err := md.Validate(true); err != nil {
+	if err := md.validate(true); err != nil {
 		return err
 	}
 
 	// write to campaign metadata file
-	if err := md.WriteToFile(filepath.Join(cam.path, CampaignMetadataFilename)); err != nil {
+	if err := md.writeToFile(filepath.Join(cam.path, CampaignMetadataFilename)); err != nil {
 		return err
 	}
 
@@ -390,7 +388,8 @@ func (cam *RDSCampaign) putCampaignMetadata(md *RDSMetadata) error {
 	return nil
 }
 
-func (cam *RDSCampaign) GetFileMetadata(filename string) (*RDSMetadata, error) {
+// GetFileMetadata retrieves metadata for a file in this campaign given a file name.
+func (cam *Campaign) GetFileMetadata(filename string) (*RawMetadata, error) {
 	// reload if stale
 	err := cam.reloadMetadata(false)
 	if err != nil {
@@ -400,20 +399,19 @@ func (cam *RDSCampaign) GetFileMetadata(filename string) (*RDSMetadata, error) {
 	// check for file metadata
 	filemd, ok := cam.fileMetadata[filename]
 	if !ok {
-		return nil, RDSNotFoundError(filename)
+		return nil, PTONotFoundError("file", filename)
 	}
 
 	return filemd, nil
 }
 
 // updateFileVirtualMetadata fills in the __data and __data_size virtual metadata
-// for a file. Not concurrency safe: caller must hold the campaign write lock.
-func (cam *RDSCampaign) updateFileVirtualMetadata(filename string) error {
-
+// for a file. Not concurrency safe: caller must hold the campaign lock.
+func (cam *Campaign) updateFileVirtualMetadata(filename string) error {
 	// get file metadata
 	md, ok := cam.fileMetadata[filename]
 	if !ok {
-		return RDSNotFoundError(filename)
+		return PTONotFoundError("file", filename)
 	}
 
 	// get file size
@@ -436,7 +434,8 @@ func (cam *RDSCampaign) updateFileVirtualMetadata(filename string) error {
 	return nil
 }
 
-func (cam *RDSCampaign) putFileMetadata(filename string, md *RDSMetadata) error {
+// PutFileMetadata overwrites the metadata in this campaign with the given metadata.
+func (cam *Campaign) PutFileMetadata(filename string, md *RawMetadata) error {
 	cam.lock.Lock()
 	defer cam.lock.Unlock()
 
@@ -445,11 +444,11 @@ func (cam *RDSCampaign) putFileMetadata(filename string, md *RDSMetadata) error 
 
 	// ensure we have a filetype
 	if md.Filetype() == "" {
-		return RDSMissingMetadataError("_file_type")
+		return PTOMissingMetadataError("_file_type")
 	}
 
 	// write to file metadata file
-	err := md.WriteToFile(filepath.Join(cam.path, filename+FileMetadataSuffix))
+	err := md.writeToFile(filepath.Join(cam.path, filename+FileMetadataSuffix))
 	if err != nil {
 		return err
 	}
@@ -461,7 +460,8 @@ func (cam *RDSCampaign) putFileMetadata(filename string, md *RDSMetadata) error 
 	return cam.updateFileVirtualMetadata(filename)
 }
 
-func (cam *RDSCampaign) getFiletype(filename string) *RDSFiletype {
+// GetFiletype returns the filetype associated with a given file in this campaign.
+func (cam *Campaign) GetFiletype(filename string) *RawFiletype {
 	// reload if stale
 	err := cam.reloadMetadata(false)
 	if err != nil {
@@ -479,29 +479,109 @@ func (cam *RDSCampaign) getFiletype(filename string) *RDSFiletype {
 		return nil
 	}
 
-	return &RDSFiletype{ftname, ctype}
+	return &RawFiletype{ftname, ctype}
 }
 
-func (cam *RDSCampaign) ReadFileData(filename string) (io.ReadCloser, error) {
-
+// ReadFileData opens and returns the data file associated with a filename on this campaign for reading.
+func (cam *Campaign) ReadFileData(filename string) (*os.File, error) {
 	// build a local filesystem path and validate it
 	rawpath := filepath.Clean(filepath.Join(cam.path, filename))
 	if pathok, _ := filepath.Match(filepath.Join(cam.path, "*"), rawpath); !pathok {
-		return nil, fmt.Errorf("path %s is not ok", rawpath)
+		return nil, PTOErrorf("path %s is not ok", rawpath).StatusIs(http.StatusBadRequest)
 	}
 
 	// open the file
 	return os.Open(rawpath)
 }
 
+// ReadFileDataToStream copies data from the data file associated with a
+// filename on this campaign to a given writer.
+func (cam *Campaign) ReadFileDataToStream(filename string, out io.Writer) error {
+	in, err := cam.ReadFileData(filename)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	// now copy to the writer until EOF
+	buf := make([]byte, 65536)
+	for {
+		n, err := in.Read(buf)
+		if err == nil {
+			if _, err = out.Write(buf[0:n]); err != nil {
+				return err
+			}
+		} else if err == io.EOF {
+			break
+		} else {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// WriteFileData creates, open and returns the data file associated with a
+// filename on this campaign for writing.If force is true, replaces the data
+// file if it exists; otherwise, returns an error if the data file exists.
+func (cam *Campaign) WriteFileData(filename string, force bool) (*os.File, error) {
+	// build a local filesystem path and validate it
+	rawpath := filepath.Clean(filepath.Join(cam.path, filename))
+	if pathok, _ := filepath.Match(filepath.Join(cam.path, "*"), rawpath); !pathok {
+		return nil, PTOErrorf("path %s is not ok", rawpath).StatusIs(http.StatusBadRequest)
+	}
+
+	// ensure file isn't there unless we're forcing overwrite
+	if !force {
+		_, err := os.Stat(rawpath)
+		if (err == nil) || !os.IsNotExist(err) {
+			return nil, PTOExistsError("file", filename)
+		}
+	}
+
+	// create file to write to
+	return os.Create(rawpath)
+}
+
+// WriteFileDataFromStream copies data from a given reader to the data file
+// associated with a filename on this campaign. If force is true, replaces the
+// data file if it exists; otherwise, returns an error if the data file exists.
+func (cam *Campaign) WriteFileDataFromStream(filename string, force bool, in io.Reader) error {
+	out, err := cam.WriteFileData(filename, force)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// now copy from the reader until EOF
+	buf := make([]byte, 65536)
+	for {
+		n, err := in.Read(buf)
+		if err == nil {
+			if _, err = out.Write(buf[0:n]); err != nil {
+				return err
+			}
+		} else if err == io.EOF {
+			break
+		} else {
+			return err
+		}
+	}
+
+	// update virtual metadata, as the underlying file size will have changed
+	if err := out.Sync(); err != nil {
+		return err
+	}
+	cam.lock.Lock()
+	defer cam.lock.Unlock()
+	return cam.updateFileVirtualMetadata(filename)
+}
+
 // A RawDataStore encapsulates a pile of PTO data and metadata files as a set of
 // campaigns.
 type RawDataStore struct {
 	// application configuration
-	config *PTOServerConfig
-
-	// authorizer
-	azr Authorizer
+	config *PTOConfiguration
 
 	// base path
 	path string
@@ -510,25 +590,16 @@ type RawDataStore struct {
 	lock sync.RWMutex
 
 	// campaign cache
-	campaigns map[string]*RDSCampaign
+	campaigns map[string]*Campaign
 }
 
-func rdsHTTPError(w http.ResponseWriter, err error) {
-	switch ev := err.(type) {
-	case *RDSError:
-		http.Error(w, ev.Error(), ev.Status)
-	default:
-		LogInternalServerError(w, "", err)
-	}
-}
-
-// scanCampaigns updates the RawDataStore to reflect the current state of the
-// files on disk.
-func (rds *RawDataStore) scanCampaigns() error {
+// ScanCampaigns updates the campaign cache in RawDataStore to reflect the
+// current state of the files on disk.
+func (rds *RawDataStore) ScanCampaigns() error {
 	rds.lock.Lock()
 	defer rds.lock.Unlock()
 
-	rds.campaigns = make(map[string]*RDSCampaign)
+	rds.campaigns = make(map[string]*Campaign)
 
 	direntries, err := ioutil.ReadDir(rds.path)
 
@@ -552,25 +623,22 @@ func (rds *RawDataStore) scanCampaigns() error {
 			}
 
 			// create a new (stale) campaign
-			rds.campaigns[direntry.Name()] = NewRDSCampaign(rds.config,
-				filepath.Join(rds.path, direntry.Name()))
+			cam, _ := newCampaign(rds.config, filepath.Join(rds.path, direntry.Name()), nil)
+			rds.campaigns[direntry.Name()] = cam
 		}
 	}
 
 	return nil
 }
 
-// FIXME rethink how to bootstrap new campaigns...
-func (rds *RawDataStore) createCampaign(camname string, md *RDSMetadata) (*RDSCampaign, error) {
-
-	campath := filepath.Join(rds.path, camname)
-	cam := NewRDSCampaign(rds.config, campath)
-	err := cam.creat(md)
+// CreateCampaign creates a new campaign given a campaign name and initial metadata for the new campaign.
+func (rds *RawDataStore) CreateCampaign(camname string, md *RawMetadata) (*Campaign, error) {
+	cam, err := newCampaign(rds.config, camname, md)
 	if err != nil {
 		return nil, err
 	}
 
-	err = cam.putCampaignMetadata(md)
+	err = cam.PutCampaignMetadata(md)
 	if err != nil {
 		return nil, err
 	}
@@ -586,20 +654,22 @@ type campaignList struct {
 	Campaigns []string `json:"campaigns"`
 }
 
-// Ensure that the directories backing the data store exist. Used for testing.
+// CreateDirectories that the directories backing the data store exist. Used
+// for testing.
 func (rds *RawDataStore) CreateDirectories() error {
 	return os.Mkdir(rds.path, 0755)
 }
 
-// Remove the directories backing the data store incluing all their contents.
-// Used for testing.
+// RemoveDirectories deletes the directories backing the data store, incluing
+// all their contents. Used for testing.
 func (rds *RawDataStore) RemoveDirectories() error {
 	return os.RemoveAll(rds.path)
 }
 
-func (rds *RawDataStore) CampaignForName(camname string) (*RDSCampaign, error) {
+// CampaignForName returns a campaign object for a given name.
+func (rds *RawDataStore) CampaignForName(camname string) (*Campaign, error) {
 	// force a campaign rescan
-	err := rds.scanCampaigns()
+	err := rds.ScanCampaigns()
 	if err != nil {
 		return nil, err
 	}
@@ -607,19 +677,19 @@ func (rds *RawDataStore) CampaignForName(camname string) (*RDSCampaign, error) {
 	// die if campaign not found
 	cam, ok := rds.campaigns[camname]
 	if !ok {
-		return nil, fmt.Errorf("campaign %s does not exist")
+		return nil, PTONotFoundError("campaign", camname)
 	}
 
 	return cam, nil
 }
 
-// NewRawDataStore encapsulates a raw data store, given a pathname of a
-// directory containing its files.
-func NewRawDataStore(config *PTOServerConfig, azr Authorizer) (*RawDataStore, error) {
-	rds := RawDataStore{config: config, azr: azr, path: config.RawRoot}
+// NewRawDataStore encapsulates a raw data store, given a configuration object
+// pointing to a directory containing data and metadata organized into campaigns.
+func NewRawDataStore(config *PTOConfiguration) (*RawDataStore, error) {
+	rds := RawDataStore{config: config, path: config.RawRoot}
 
 	// scan the directory for campaigns
-	if err := rds.scanCampaigns(); err != nil {
+	if err := rds.ScanCampaigns(); err != nil {
 		return nil, err
 	}
 

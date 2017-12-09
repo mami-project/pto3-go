@@ -8,6 +8,8 @@ import (
 	"github.com/go-pg/pg/orm"
 )
 
+// Path represents a PTO path: a sequence of path elements. Paths are
+// currently stored as white-space separated element lists in strings.
 type Path struct {
 	ID     int
 	String string
@@ -18,7 +20,9 @@ type PathCache map[string]int
 
 // CacheNewPaths takes a set of path names, and adds those not already
 // appearing to the cache and the underlying database. It modifies the pathSet
-// to contain only those paths added.
+// to contain only those paths added. Note that duplicate paths may be added
+// to the database using this function: it only checks the cache, not the
+// database, before adding, for performance reasons.
 func (cache PathCache) CacheNewPaths(db orm.DB, pathSet map[string]struct{}) error {
 	// first, reduce to paths not already in the cache
 	for ps := range pathSet {
@@ -77,6 +81,8 @@ func (cache PathCache) CacheNewPaths(db orm.DB, pathSet map[string]struct{}) err
 	return <-streamerr
 }
 
+// InsertOnce retrieves a path's ID if it has already been inserted into the
+// database, inserting it into the database if it's not already there.
 func (p *Path) InsertOnce(db orm.DB) error {
 	if p.ID == 0 {
 		_, err := db.Model(p).

@@ -19,7 +19,7 @@ import (
 // set to true to allow inspection of tables after testing
 const SuppressDropTables = false
 
-func setupRDS(config *pto3.PTOServerConfig, azr pto3.Authorizer) *pto3.RawDataStore {
+func setupRDS(config *pto3.PTOConfiguration, azr pto3.Authorizer) *pto3.RawDataStore {
 	// create temporary RDS directory
 	var err error
 	config.RawRoot, err = ioutil.TempDir("", "pto3-test-raw")
@@ -42,7 +42,7 @@ func teardownRDS(rds *pto3.RawDataStore) {
 	}
 }
 
-func setupOSR(config *pto3.PTOServerConfig, azr pto3.Authorizer) *pto3.ObservationStore {
+func setupOSR(config *pto3.PTOConfiguration, azr pto3.Authorizer) *pto3.ObservationStore {
 	// create an RDS
 	osr, err := pto3.NewObservationStore(config, azr)
 	if err != nil {
@@ -69,7 +69,7 @@ func teardownOSR(osr *pto3.ObservationStore) {
 	}
 }
 
-// func setupQC(config *pto3.PTOServerConfig, azr pto3.Authorizer) *pto3.QueryCache {
+// func setupQC(config *pto3.PTOConfiguration, azr pto3.Authorizer) *pto3.QueryCache {
 // 	// create temporary QC directory
 // 	var err error
 // 	config.QueryCacheRoot, err = ioutil.TempDir("", "pto3-test-queries")
@@ -169,7 +169,7 @@ func executeWithFile(r *mux.Router, t *testing.T,
 
 const TestBaseURL = "https://ptotest.mami-project.eu"
 
-var TestConfig *pto3.PTOServerConfig
+var TestConfig *pto3.PTOConfiguration
 var TestRouter *mux.Router
 
 var TestRC int

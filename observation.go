@@ -2,7 +2,6 @@ package pto3
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -22,24 +21,31 @@ import (
 // Observation data model for PTO3 obs and query
 // including PostgreSQL object-relational mapping
 
+// ObservationSet represents an PTO observation set and its metadata.
 type ObservationSet struct {
-	ID                int
-	Sources           []string `pg:",array"`
-	Analyzer          string
-	Conditions        []Condition `pg:",many2many:observation_set_conditions"`
-	conditionDeclared map[int]bool
-	Metadata          map[string]string
-	datalink          string
-	link              string
-	count             int
+	// Observation set ID in the database
+	ID int
+	// Array of source URLs, from _sources metadata key
+	Sources []string `pg:",array"`
+	// Analyzer metadata URL, from _analyzer metadata key
+	Analyzer string
+	// Conditions declared to appear in this observation set,
+	Conditions []Condition `pg:",many2many:observation_set_conditions"`
+	// Arbitrary metadata
+	Metadata map[string]string
+	datalink string
+	link     string
+	count    int
 }
 
+// ObservationSetCondition implements a linking table between observation sets
+// and conditions appearing therein.
 type ObservationSetCondition struct {
 	ObservationSetID int
 	ConditionID      int
 }
 
-// MarshalJSON turns this observation set into a JSON observation set metadata
+// MarshalJSON serializes this ObservationSet into a JSON observation set metadata
 // object suitable for use with the PTO API or as a line in an Observation Set
 // File.
 func (set *ObservationSet) MarshalJSON() ([]byte, error) {
@@ -75,7 +81,7 @@ func (set *ObservationSet) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jmap)
 }
 
-// UnmarshalJSON fills in an observation set from a JSON observation set
+// UnmarshalJSON fills in an ObservationSet from a JSON observation set
 // metadata object suitable for use with the PTO API.
 func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 	set.Metadata = make(map[string]string)
@@ -88,9 +94,6 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 
 	// zero ID, it will be assigned on insertion or from the URI
 	set.ID = 0
-
-	// invalidate declared condition cache
-	set.conditionDeclared = nil
 
 	var ok bool
 	for k, v := range jmap {
@@ -136,7 +139,7 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func (set *ObservationSet) ValidateConditions(db orm.DB) error {
+func (set *ObservationSet) ensureConditionsInDB(db orm.DB) error {
 	for i := range set.Conditions {
 		if err := set.Conditions[i].InsertOnce(db); err != nil {
 			return err
@@ -145,13 +148,17 @@ func (set *ObservationSet) ValidateConditions(db orm.DB) error {
 	return nil
 }
 
+// Insert inserts an ObservationSet into the database. A row is inserted if
+// the observation set has not already been inserted (i.e., has no ID) or if
+// the force flag is set.
 func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 	if force {
 		set.ID = 0
 	}
+
 	if set.ID == 0 {
 		// ensure conditions have IDs
-		if err := set.ValidateConditions(db); err != nil {
+		if err := set.ensureConditionsInDB(db); err != nil {
 			return err
 		}
 
@@ -172,9 +179,8 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 	return nil
 }
 
+// SelectByID selects values for this ObservationSet from the database by its ID.
 func (set *ObservationSet) SelectByID(db orm.DB) error {
-	// TODO file a bug against go-pg or its docs: this does not work, we have to brute force it instead.
-	// return db.Model(set).Column("observation_set.*", "Conditions").Where("id = ?", set.ID).First()
 
 	if err := db.Model(set).Column("observation_set.*").Where("id = ?", set.ID).First(); err != nil {
 		return err
@@ -201,9 +207,11 @@ func (set *ObservationSet) SelectByID(db orm.DB) error {
 	return nil
 }
 
+// Update updates this ObservationSet in the database by overwriting the DB's
+// values with its own, by ID.
 func (set *ObservationSet) Update(db orm.DB) error {
 	// ensure new conditions are in the database
-	if err := set.ValidateConditions(db); err != nil {
+	if err := set.ensureConditionsInDB(db); err != nil {
 		return err
 	}
 
@@ -213,7 +221,6 @@ func (set *ObservationSet) Update(db orm.DB) error {
 	}
 
 	// now delete and restore conditions
-	// See https://github.com/mami-project/pto3-go/issues/20
 	_, err := db.Exec("DELETE FROM observation_set_conditions WHERE observation_set_id = ?", set.ID)
 	if err != nil {
 		return err
@@ -229,16 +236,20 @@ func (set *ObservationSet) Update(db orm.DB) error {
 	return nil
 }
 
+// LinkForSetID generates a link from a base URL and a set ID. Observation set
+// links are given by set ID as a hexadecimal string.
 func LinkForSetID(baseurl *url.URL, setid int) string {
 	seturl, _ := url.Parse(fmt.Sprintf("obs/%016x", setid))
 	return baseurl.ResolveReference(seturl).String()
 }
 
+// LinkVia sets this ObservationSet's link and datalink given a base URL
 func (set *ObservationSet) LinkVia(baseurl *url.URL) {
 	set.link = LinkForSetID(baseurl, set.ID)
 	set.datalink = set.link + "/data"
 }
 
+// CountObservations counts observations in the database for this ObservationSet
 func (set *ObservationSet) CountObservations(db orm.DB) int {
 	if set.count == 0 {
 		set.count, _ = db.Model(&Observation{}).Where("set_id = ?", set.ID).Count()
@@ -246,14 +257,32 @@ func (set *ObservationSet) CountObservations(db orm.DB) int {
 	return set.count
 }
 
-type UndeclaredErrorCondition struct {
+func (set *ObservationSet) verifyConditionSet(conditionNames map[string]struct{}) error {
+	// make a set condition names declared in the condition set
+	conditionDeclared := make(map[string]struct{})
+	for _, c := range set.Conditions {
+		conditionDeclared[c.Name] = struct{}{}
+	}
+
+	// look for name in condition names not declared in the set, raise error if so
+	for conditionName := range conditionNames {
+		if _, ok := conditionDeclared[conditionName]; !ok {
+			return &undeclaredConditionError{conditionName}
+		}
+	}
+
+	return nil
+}
+
+type undeclaredConditionError struct {
 	condition string
 }
 
-func (uec *UndeclaredErrorCondition) Error() string {
+func (uec *undeclaredConditionError) Error() string {
 	return fmt.Sprintf("observation has condition %s not declared in set", uec.condition)
 }
 
+// Observation represents a single observation, within an observation set
 type Observation struct {
 	ID          int `sql:",pk"`
 	SetID       int
@@ -267,8 +296,8 @@ type Observation struct {
 	Value       int
 }
 
-// MarshalJSON turns this observation into a JSON array suitable for use as a
-// line in an Observation Set File.
+// MarshalJSON turns this Observation into a JSON array suitable for use as a
+// line in an observation file.
 func (obs *Observation) MarshalJSON() ([]byte, error) {
 	jslice := []string{
 		fmt.Sprintf("%x", obs.SetID),
@@ -285,19 +314,8 @@ func (obs *Observation) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&jslice)
 }
 
-// UnmarshalJSON fills in this observation from a JSON array line in an
-// Observation Set File.
-func (obs *Observation) UnmarshalJSON(b []byte) error {
-	var jslice []string
-
-	err := json.Unmarshal(b, &jslice)
-	if err != nil {
-		return err
-	}
-
-	if len(jslice) < 5 {
-		return errors.New("Observation requires at least five elements")
-	}
+// UnmarshalStringSlice fills in this observation from a string slice. This is used by both JSON unmarshaling and CSV unmarshaling (in CopyDataToStream)
+func (obs *Observation) unmarshalStringSlice(jslice []string) error {
 
 	obs.ID = 0
 	if len(jslice[0]) > 0 {
@@ -335,95 +353,22 @@ func (obs *Observation) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func (obs *Observation) InsertInSet(db orm.DB, set *ObservationSet) error {
-	if set.conditionDeclared == nil {
-		set.conditionDeclared = make(map[int]bool)
-		for i := range set.Conditions {
+// UnmarshalJSON fills in this Observation from a JSON array line in an
+// observation file.
+func (obs *Observation) UnmarshalJSON(b []byte) error {
+	var jslice []string
 
-			set.conditionDeclared[set.Conditions[i].ID] = true
-		}
-		log.Printf("rebuilt declared condition map for set %x: %d conditions", set.ID, len(set.conditionDeclared))
-	}
-
-	if err := obs.Path.InsertOnce(db); err != nil {
-		return err
-	}
-	obs.PathID = obs.Path.ID
-
-	if err := obs.Condition.InsertOnce(db); err != nil {
-		return err
-	}
-	obs.ConditionID = obs.Condition.ID
-
-	if !set.conditionDeclared[obs.ConditionID] {
-		return &UndeclaredErrorCondition{obs.Condition.Name}
-	}
-
-	obs.Set = set
-	if err := obs.Set.Insert(db, false); err != nil {
-		return err
-	}
-	obs.SetID = obs.Set.ID
-
-	return db.Insert(obs)
-}
-
-func ObservationsBySetID(db orm.DB, setid int) ([]Observation, error) {
-	var obsdat []Observation
-
-	err := db.Model(&obsdat).
-		Column("observation.*", "Condition", "Path").
-		Where("set_id = ?", setid).
-		Select()
+	err := json.Unmarshal(b, &jslice)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return obsdat, nil
-}
-
-func WriteObservations(obsdat []Observation, out io.Writer) error {
-	for _, obs := range obsdat {
-		b, err := json.Marshal(&obs)
-		if err != nil {
-			return err
-		}
-		_, err = out.Write(b)
-		if err != nil {
-			return err
-		}
-		_, err = out.Write([]byte("\n"))
-		if err != nil {
-			return err
-		}
+	if len(jslice) < 5 {
+		return errors.New("Observation requires at least five elements")
 	}
-	return nil
-}
 
-func MarshalObservations(obsdat []Observation) ([]byte, error) {
-	var out bytes.Buffer
-	err := WriteObservations(obsdat, &out)
-	if err != nil {
-		return nil, err
-	}
-	return out.Bytes(), err
-}
+	return obs.unmarshalStringSlice(jslice)
 
-func ReadObservations(in io.Reader) ([]Observation, error) {
-	sin := bufio.NewScanner(in)
-	out := make([]Observation, 0)
-	var obs Observation
-	for sin.Scan() {
-		if err := json.Unmarshal([]byte(sin.Text()), &obs); err != nil {
-			return nil, err
-		}
-		out = append(out, obs)
-	}
-	return out, nil
-}
-
-func UnmarshalObservations(in []byte) ([]Observation, error) {
-	return ReadObservations(bytes.NewBuffer(in))
 }
 
 // CreateTables insures that the tables used by the ORM exist in the given
@@ -488,17 +433,18 @@ func DropTables(db *pg.DB) error {
 	})
 }
 
-// extractFirstPass scans a file, getting metadata (in the form of an observation set) and a set of paths
-func extractFirstPass(r *os.File) (*ObservationSet, map[string]struct{}, error) {
+// obsFileFirstPass scans a file, getting metadata (in the form of an observation set), a set of paths, and a set of conditions
+func obsFileFirstPass(r *os.File) (*ObservationSet, map[string]struct{}, map[string]struct{}, error) {
 	filename := r.Name()
 
 	// create an observation set to hold metadata
 	set := ObservationSet{}
 
-	// and a map to hold the set of paths
+	// and maps to hold paths and conditions
 	pathSeen := make(map[string]struct{})
+	conditionSeen := make(map[string]struct{})
 
-	// now scan the file for metadata and paths
+	// now scan the file for metadata, paths, and conditions
 	var lineno = 0
 	in := bufio.NewScanner(r)
 	for in.Scan() {
@@ -507,25 +453,34 @@ func extractFirstPass(r *os.File) (*ObservationSet, map[string]struct{}, error) 
 		switch line[0] {
 		case '{':
 			if err := set.UnmarshalJSON([]byte(line)); err != nil {
-				return nil, nil, fmt.Errorf("error in metadata at %s line %d: %s", filename, lineno, err.Error())
+				return nil, nil, nil, fmt.Errorf("error in metadata at %s line %d: %s", filename, lineno, err.Error())
 			}
 		case '[':
 			var obs []string
 			if err := json.Unmarshal([]byte(line), &obs); err != nil {
-				return nil, nil, fmt.Errorf("error looking for path at %s line %d: %s", filename, lineno, err.Error())
+				return nil, nil, nil, fmt.Errorf("error looking for path at %s line %d: %s", filename, lineno, err.Error())
 			}
 			if len(obs) < 4 {
-				return nil, nil, fmt.Errorf("short observation looking for path at %s line %d", filename, lineno)
+				return nil, nil, nil, fmt.Errorf("short observation looking for path at %s line %d", filename, lineno)
 			}
 			pathSeen[obs[3]] = struct{}{}
+			conditionSeen[obs[4]] = struct{}{}
 		}
 	}
 
 	// done
-	return &set, pathSeen, nil
+	return &set, pathSeen, conditionSeen, nil
 }
 
-func writeObsToCSV(setID int, cidCache map[string]int, pidCache map[string]int, line string, out *csv.Writer) error {
+// writeObsToCSV writes an unparsed observation to a CSV writer, for COPY FROM
+// loading of observations into a PostgreSQL table.
+func writeObsToCSV(
+	set *ObservationSet,
+	cidCache ConditionCache,
+	pidCache PathCache,
+	line string,
+	out *csv.Writer) error {
+
 	var jslice []string
 
 	if err := json.Unmarshal([]byte(line), &jslice); err != nil {
@@ -538,7 +493,7 @@ func writeObsToCSV(setID int, cidCache map[string]int, pidCache map[string]int, 
 	}
 
 	// replace set ID
-	jslice[0] = fmt.Sprintf("%d", setID)
+	jslice[0] = fmt.Sprintf("%d", set.ID)
 
 	// replace path string with path ID
 	jslice[3] = fmt.Sprintf("%d", pidCache[jslice[3]])
@@ -550,7 +505,13 @@ func writeObsToCSV(setID int, cidCache map[string]int, pidCache map[string]int, 
 	return out.Write(jslice)
 }
 
-func loadObservations(cidCache map[string]int, pidCache map[string]int, t *pg.Tx, set *ObservationSet, r *os.File) error {
+func loadObservations(
+	cidCache ConditionCache,
+	pidCache PathCache,
+	t *pg.Tx,
+	set *ObservationSet,
+	r *os.File) error {
+
 	lineno := 0
 
 	dbpipe, obspipe, err := os.Pipe()
@@ -572,7 +533,7 @@ func loadObservations(cidCache map[string]int, pidCache map[string]int, t *pg.Tx
 			lineno++
 			line := strings.TrimSpace(in.Text())
 			if line[0] == '[' {
-				if err := writeObsToCSV(set.ID, cidCache, pidCache, line, out); err != nil {
+				if err := writeObsToCSV(set, cidCache, pidCache, line, out); err != nil {
 					converr <- err
 				}
 			}
@@ -590,8 +551,15 @@ func loadObservations(cidCache map[string]int, pidCache map[string]int, t *pg.Tx
 	return <-converr
 }
 
-// LoadObservationFile loads an observation file into a database, using a given cache to cache path IDs.
-func LoadObservationFile(filename string, db *pg.DB, pidCache PathCache) (*ObservationSet, error) {
+// CopySetFromObsFile loads an observation file from a local path into the
+// database. It uses given caches to cache condition and path IDs, and creates the
+// ObservationSet from the metadata found in the file. This is used by ptoload
+// to load observation sets created by local analysis into the database.
+func CopySetFromObsFile(
+	filename string,
+	db *pg.DB,
+	cidCache ConditionCache,
+	pidCache PathCache) (*ObservationSet, error) {
 
 	obsfile, err := os.Open(filename)
 	if err != nil {
@@ -599,34 +567,41 @@ func LoadObservationFile(filename string, db *pg.DB, pidCache PathCache) (*Obser
 	}
 	defer obsfile.Close()
 
-	set, pathSet, err := extractFirstPass(obsfile)
+	// first pass: extract paths, conditions, and metadata
+	set, pathSet, conditionSet, err := obsFileFirstPass(obsfile)
 	if err != nil {
 		return nil, err
 	}
 
+	// ensure every condition is declared
+	if err := set.verifyConditionSet(conditionSet); err != nil {
+		return nil, err
+	}
+
+	// now rewind for a second pass
 	if _, err := obsfile.Seek(0, 0); err != nil {
 		return nil, err
 	}
 
+	// spin up a transaction
 	err = db.RunInTransaction(func(t *pg.Tx) error {
 
-		cidCache, err := cacheConditionIDs(t, set)
-		if err != nil {
+		// make sure conditions are inserted
+		if err := cidCache.FillConditionIDsInSet(t, set); err != nil {
 			return err
 		}
-		log.Printf("%s: first pass cached %d conditions", filename, len(cidCache))
 
+		// make sure paths are inserted
 		if err := pidCache.CacheNewPaths(t, pathSet); err != nil {
 			return err
 		}
 
-		log.Printf("%s: first pass cached %d paths", filename, len(pidCache))
-
+		// insert the set
 		if err := set.Insert(t, true); err != nil {
 			return err
 		}
-		log.Printf("%s: allocated set id %x, loading observations", filename, set.ID)
 
+		// now insert the observations
 		return loadObservations(cidCache, pidCache, t, set, obsfile)
 	})
 
@@ -636,3 +611,203 @@ func LoadObservationFile(filename string, db *pg.DB, pidCache PathCache) (*Obser
 
 	return set, nil
 }
+
+// CopyDataFromObsFile loads an observation file from a local path into the
+// database. It requires an ObservationSet to already exist in the database.
+// It uses given caches to cache condition and path IDs, and checks conditions
+// against those declared. This is used by ptoload to load observation sets
+// created by local analysis into the database.
+func CopyDataFromObsFile(
+	filename string,
+	db *pg.DB, set *ObservationSet,
+	cidCache ConditionCache,
+	pidCache PathCache) error {
+
+	obsfile, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer obsfile.Close()
+
+	// first pass: extract paths and conditions
+	_, pathSet, conditionSet, err := obsFileFirstPass(obsfile)
+	if err != nil {
+		return err
+	}
+
+	// ensure every condition is declared
+	if err := set.verifyConditionSet(conditionSet); err != nil {
+		return err
+	}
+
+	// now rewind for a second pass
+	if _, err := obsfile.Seek(0, 0); err != nil {
+		return err
+	}
+
+	// spin up a transaction
+	return db.RunInTransaction(func(t *pg.Tx) error {
+
+		// make sure paths are inserted
+		if err := pidCache.CacheNewPaths(t, pathSet); err != nil {
+			return err
+		}
+
+		// now insert the observations
+		return loadObservations(cidCache, pidCache, t, set, obsfile)
+	})
+}
+
+// CopyDataToStream copies all the observations in this observation set in
+// observation file format to the given stream
+func (set *ObservationSet) CopyDataToStream(db *pg.DB, out io.Writer) error {
+
+	// create some pipes
+	obspipe, dbpipe, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	defer dbpipe.Close()
+
+	converr := make(chan error, 1)
+
+	// wrap a CSV reader around the read side
+	in := csv.NewReader(obspipe)
+
+	// set up goroutine to parse observations and dump them to the writer as JSON
+	go func() {
+		defer obspipe.Close()
+		var obs Observation
+		for {
+			cslice, err := in.Read()
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				converr <- err
+				return
+			}
+
+			if err := obs.unmarshalStringSlice(cslice); err != nil {
+				converr <- err
+				return
+			}
+
+			b, err := obs.MarshalJSON()
+			if err != nil {
+				converr <- err
+				return
+			}
+
+			if _, err := out.Write(b); err != nil {
+				converr <- err
+				return
+			}
+		}
+
+		converr <- nil
+	}()
+
+	// now kick off a copy query
+	if _, err := db.CopyTo(dbpipe, "COPY (SELECT set_id, start_time, end_time, string, name, value from observations JOIN conditions ON conditions.id = observations.condition_id JOIN paths ON paths.id = observations.path_id WHERE set_id = ?;) TO STDIN WITH CSV", set.ID); err != nil {
+		return err
+	}
+
+	// and wait for the copy goroutine to finish
+	return <-converr
+}
+
+//
+// Old code: everything down here was based on the idea of singleton insertion
+// and retrieval of observations, which appears to be too slow to use. All of
+// this has been replaced with the bulk load and bulk select code above.
+//
+
+// func (obs *Observation) InsertInSet(db orm.DB, set *ObservationSet) error {
+// 	if set.conditionDeclared == nil {
+// 		set.conditionDeclared = make(map[int]bool)
+// 		for i := range set.Conditions {
+
+// 			set.conditionDeclared[set.Conditions[i].ID] = true
+// 		}
+// 	}
+
+// 	if err := obs.Path.InsertOnce(db); err != nil {
+// 		return err
+// 	}
+// 	obs.PathID = obs.Path.ID
+
+// 	if err := obs.Condition.InsertOnce(db); err != nil {
+// 		return err
+// 	}
+// 	obs.ConditionID = obs.Condition.ID
+
+// 	if !set.conditionDeclared[obs.ConditionID] {
+// 		return &undeclaredConditionError{obs.Condition.Name}
+// 	}
+
+// 	obs.Set = set
+// 	if err := obs.Set.Insert(db, false); err != nil {
+// 		return err
+// 	}
+// 	obs.SetID = obs.Set.ID
+
+// 	return db.Insert(obs)
+// }
+
+// func ObservationsBySetID(db orm.DB, setid int) ([]Observation, error) {
+// 	var obsdat []Observation
+
+// 	err := db.Model(&obsdat).
+// 		Column("observation.*", "Condition", "Path").
+// 		Where("set_id = ?", setid).
+// 		Select()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	return obsdat, nil
+// }
+
+// func WriteObservations(obsdat []Observation, out io.Writer) error {
+// 	for _, obs := range obsdat {
+// 		b, err := json.Marshal(&obs)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		_, err = out.Write(b)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		_, err = out.Write([]byte("\n"))
+// 		if err != nil {
+// 			return err
+// 		}
+// 	}
+// 	return nil
+// }
+
+// func MarshalObservations(obsdat []Observation) ([]byte, error) {
+// 	var out bytes.Buffer
+// 	err := WriteObservations(obsdat, &out)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return out.Bytes(), err
+// }
+
+// func ReadObservations(in io.Reader) ([]Observation, error) {
+// 	sin := bufio.NewScanner(in)
+// 	out := make([]Observation, 0)
+// 	var obs Observation
+// 	for sin.Scan() {
+// 		if err := json.Unmarshal([]byte(sin.Text()), &obs); err != nil {
+// 			return nil, err
+// 		}
+// 		out = append(out, obs)
+// 	}
+// 	return out, nil
+// }
+
+// func UnmarshalObservations(in []byte) ([]Observation, error) {
+// 	return ReadObservations(bytes.NewBuffer(in))
+// }

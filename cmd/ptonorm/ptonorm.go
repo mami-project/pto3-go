@@ -79,7 +79,7 @@ func filterMetadata(from io.ReadCloser, to io.Writer, sourceurl string, errchan 
 	close(donechan)
 }
 
-func PtoNorm(config *pto3.PTOServerConfig, outfile io.Writer,
+func PtoNorm(config *pto3.PTOConfiguration, outfile io.Writer,
 	normCmd string, campaign string, filename string) error {
 
 	// create a raw data store (no need for an authorizer)
