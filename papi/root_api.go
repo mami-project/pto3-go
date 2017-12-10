@@ -2,24 +2,27 @@ package papi
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
-	"net/url"
 
 	"github.com/gorilla/mux"
+	pto3 "github.com/mami-project/pto3-go"
 )
 
-func (config *PTOConfiguration) HandleRoot(w http.ResponseWriter, r *http.Request) {
+type RootAPI struct {
+	config *pto3.PTOConfiguration
+}
+
+func (ra *RootAPI) handleRoot(w http.ResponseWriter, r *http.Request) {
 
 	links := make(map[string]string)
 
-	if config.RawRoot != "" {
-		rawrel, _ := url.Parse("raw")
-		links["raw"] = config.baseURL.ResolveReference(rawrel).String()
+	if ra.config.RawRoot != "" {
+		links["raw"], _ = ra.config.LinkTo("raw")
 	}
 
-	if config.ObsDatabase.Database != "" {
-		obsrel, _ := url.Parse("obs")
-		links["obs"] = config.baseURL.ResolveReference(obsrel).String()
+	if ra.config.ObsDatabase.Database != "" {
+		links["obs"], _ = ra.config.LinkTo("obs")
 	}
 
 	linksj, err := json.Marshal(links)
@@ -34,6 +37,11 @@ func (config *PTOConfiguration) HandleRoot(w http.ResponseWriter, r *http.Reques
 	w.Write(linksj)
 }
 
-func (config *PTOConfiguration) AddRoutes(r *mux.Router) {
-	r.HandleFunc("/", LogAccess(config.accessLogger, config.HandleRoot)).Methods("GET")
+func (ra *RootAPI) addRoutes(r *mux.Router, l *log.Logger) {
+	r.HandleFunc("/", LogAccess(l, ra.handleRoot)).Methods("GET")
+}
+
+func NewRootAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router, l *log.Logger) *RootAPI {
+	ra = new(RootAPI)
+	ra.config = config
 }

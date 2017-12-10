@@ -40,20 +40,26 @@ type PTOConfiguration struct {
 	accessLogger  *log.Logger
 }
 
-func (config *PTOConfiguration) ParseURL() error {
-	var err error
-	config.baseURL, err = url.Parse(config.BaseURL)
-	return err
+// LinkFromBaseURL
+func (config *PTOConfiguration) LinkTo(relative string) (string, error) {
+	u, err := url.Parse(relative)
+	if err != nil {
+		return "", err
+	}
+
+	return config.baseURL.ResolveReference(u).String(), nil
 }
 
 func NewConfigFromJSON(b []byte) (*PTOConfiguration, error) {
 	var config PTOConfiguration
+	var err error
 
 	if err := json.Unmarshal(b, &config); err != nil {
 		return nil, err
 	}
 
-	if err := config.ParseURL(); err != nil {
+	config.baseURL, err = url.Parse(config.BaseURL)
+	if err != nil {
 		return nil, err
 	}
 

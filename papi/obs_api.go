@@ -23,12 +23,12 @@ type ObsAPI struct {
 
 func (oa *ObsAPI) writeMetadataResponse(w http.ResponseWriter, set *pto3.ObservationSet, status int) {
 	// compute a link for the observation set
-	set.LinkVia(oa.config.baseURL)
+	set.LinkVia(oa.config)
 
 	// now write it to the response
 	b, err := json.Marshal(&set)
 	if err != nil {
-		LogInternalServerError(w, "marshaling metadata", err)
+		pto3.HandleErrorHTTP(w, "marshaling metadata", err)
 		return
 	}
 	w.WriteHeader(status)
@@ -46,21 +46,21 @@ func (oa *ObsAPI) handleListSets(w http.ResponseWriter, r *http.Request) {
 
 	// select set IDs into an array
 	// FIXME this should go into model.go
-	if err := oa.db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&setIds)); err != nil && err != pg.ErrNoRows {
-		LogInternalServerError(w, "listing set IDs", err)
+	if err := oa.db.Model(&pto3.ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&setIds)); err != nil && err != pg.ErrNoRows {
+		pto3.HandleErrorHTTP(w, "listing set IDs", err)
 		return
 	}
 
 	// linkify them
 	sets := setList{make([]string, len(setIds))}
 	for i, id := range setIds {
-		sets.Sets[i] = LinkForSetID(oa.config.baseURL, id)
+		sets.Sets[i] = pto3.LinkForSetID(oa.config, id)
 	}
 
 	// FIXME pagination goes here
 	outb, err := json.Marshal(sets)
 	if err != nil {
-		LogInternalServerError(w, "marshaling set list", err)
+		pto3.HandleErrorHTTP(w, "marshaling set list", err)
 		return
 	}
 
@@ -93,7 +93,7 @@ func (oa *ObsAPI) handleCreateSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var set ObservationSet
+	var set pto3.ObservationSet
 	if err := json.Unmarshal(b, &set); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -106,7 +106,7 @@ func (oa *ObsAPI) handleCreateSet(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		log.Print(err)
-		LogInternalServerError(w, "inserting set record", err)
+		pto3.HandleErrorHTTP(w, "inserting set record", err)
 		return
 	}
 
@@ -130,12 +130,12 @@ func (oa *ObsAPI) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	set := ObservationSet{ID: int(setid)}
+	set := pto3.ObservationSet{ID: int(setid)}
 	if err = set.SelectByID(oa.db); err != nil {
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {
-			LogInternalServerError(w, "retrieving set", err)
+			pto3.HandleErrorHTTP(w, "retrieving set", err)
 		}
 		return
 	}
@@ -175,7 +175,7 @@ func (oa *ObsAPI) handlePutMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var set ObservationSet
+	var set pto3.ObservationSet
 	if err := json.Unmarshal(b, &set); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -190,7 +190,7 @@ func (oa *ObsAPI) handlePutMetadata(w http.ResponseWriter, r *http.Request) {
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {
-			LogInternalServerError(w, "updating set metadata", err)
+			pto3.HandleErrorHTTP(w, "updating set metadata", err)
 		}
 		return
 	}
@@ -263,12 +263,12 @@ func (oa *ObsAPI) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// retrieve set metadata
-	set := ObservationSet{ID: int(setid)}
+	set := pto3.ObservationSet{ID: int(setid)}
 	if err := set.SelectByID(oa.db); err != nil {
 		if err == pg.ErrNoRows {
 			http.Error(w, fmt.Sprintf("Observation set %s not found", vars["set"]), http.StatusNotFound)
 		} else {
-			LogInternalServerError(w, "retrieving set metadata", err)
+			pto3.HandleErrorHTTP(w, "retrieving set metadata", err)
 		}
 		return
 	}
@@ -304,7 +304,7 @@ func (oa *ObsAPI) handleUpload(w http.ResponseWriter, r *http.Request) {
 	pidCache := make(pto3.PathCache)
 
 	// now insert the tempfile into the database
-	if err := pto3.CopyDataFromObsFile(tf.Name(), oa.db, set, cidCache, pidCache); err != nil {
+	if err := pto3.CopyDataFromObsFile(tf.Name(), oa.db, &set, cidCache, pidCache); err != nil {
 		pto3.HandleErrorHTTP(w, "inserting observations", err)
 		return
 	}
@@ -336,17 +336,17 @@ func (oa *ObsAPI) EnableQueryLogging() {
 }
 
 func (oa *ObsAPI) addRoutes(r *mux.Router, l *log.Logger) {
-	r.handleFunc("/obs", LogAccess(l, oa.handleListSets)).Methods("GET")
-	r.handleFunc("/obs/create", LogAccess(l, oa.handleCreateSet)).Methods("POST")
-	r.handleFunc("/obs/{set}", LogAccess(l, oa.handleGetMetadata)).Methods("GET")
-	r.handleFunc("/obs/{set}", LogAccess(l, oa.handlePutMetadata)).Methods("PUT")
-	r.handleFunc("/obs/{set}/data", LogAccess(l, oa.handleDownload)).Methods("GET")
-	r.handleFunc("/obs/{set}/data", LogAccess(l, oa.handleUpload)).Methods("PUT")
+	r.HandleFunc("/obs", LogAccess(l, oa.handleListSets)).Methods("GET")
+	r.HandleFunc("/obs/create", LogAccess(l, oa.handleCreateSet)).Methods("POST")
+	r.HandleFunc("/obs/{set}", LogAccess(l, oa.handleGetMetadata)).Methods("GET")
+	r.HandleFunc("/obs/{set}", LogAccess(l, oa.handlePutMetadata)).Methods("PUT")
+	r.HandleFunc("/obs/{set}/data", LogAccess(l, oa.handleDownload)).Methods("GET")
+	r.HandleFunc("/obs/{set}/data", LogAccess(l, oa.handleUpload)).Methods("PUT")
 }
 
 func NewObsAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router, l *log.Logger) *ObsAPI {
 	if config.ObsDatabase.Database == "" {
-		return nil, nil
+		return nil
 	}
 
 	oa := new(ObsAPI)

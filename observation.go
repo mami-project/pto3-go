@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -236,16 +235,16 @@ func (set *ObservationSet) Update(db orm.DB) error {
 	return nil
 }
 
-// LinkForSetID generates a link from a base URL and a set ID. Observation set
+// LinkForSetID generates a link from given PTO configuration and a set ID. Observation set
 // links are given by set ID as a hexadecimal string.
-func LinkForSetID(baseurl *url.URL, setid int) string {
-	seturl, _ := url.Parse(fmt.Sprintf("obs/%016x", setid))
-	return baseurl.ResolveReference(seturl).String()
+func LinkForSetID(config *PTOConfiguration, setid int) string {
+	out, _ := config.LinkTo(fmt.Sprintf("obs/%016x", setid))
+	return out
 }
 
-// LinkVia sets this ObservationSet's link and datalink given a base URL
-func (set *ObservationSet) LinkVia(baseurl *url.URL) {
-	set.link = LinkForSetID(baseurl, set.ID)
+// LinkVia sets this ObservationSet's link and datalink given a configuration
+func (set *ObservationSet) LinkVia(config *PTOConfiguration) {
+	set.link = LinkForSetID(config, set.ID)
 	set.datalink = set.link + "/data"
 }
 

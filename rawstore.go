@@ -426,11 +426,10 @@ func (cam *Campaign) updateFileVirtualMetadata(filename string) error {
 	}
 
 	// generate data path
-	datarel, err := url.Parse("/raw/" + filepath.Base(cam.path) + "/" + filename + "/data")
+	md.datalink, err = cam.config.LinkTo("raw/" + filepath.Base(cam.path) + "/" + filename + "/data")
 	if err != nil {
 		return err
 	}
-	md.datalink = cam.config.baseURL.ResolveReference(datarel).String()
 
 	return nil
 }
@@ -636,11 +635,13 @@ type campaignList struct {
 }
 
 // CampaignForName returns a campaign object for a given name.
-func (rds *RawDataStore) CampaignForName(camname string) (*Campaign, error) {
-	// force a campaign rescan
-	err := rds.ScanCampaigns()
-	if err != nil {
-		return nil, err
+func (rds *RawDataStore) CampaignForName(camname string, rescan bool) (*Campaign, error) {
+	// force a campaign rescan if requestes
+	if rescan {
+		err := rds.ScanCampaigns()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// die if campaign not found
@@ -687,7 +688,7 @@ func StreamCopy(in io.Reader, out io.Writer) error {
 				return err
 			}
 		} else if err == io.EOF {
-			break
+			return nil
 		} else {
 			return err
 		}

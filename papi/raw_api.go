@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 	"path/filepath"
 
 	"github.com/mami-project/pto3-go"
@@ -21,7 +20,7 @@ type RawAPI struct {
 }
 
 func metadataResponse(w http.ResponseWriter, status int, cam *pto3.Campaign, filename string) {
-	var md *RawMetadata
+	var md *pto3.RawMetadata
 	var err error
 	if filename == "" {
 		md, err = cam.GetCampaignMetadata()
@@ -55,7 +54,7 @@ func (ra *RawAPI) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// force a campaign rescan
-	err := ra.ra.rds.ScanCampaigns()
+	err := ra.rds.ScanCampaigns()
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "scanning campaigns", err)
 		return
@@ -65,13 +64,13 @@ func (ra *RawAPI) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 	out := campaignList{make([]string, len(ra.rds.campaigns))}
 
 	i := 0
-	for k := range ra.ra.rds.campaigns {
-		camurl, err := url.Parse(fmt.Sprintf("raw/%s", k))
+	for k := range ra.rds.campaigns {
+		var err error
+		out.Campaigns[i], err = ra.config.LinkTo(fmt.Sprintf("raw/%s", k))
 		if err != nil {
 			pto3.HandleErrorHTTP(w, "generating campaign link", err)
 			return
 		}
-		out.Campaigns[i] = ra.config.baseURL.ResolveReference(camurl).String()
 		i++
 	}
 
@@ -112,14 +111,13 @@ func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Reque
 	}
 
 	// look up campaign
-	cam, ok := ra.rds.campaigns[camname]
-	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
+	cam, err := ra.rds.CampaignForName(camname, false)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "retrieving campaign", err)
 		return
 	}
 
 	var out campaignFileList
-	var err error
 	out.Metadata, err = cam.GetCampaignMetadata()
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "getting file metadata", err)
@@ -129,12 +127,12 @@ func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Reque
 	out.Files = make([]string, len(cam.fileMetadata))
 	i := 0
 	for filename := range cam.fileMetadata {
-		filepath, err := url.Parse("/raw/" + filepath.Base(cam.path) + "/" + filename)
+		var err error
+		out.Files[i], err = ra.config.LinkTo("raw/" + filepath.Base(cam.path) + "/" + filename)
 		if err != nil {
-			log.Print(err)
 			pto3.HandleErrorHTTP(w, "generating file link", err)
+			return
 		}
-		out.Files[i] = ra.config.baseURL.ResolveReference(filepath).String()
 		i++
 	}
 
@@ -183,20 +181,31 @@ func (ra *RawAPI) handlePutCampaignMetadata(w http.ResponseWriter, r *http.Reque
 	}
 
 	// unmarshal it
-	var in RawMetadata
+	var in pto3.RawMetadata
 	err = json.Unmarshal(b, &in)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// now look up the campaign
-	cam, ok := ra.rds.campaigns[camname]
-	if !ok {
-		// Campaign doesn't exist. We have to create it.
-		cam, err = ra.rds.CreateCampaign(camname, &in)
-		if err != nil {
-			pto3.HandleErrorHTTP(w, fmt.Sprintf("creating campaign %s", camname), err)
+	// now look up the campaign, rescanning local directories, and create if necessary.
+	cam, err := ra.rds.CampaignForName(camname, true)
+	if err != nil {
+		switch ev := err.(type) {
+		case *pto3.PTOError:
+			if ev.Status() == http.StatusNotFound {
+				// Campaign doesn't exist. We have to create it.
+				cam, err = ra.rds.CreateCampaign(camname, &in)
+				if err != nil {
+					pto3.HandleErrorHTTP(w, "creating campaign", err)
+					return
+				}
+			} else {
+				pto3.HandleErrorHTTP(w, "retrieving campaign", err)
+				return
+			}
+		default:
+			pto3.HandleErrorHTTP(w, "retrieving campaign", err)
 			return
 		}
 	}
@@ -235,9 +244,9 @@ func (ra *RawAPI) handleGetFileMetadata(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	cam, ok := ra.rds.campaigns[vars["campaign"]]
-	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
+	cam, err := ra.rds.CampaignForName(camname, false)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "retrieving campaign", err)
 		return
 	}
 
@@ -283,7 +292,7 @@ func (ra *RawAPI) handlePutFileMetadata(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// unmarshal it
-	var in RawMetadata
+	var in pto3.RawMetadata
 	err = json.Unmarshal(b, &in)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -291,9 +300,9 @@ func (ra *RawAPI) handlePutFileMetadata(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// now look up the campaign
-	cam, ok := ra.rds.campaigns[camname]
-	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
+	cam, err := ra.rds.CampaignForName(camname, false)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "retrieving campaign", err)
 		return
 	}
 
@@ -340,14 +349,14 @@ func (ra *RawAPI) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// now look up the campaign
-	cam, ok := ra.rds.campaigns[camname]
-	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", camname), http.StatusNotFound)
+	cam, err := ra.rds.CampaignForName(camname, false)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "retrieving campaign", err)
 		return
 	}
 
 	// determine MIME type
-	ft := cam.getFiletype(filename)
+	ft := cam.GetFiletype(filename)
 	if ft == nil {
 		pto3.HandleErrorHTTP(w, fmt.Sprintf("determining filetype for %s", filename), nil)
 		return
@@ -388,14 +397,14 @@ func (ra *RawAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// now look up the campaign
-	cam, ok := ra.rds.campaigns[camname]
-	if !ok {
-		http.Error(w, fmt.Sprintf("campaign %s not found", vars["campaign"]), http.StatusNotFound)
+	cam, err := ra.rds.CampaignForName(camname, false)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "retrieving campaign", err)
 		return
 	}
 
 	// determine and verify MIME type
-	ft := cam.getFiletype(filename)
+	ft := cam.GetFiletype(filename)
 	if ft == nil {
 		// fixme another way to do this?
 		pto3.HandleErrorHTTP(w, fmt.Sprintf("getting filetype for %s", filename), nil)
@@ -421,16 +430,15 @@ func (ra *RawAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	metadataResponse(w, http.StatusCreated, cam, filename)
 }
 
-func (ra *RawAPI) addRoutes(r *mux.Router) {
-	l := ra.config.accessLogger
-	r.handleFunc("/raw", LogAccess(l, ra.rds.handleListCampaigns)).Methods("GET")
-	r.handleFunc("/raw/{campaign}", LogAccess(l, ra.rds.handleGetCampaignMetadata)).Methods("GET")
-	r.handleFunc("/raw/{campaign}", LogAccess(l, ra.rds.handlePutCampaignMetadata)).Methods("PUT")
-	r.handleFunc("/raw/{campaign}/{file}", LogAccess(l, ra.rds.handleGetFileMetadata)).Methods("GET")
-	r.handleFunc("/raw/{campaign}/{file}", LogAccess(l, ra.rds.handlePutFileMetadata)).Methods("PUT")
-	r.handleFunc("/raw/{campaign}/{file}", LogAccess(l, ra.rds.handleDeleteFile)).Methods("DELETE")
-	r.handleFunc("/raw/{campaign}/{file}/data", LogAccess(l, ra.rds.handleFileDownload)).Methods("GET")
-	r.handleFunc("/raw/{campaign}/{file}/data", LogAccess(l, ra.rds.handleFileUpload)).Methods("PUT")
+func (ra *RawAPI) addRoutes(r *mux.Router, l *log.Logger) {
+	r.HandleFunc("/raw", LogAccess(l, ra.handleListCampaigns)).Methods("GET")
+	r.HandleFunc("/raw/{campaign}", LogAccess(l, ra.handleGetCampaignMetadata)).Methods("GET")
+	r.HandleFunc("/raw/{campaign}", LogAccess(l, ra.handlePutCampaignMetadata)).Methods("PUT")
+	r.HandleFunc("/raw/{campaign}/{file}", LogAccess(l, ra.handleGetFileMetadata)).Methods("GET")
+	r.HandleFunc("/raw/{campaign}/{file}", LogAccess(l, ra.handlePutFileMetadata)).Methods("PUT")
+	r.HandleFunc("/raw/{campaign}/{file}", LogAccess(l, ra.handleDeleteFile)).Methods("DELETE")
+	r.HandleFunc("/raw/{campaign}/{file}/data", LogAccess(l, ra.handleFileDownload)).Methods("GET")
+	r.HandleFunc("/raw/{campaign}/{file}/data", LogAccess(l, ra.handleFileUpload)).Methods("PUT")
 }
 
 func NewRawAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router, l *log.Logger) (*RawAPI, error) {
