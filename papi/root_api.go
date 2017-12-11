@@ -28,7 +28,7 @@ func (ra *RootAPI) handleRoot(w http.ResponseWriter, r *http.Request) {
 	linksj, err := json.Marshal(links)
 
 	if err != nil {
-		LogInternalServerError(w, "marshaling root link list", err)
+		pto3.HandleErrorHTTP(w, "marshaling root link list", err)
 		return
 	}
 
@@ -42,6 +42,8 @@ func (ra *RootAPI) addRoutes(r *mux.Router, l *log.Logger) {
 }
 
 func NewRootAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router, l *log.Logger) *RootAPI {
-	ra = new(RootAPI)
+	ra := new(RootAPI)
 	ra.config = config
+	ra.addRoutes(r, l)
+	return ra
 }

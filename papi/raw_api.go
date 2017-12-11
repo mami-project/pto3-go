@@ -43,6 +43,10 @@ func metadataResponse(w http.ResponseWriter, status int, cam *pto3.Campaign, fil
 	w.Write(b)
 }
 
+type campaignList struct {
+	Campaigns []string `json:"campaigns"`
+}
+
 // handleListCampaigns handles GET /raw, returning a list of campaigns in the
 // raw data store. It writes a JSON object to the response with a single key,
 // "campaigns", whose content is an array of campaign URL as strings.
@@ -61,17 +65,10 @@ func (ra *RawAPI) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// construct URLs based on the campaign
-	out := campaignList{make([]string, len(ra.rds.campaigns))}
-
-	i := 0
-	for k := range ra.rds.campaigns {
-		var err error
-		out.Campaigns[i], err = ra.config.LinkTo(fmt.Sprintf("raw/%s", k))
-		if err != nil {
-			pto3.HandleErrorHTTP(w, "generating campaign link", err)
-			return
-		}
-		i++
+	camnames := ra.rds.CampaignNames()
+	out := campaignList{Campaigns: make([]string, len(camnames))}
+	for i, camname := range camnames {
+		out.Campaigns[i], _ = ra.config.LinkTo(fmt.Sprintf("raw/%s", camname))
 	}
 
 	// FIXME pagination goes here
@@ -111,7 +108,7 @@ func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Reque
 	}
 
 	// look up campaign
-	cam, err := ra.rds.CampaignForName(camname, false)
+	cam, err := ra.rds.CampaignForName(camname)
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "retrieving campaign", err)
 		return
@@ -188,8 +185,8 @@ func (ra *RawAPI) handlePutCampaignMetadata(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// now look up the campaign, rescanning local directories, and create if necessary.
-	cam, err := ra.rds.CampaignForName(camname, true)
+	// now look up the campaig and create if necessary.
+	cam, err := ra.rds.CampaignForName(camname)
 	if err != nil {
 		switch ev := err.(type) {
 		case *pto3.PTOError:
@@ -244,7 +241,7 @@ func (ra *RawAPI) handleGetFileMetadata(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	cam, err := ra.rds.CampaignForName(camname, false)
+	cam, err := ra.rds.CampaignForName(camname)
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "retrieving campaign", err)
 		return
@@ -300,7 +297,7 @@ func (ra *RawAPI) handlePutFileMetadata(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// now look up the campaign
-	cam, err := ra.rds.CampaignForName(camname, false)
+	cam, err := ra.rds.CampaignForName(camname)
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "retrieving campaign", err)
 		return
@@ -349,7 +346,7 @@ func (ra *RawAPI) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// now look up the campaign
-	cam, err := ra.rds.CampaignForName(camname, false)
+	cam, err := ra.rds.CampaignForName(camname)
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "retrieving campaign", err)
 		return
@@ -397,7 +394,7 @@ func (ra *RawAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// now look up the campaign
-	cam, err := ra.rds.CampaignForName(camname, false)
+	cam, err := ra.rds.CampaignForName(camname)
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "retrieving campaign", err)
 		return

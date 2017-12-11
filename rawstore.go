@@ -630,20 +630,8 @@ func (rds *RawDataStore) CreateCampaign(camname string, md *RawMetadata) (*Campa
 	return cam, nil
 }
 
-type campaignList struct {
-	Campaigns []string `json:"campaigns"`
-}
-
 // CampaignForName returns a campaign object for a given name.
-func (rds *RawDataStore) CampaignForName(camname string, rescan bool) (*Campaign, error) {
-	// force a campaign rescan if requestes
-	if rescan {
-		err := rds.ScanCampaigns()
-		if err != nil {
-			return nil, err
-		}
-	}
-
+func (rds *RawDataStore) CampaignForName(camname string) (*Campaign, error) {
 	// die if campaign not found
 	cam, ok := rds.campaigns[camname]
 	if !ok {
@@ -651,6 +639,19 @@ func (rds *RawDataStore) CampaignForName(camname string, rescan bool) (*Campaign
 	}
 
 	return cam, nil
+}
+
+func (rds *RawDataStore) CampaignNames() []string {
+	// return list of names
+	rds.lock.RLock()
+	defer rds.lock.RUnlock()
+	out := make([]string, len(rds.campaigns))
+	i := 0
+	for k := range rds.campaigns {
+		out[i] = k
+		i++
+	}
+	return out
 }
 
 // NewRawDataStore encapsulates a raw data store, given a configuration object
