@@ -3,7 +3,6 @@
 // metadata. It is meant to allow the storage of preprocessed observations as
 // raw data in the PTO, as well as to provide for self-contained testing of
 // the local analysis runtime.
-
 package main
 
 import (
@@ -20,11 +19,14 @@ import (
 	"github.com/mami-project/pto3-go"
 )
 
-// ObsPassthrough implements a simple passthrough analyzer taking input and metadata on
+// ObsPassthrough implements a simple passthrough analyzer taking input and
+// metadata from two input streams and writing unified output to a single
+// stream. It checks the input streams for synactic correctness, and creates a
+// _conditions metadata key by tracking conditions in the input.
 func ObsPassthrough(in io.Reader, metain io.Reader, out io.Writer) error {
 
 	// unmarshal metadata into an RDS metadata object
-	md, err := pto3.RDSMetadataFromReader(metain, nil)
+	md, err := pto3.RawMetadataFromReader(metain, nil)
 	if err != nil {
 		return fmt.Errorf("could not read metadata: %s", err.Error())
 	}

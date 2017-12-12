@@ -1,4 +1,9 @@
-# Local Analyzer Interface
+
+# Using the Local Analyzer Command-Line Tools
+
+write me
+
+# Writing Local Analyzers
 
 Local analyzers are identified by the presence of an `_invocation` key in the
 analyzer metadata. Local analyzers are either normalizers (consuming raw data,

@@ -4,16 +4,14 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 
 	"github.com/go-pg/pg"
-	"github.com/gorilla/mux"
 )
 
-// PTOServerConfig contains a configuration of a PTO server
-type PTOServerConfig struct {
+// PTOConfiguration contains a configuration of a PTO server
+type PTOConfiguration struct {
 	// Address/port to bind to
 	BindTo string
 
@@ -42,50 +40,31 @@ type PTOServerConfig struct {
 	accessLogger  *log.Logger
 }
 
-func (config *PTOServerConfig) ParseURL() error {
-	var err error
-	config.baseURL, err = url.Parse(config.BaseURL)
-	return err
-}
-
-func (config *PTOServerConfig) HandleRoot(w http.ResponseWriter, r *http.Request) {
-
-	links := make(map[string]string)
-
-	if config.RawRoot != "" {
-		rawrel, _ := url.Parse("raw")
-		links["raw"] = config.baseURL.ResolveReference(rawrel).String()
-	}
-
-	if config.ObsDatabase.Database != "" {
-		obsrel, _ := url.Parse("obs")
-		links["obs"] = config.baseURL.ResolveReference(obsrel).String()
-	}
-
-	linksj, err := json.Marshal(links)
-
+// LinkFromBaseURL
+func (config *PTOConfiguration) LinkTo(relative string) (string, error) {
+	u, err := url.Parse(relative)
 	if err != nil {
-		LogInternalServerError(w, "marshaling root link list", err)
-		return
+		return "", err
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(linksj)
+	return config.baseURL.ResolveReference(u).String(), nil
 }
 
-func (config *PTOServerConfig) AddRoutes(r *mux.Router) {
-	r.HandleFunc("/", LogAccess(config.accessLogger, config.HandleRoot)).Methods("GET")
+// AccessLogger returns a logger for the web API to log accesses to
+func (config *PTOConfiguration) AccessLogger() *log.Logger {
+	return config.accessLogger
 }
 
-func NewConfigFromJSON(b []byte) (*PTOServerConfig, error) {
-	var config PTOServerConfig
+func NewConfigFromJSON(b []byte) (*PTOConfiguration, error) {
+	var config PTOConfiguration
+	var err error
 
 	if err := json.Unmarshal(b, &config); err != nil {
 		return nil, err
 	}
 
-	if err := config.ParseURL(); err != nil {
+	config.baseURL, err = url.Parse(config.BaseURL)
+	if err != nil {
 		return nil, err
 	}
 
@@ -102,7 +81,7 @@ func NewConfigFromJSON(b []byte) (*PTOServerConfig, error) {
 	return &config, nil
 }
 
-func NewConfigFromFile(filename string) (*PTOServerConfig, error) {
+func NewConfigFromFile(filename string) (*PTOConfiguration, error) {
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err

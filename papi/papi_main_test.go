@@ -1,4 +1,4 @@
-package pto3_test
+package papi_test
 
 import (
 	"bytes"
@@ -14,12 +14,13 @@ import (
 
 	"github.com/gorilla/mux"
 	pto3 "github.com/mami-project/pto3-go"
+	"github.com/mami-project/pto3-go/papi"
 )
 
 // set to true to allow inspection of tables after testing
 const SuppressDropTables = false
 
-func setupRDS(config *pto3.PTOServerConfig, azr pto3.Authorizer) *pto3.RawDataStore {
+func setupRaw(config *pto3.PTOConfiguration, azr papi.Authorizer, r *mux.Router) *papi.RawAPI {
 	// create temporary RDS directory
 	var err error
 	config.RawRoot, err = ioutil.TempDir("", "pto3-test-raw")
@@ -28,74 +29,48 @@ func setupRDS(config *pto3.PTOServerConfig, azr pto3.Authorizer) *pto3.RawDataSt
 	}
 
 	// create an RDS
-	rds, err := pto3.NewRawDataStore(config, azr)
+	obsapi, err := papi.NewRawAPI(config, azr, r)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return rds
+	return obsapi
 }
 
-func teardownRDS(rds *pto3.RawDataStore) {
-	if err := rds.RemoveDirectories(); err != nil {
+func teardownRaw(config *pto3.PTOConfiguration) {
+	if err := os.RemoveAll(config.RawRoot); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func setupOSR(config *pto3.PTOServerConfig, azr pto3.Authorizer) *pto3.ObservationStore {
+func setupObs(config *pto3.PTOConfiguration, azr papi.Authorizer, r *mux.Router) *papi.ObsAPI {
 	// create an RDS
-	osr, err := pto3.NewObservationStore(config, azr)
-	if err != nil {
-		log.Fatal(err)
-	}
+	obsapi := papi.NewObsAPI(config, azr, r)
 
 	// log everything
-	osr.EnableQueryLogging()
+	obsapi.EnableQueryLogging()
 
 	// create tables
-	if err := osr.CreateTables(); err != nil {
+	if err := obsapi.CreateTables(); err != nil {
 		log.Fatal(err)
 	}
 
-	return osr
+	return obsapi
 }
 
-func teardownOSR(osr *pto3.ObservationStore) {
+func teardownObs(obsapi *papi.ObsAPI) {
 	// (don't) delete tables
 	if !SuppressDropTables && TestRC == 0 {
-		if err := osr.DropTables(); err != nil {
+		if err := obsapi.DropTables(); err != nil {
 			log.Fatal(err)
 		}
 	}
 }
 
-// func setupQC(config *pto3.PTOServerConfig, azr pto3.Authorizer) *pto3.QueryCache {
-// 	// create temporary QC directory
-// 	var err error
-// 	config.QueryCacheRoot, err = ioutil.TempDir("", "pto3-test-queries")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	// create a QC
-// 	qc, err := pto3.NewQueryCache(config, azr)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	return qc
-// }
-
-// func teardownQC(qc *pto3.QueryCache) {
-// 	if err := qc.RemoveDirectories(); err != nil {
-// 		log.Fatal(err)
-// 	}
-// }
-
 const GoodAPIKey = "07e57ab18e70"
 
-func setupAZR() pto3.Authorizer {
-	return &pto3.APIKeyAuthorizer{
+func setupAZR() papi.Authorizer {
+	return &papi.APIKeyAuthorizer{
 		APIKeys: map[string]map[string]bool{
 			GoodAPIKey: map[string]bool{
 				"list_raw":       true,
@@ -169,7 +144,7 @@ func executeWithFile(r *mux.Router, t *testing.T,
 
 const TestBaseURL = "https://ptotest.mami-project.eu"
 
-var TestConfig *pto3.PTOServerConfig
+var TestConfig *pto3.PTOConfiguration
 var TestRouter *mux.Router
 
 var TestRC int
@@ -197,29 +172,23 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
+	// create a router
+	TestRouter = mux.NewRouter()
+
 	// inner anon function ensures that os.Exit doesn't keep deferred teardown from running
 	os.Exit(func() int {
 		// get an authorizer
 		azr := setupAZR()
 
+		papi.NewRootAPI(TestConfig, azr, TestRouter)
+
 		// build a raw data store  (and prepare to clean up after it)
-		rds := setupRDS(TestConfig, azr)
-		defer teardownRDS(rds)
+		setupRaw(TestConfig, azr, TestRouter)
+		defer teardownRaw(TestConfig)
 
 		// build an observation store (and prepare to clean up after it)
-		osr := setupOSR(TestConfig, azr)
-		defer teardownOSR(osr)
-
-		// build a query cache (and prepare to clean up after it)
-		// qc := setupQC(&TestConfig, azr)
-		// defer teardownQC(qc)
-
-		// set up routes
-		TestRouter = mux.NewRouter()
-		TestConfig.AddRoutes(TestRouter)
-		rds.AddRoutes(TestRouter)
-		osr.AddRoutes(TestRouter)
-		// qc.AddRoutes(TestRouter)
+		obsapi := setupObs(TestConfig, azr, TestRouter)
+		defer teardownObs(obsapi)
 
 		TestRC = m.Run()
 		return TestRC

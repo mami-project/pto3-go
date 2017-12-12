@@ -1,7 +1,6 @@
 // ptonorm is a command-line utility to run a specified normalizer with a
 // specified raw data file, passing the observation data and metadata produced
 // by the normalizer to standard output.
-
 package main
 
 import (
@@ -79,11 +78,11 @@ func filterMetadata(from io.ReadCloser, to io.Writer, sourceurl string, errchan 
 	close(donechan)
 }
 
-func PtoNorm(config *pto3.PTOServerConfig, outfile io.Writer,
+func PtoNorm(config *pto3.PTOConfiguration, outfile io.Writer,
 	normCmd string, campaign string, filename string) error {
 
 	// create a raw data store (no need for an authorizer)
-	rds, err := pto3.NewRawDataStore(config, &pto3.NullAuthorizer{})
+	rds, err := pto3.NewRawDataStore(config)
 	if err != nil {
 		return err
 	}

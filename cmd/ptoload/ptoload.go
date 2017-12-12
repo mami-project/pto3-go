@@ -1,4 +1,5 @@
-// ptoload loads an observation file into a database; run `ptoload -help` for help.
+// ptoload loads an observation file in the form produced by normalizers and
+// derived analyzers into the database.
 package main
 
 import (
@@ -49,12 +50,17 @@ func main() {
 		}
 	}
 
-	// share a pid cache across all files
+	// share pid and condition caches across all files
+	cidCache, err := pto3.LoadConditionCache(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	pidCache := make(pto3.PathCache)
 
 	for _, filename := range args {
 		var set *pto3.ObservationSet
-		set, err = pto3.LoadObservationFile(filename, db, pidCache)
+		set, err = pto3.CopySetFromObsFile(filename, db, cidCache, pidCache)
 		if err != nil {
 			log.Fatal(err)
 		}

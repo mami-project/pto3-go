@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/mux"
 	pto3 "github.com/mami-project/pto3-go"
+	"github.com/mami-project/pto3-go/papi"
 )
 
 var configPath = flag.String("config", "ptoconfig.json", "Path to PTO `config file`")
@@ -23,6 +24,7 @@ func main() {
 		return
 	}
 
+	// load configuration file
 	config, err := pto3.NewConfigFromFile(*configPath)
 	if err != nil {
 		log.Fatal(err)
@@ -30,42 +32,34 @@ func main() {
 	log.Printf("ptosrv starting with configuration at %s...", *configPath)
 
 	// create an API key authorizer
-	azr, err := pto3.LoadAPIKeys(config.APIKeyFile)
+	azr, err := papi.LoadAPIKeys(config.APIKeyFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// now hook up routes
 	r := mux.NewRouter()
-	r.HandleFunc("/", config.HandleRoot)
 
-	// create a RawDataStore around the RDS path if given
-	if config.RawRoot != "" {
-		rds, err := pto3.NewRawDataStore(config, azr)
-		if err != nil {
-			log.Fatal(err)
-		}
-		rds.AddRoutes(r)
+	papi.NewRootAPI(config, azr, r)
+
+	rawapi, err := papi.NewRawAPI(config, azr, r)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if rawapi != nil {
 		log.Printf("...will serve /raw from %s", config.RawRoot)
 	}
 
-	if config.ObsDatabase.Database != "" {
-		osr, err := pto3.NewObservationStore(config, azr)
-		if err != nil {
-			log.Fatal(err)
-		}
-
+	obsapi := papi.NewObsAPI(config, azr, r)
+	if obsapi != nil {
+		log.Printf("...will serve /obs from postgresql://%s@%s/%s",
+			config.ObsDatabase.User, config.ObsDatabase.Addr, config.ObsDatabase.Database)
 		if *initdb {
-			err = osr.CreateTables()
-			if err != nil {
+			if err := obsapi.CreateTables(); err != nil {
 				log.Fatal(err)
 			}
 			log.Printf("...created observation tables")
 		}
-
-		osr.AddRoutes(r)
-		log.Printf("...will serve /obs from postgresql://%s@%s/%s",
-			config.ObsDatabase.User, config.ObsDatabase.Addr, config.ObsDatabase.Database)
 	}
 
 	log.Printf("...listening on %s", config.BindTo)

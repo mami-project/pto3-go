@@ -2,12 +2,6 @@
 
 Path Transparency Observatory API specifiation, version 3
 
-**NOTE** as of this commit the code in package
-https://github.com/mami-project/pto3-go
-does not yet fully implement this specification. In addition, see [the issue
-tracker](https://github.com/mami-project/pto3-go/issues) for proposed changes to
-this specification and the implementation thereof.
-
 The API consists of three applications: raw data access and upload,
 observation access, and observation query. The interface to each application
 is made up of certain resources accessed in a RESTful way; these resources are
