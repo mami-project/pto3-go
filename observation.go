@@ -313,8 +313,8 @@ func (obs *Observation) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&jslice)
 }
 
-// UnmarshalStringSlice fills in this observation from a string slice. This is used by both JSON unmarshaling and CSV unmarshaling (in CopyDataToStream)
-func (obs *Observation) unmarshalStringSlice(jslice []string) error {
+// unmarshalStringSlice fills in this observation from a string slice. This is used by both JSON unmarshaling and CSV unmarshaling (in CopyDataToStream)
+func (obs *Observation) unmarshalStringSlice(jslice []string, time_format string) error {
 
 	obs.ID = 0
 	if len(jslice[0]) > 0 {
@@ -327,13 +327,13 @@ func (obs *Observation) unmarshalStringSlice(jslice []string) error {
 		obs.SetID = 0
 	}
 
-	starttime, err := time.Parse(time.RFC3339, jslice[1])
+	starttime, err := time.Parse(time_format, jslice[1])
 	if err != nil {
 		return err
 	}
 	obs.StartTime = &starttime
 
-	endtime, err := time.Parse(time.RFC3339, jslice[2])
+	endtime, err := time.Parse(time_format, jslice[2])
 	if err != nil {
 		return err
 	}
@@ -366,7 +366,7 @@ func (obs *Observation) UnmarshalJSON(b []byte) error {
 		return errors.New("Observation requires at least five elements")
 	}
 
-	return obs.unmarshalStringSlice(jslice)
+	return obs.unmarshalStringSlice(jslice, time.RFC3339)
 
 }
 
@@ -664,7 +664,7 @@ func CopyDataFromObsFile(
 
 // CopyDataToStream copies all the observations in this observation set in
 // observation file format to the given stream
-func (set *ObservationSet) CopyDataToStream(db *pg.DB, out io.Writer) error {
+func (set *ObservationSet) CopyDataToStream(db orm.DB, out io.Writer) error {
 
 	// create some pipes
 	obspipe, dbpipe, err := os.Pipe()
@@ -678,10 +678,14 @@ func (set *ObservationSet) CopyDataToStream(db *pg.DB, out io.Writer) error {
 	// wrap a CSV reader around the read side
 	in := csv.NewReader(obspipe)
 
+	// COPY TO STDOUT doesn't seem to close the pipe, so we need to know when to stop.
+	obscount := set.CountObservations(db)
+
 	// set up goroutine to parse observations and dump them to the writer as JSON
 	go func() {
 		defer obspipe.Close()
 		var obs Observation
+		i := 0
 		for {
 			cslice, err := in.Read()
 			if err == io.EOF {
@@ -691,7 +695,7 @@ func (set *ObservationSet) CopyDataToStream(db *pg.DB, out io.Writer) error {
 				return
 			}
 
-			if err := obs.unmarshalStringSlice(cslice); err != nil {
+			if err := obs.unmarshalStringSlice(cslice, "2006-01-02 15:04:05-07"); err != nil {
 				converr <- err
 				return
 			}
@@ -702,8 +706,14 @@ func (set *ObservationSet) CopyDataToStream(db *pg.DB, out io.Writer) error {
 				return
 			}
 
-			if _, err := out.Write(b); err != nil {
+			if _, err := fmt.Fprintf(out, "%s\n", b); err != nil {
 				converr <- err
+				return
+			}
+
+			i++
+			if i >= obscount {
+				converr <- nil
 				return
 			}
 		}
@@ -712,7 +722,7 @@ func (set *ObservationSet) CopyDataToStream(db *pg.DB, out io.Writer) error {
 	}()
 
 	// now kick off a copy query
-	if _, err := db.CopyTo(dbpipe, "COPY (SELECT set_id, start_time, end_time, string, name, value from observations JOIN conditions ON conditions.id = observations.condition_id JOIN paths ON paths.id = observations.path_id WHERE set_id = ?;) TO STDIN WITH CSV", set.ID); err != nil {
+	if _, err := db.CopyTo(dbpipe, "COPY (SELECT set_id, start_time, end_time, string, name, value from observations JOIN conditions ON conditions.id = observations.condition_id JOIN paths ON paths.id = observations.path_id WHERE set_id = ?) TO STDOUT WITH CSV", set.ID); err != nil {
 		return err
 	}
 

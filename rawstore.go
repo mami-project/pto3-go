@@ -59,7 +59,7 @@ func (md *RawMetadata) DumpJSONObject(inherit bool) ([]byte, error) {
 	// first inherit from parent
 	if inherit && md.Parent != nil {
 		if md.Parent.filetype != "" {
-			jmap["_file_type"] = md.Parent.Filetype
+			jmap["_file_type"] = md.Parent.filetype
 		}
 
 		if md.Parent.Owner != "" {
@@ -81,7 +81,7 @@ func (md *RawMetadata) DumpJSONObject(inherit bool) ([]byte, error) {
 
 	// then overwrite with own values
 	if md.filetype != "" {
-		jmap["_file_type"] = md.Filetype
+		jmap["_file_type"] = md.filetype
 	}
 
 	if md.Owner != "" {
@@ -705,18 +705,6 @@ func NewRawDataStore(config *PTOConfiguration) (*RawDataStore, error) {
 	}
 
 	return &rds, nil
-}
-
-// CreateDirectories that the directories backing the data store exist. Used
-// for testing.
-func (rds *RawDataStore) CreateDirectories() error {
-	return os.Mkdir(rds.path, 0755)
-}
-
-// RemoveDirectories deletes the directories backing the data store, incluing
-// all their contents. Used for testing.
-func (rds *RawDataStore) RemoveDirectories() error {
-	return os.RemoveAll(rds.path)
 }
 
 // StreamCopy copies bytes from in to out until EOF.

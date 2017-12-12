@@ -1,8 +1,11 @@
 package papi_test
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
+	"io"
+	"log"
 	"net/http"
 	"testing"
 
@@ -21,6 +24,51 @@ type ClientObservationSet struct {
 
 type ClientSetList struct {
 	Sets []string `json:"sets"`
+}
+
+func WriteObservations(obsdat []pto3.Observation, out io.Writer) error {
+	for _, obs := range obsdat {
+		b, err := json.Marshal(&obs)
+		if err != nil {
+			return err
+		}
+		_, err = out.Write(b)
+		if err != nil {
+			return err
+		}
+		_, err = out.Write([]byte("\n"))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func MarshalObservations(obsdat []pto3.Observation) ([]byte, error) {
+	var out bytes.Buffer
+	err := WriteObservations(obsdat, &out)
+	if err != nil {
+		return nil, err
+	}
+	return out.Bytes(), err
+}
+
+func ReadObservations(in io.Reader) ([]pto3.Observation, error) {
+	sin := bufio.NewScanner(in)
+	out := make([]pto3.Observation, 0)
+	var obs pto3.Observation
+	for sin.Scan() {
+		log.Printf("got observation line %s", sin.Text())
+		if err := json.Unmarshal([]byte(sin.Text()), &obs); err != nil {
+			return nil, err
+		}
+		out = append(out, obs)
+	}
+	return out, nil
+}
+
+func UnmarshalObservations(in []byte) ([]pto3.Observation, error) {
+	return ReadObservations(bytes.NewBuffer(in))
 }
 
 func TestObsRoundtrip(t *testing.T) {
@@ -122,7 +170,7 @@ func TestObsRoundtrip(t *testing.T) {
 	["e1337", "2017-10-01T10:06:07Z", "2017-10-01T10:06:11Z", "[2001:db8::33:a4] * [2001:db8:3]/64", "pto.test.succeeded"]
 	["e1337", "2017-10-01T10:06:09Z", "2017-10-01T10:06:14Z", "[2001:db8::33:a4] * [2001:db8:3]/64", "pto.test.succeeded"]`)
 
-	observations_up, err := pto3.UnmarshalObservations(observations_up_bytes)
+	observations_up, err := UnmarshalObservations(observations_up_bytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +191,7 @@ func TestObsRoundtrip(t *testing.T) {
 	// and try downloading it again
 	res = executeRequest(TestRouter, t, "GET", datalink, nil, "", GoodAPIKey, http.StatusOK)
 
-	observations_down, err := pto3.ReadObservations(res.Body)
+	observations_down, err := ReadObservations(res.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
