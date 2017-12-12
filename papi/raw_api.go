@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"path/filepath"
 
 	"github.com/mami-project/pto3-go"
 
@@ -117,20 +116,14 @@ func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Reque
 	var out campaignFileList
 	out.Metadata, err = cam.GetCampaignMetadata()
 	if err != nil {
-		pto3.HandleErrorHTTP(w, "getting file metadata", err)
+		pto3.HandleErrorHTTP(w, "getting campaign metadata", err)
 		return
 	}
 
-	out.Files = make([]string, len(cam.fileMetadata))
-	i := 0
-	for filename := range cam.fileMetadata {
-		var err error
-		out.Files[i], err = ra.config.LinkTo("raw/" + filepath.Base(cam.path) + "/" + filename)
-		if err != nil {
-			pto3.HandleErrorHTTP(w, "generating file link", err)
-			return
-		}
-		i++
+	out.Files, err = cam.FileLinks()
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "listing campaign files", err)
+		return
 	}
 
 	outb, err := json.Marshal(out)
