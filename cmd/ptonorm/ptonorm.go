@@ -82,7 +82,7 @@ func PtoNorm(config *pto3.PTOConfiguration, outfile io.Writer,
 	normCmd string, campaign string, filename string) error {
 
 	// create a raw data store (no need for an authorizer)
-	rds, err := pto3.NewRawDataStore(config, &pto3.NullAuthorizer{})
+	rds, err := pto3.NewRawDataStore(config)
 	if err != nil {
 		return err
 	}

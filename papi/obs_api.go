@@ -344,7 +344,7 @@ func (oa *ObsAPI) addRoutes(r *mux.Router, l *log.Logger) {
 	r.HandleFunc("/obs/{set}/data", LogAccess(l, oa.handleUpload)).Methods("PUT")
 }
 
-func NewObsAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router, l *log.Logger) *ObsAPI {
+func NewObsAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router) *ObsAPI {
 	if config.ObsDatabase.Database == "" {
 		return nil
 	}
@@ -354,7 +354,7 @@ func NewObsAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router, l *
 	oa.azr = azr
 	oa.db = pg.Connect(&config.ObsDatabase)
 
-	oa.addRoutes(r, l)
+	oa.addRoutes(r, config.AccessLogger())
 
 	return oa
 }

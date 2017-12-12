@@ -50,6 +50,11 @@ func (config *PTOConfiguration) LinkTo(relative string) (string, error) {
 	return config.baseURL.ResolveReference(u).String(), nil
 }
 
+// AccessLogger returns a logger for the web API to log accesses to
+func (config *PTOConfiguration) AccessLogger() *log.Logger {
+	return config.accessLogger
+}
+
 func NewConfigFromJSON(b []byte) (*PTOConfiguration, error) {
 	var config PTOConfiguration
 	var err error

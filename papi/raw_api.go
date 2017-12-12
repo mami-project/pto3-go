@@ -431,7 +431,7 @@ func (ra *RawAPI) addRoutes(r *mux.Router, l *log.Logger) {
 	r.HandleFunc("/raw/{campaign}/{file}/data", LogAccess(l, ra.handleFileUpload)).Methods("PUT")
 }
 
-func NewRawAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router, l *log.Logger) (*RawAPI, error) {
+func NewRawAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router) (*RawAPI, error) {
 	var err error
 
 	if config.RawRoot == "" {
@@ -445,7 +445,7 @@ func NewRawAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router, l *
 		return nil, err
 	}
 
-	ra.addRoutes(r, l)
+	ra.addRoutes(r, config.AccessLogger())
 
 	return ra, nil
 }

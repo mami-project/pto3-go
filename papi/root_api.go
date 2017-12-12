@@ -41,9 +41,9 @@ func (ra *RootAPI) addRoutes(r *mux.Router, l *log.Logger) {
 	r.HandleFunc("/", LogAccess(l, ra.handleRoot)).Methods("GET")
 }
 
-func NewRootAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router, l *log.Logger) *RootAPI {
+func NewRootAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router) *RootAPI {
 	ra := new(RootAPI)
 	ra.config = config
-	ra.addRoutes(r, l)
+	ra.addRoutes(r, config.AccessLogger())
 	return ra
 }
