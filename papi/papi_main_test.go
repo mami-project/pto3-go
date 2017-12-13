@@ -44,7 +44,7 @@ func teardownRaw(config *pto3.PTOConfiguration) {
 }
 
 func setupObs(config *pto3.PTOConfiguration, azr papi.Authorizer, r *mux.Router) *papi.ObsAPI {
-	// create an RDS
+	// create an observation API
 	obsapi := papi.NewObsAPI(config, azr, r)
 
 	// log everything

@@ -1,13 +1,18 @@
 package pto3
 
-import "github.com/go-pg/pg/orm"
+import (
+	"net/http"
+	"strings"
+
+	"github.com/go-pg/pg/orm"
+)
 
 type Condition struct {
 	ID   int
 	Name string
 }
 
-// FIXME we probably should replace this with a condition cache everywhere
+// FIXME consider replacing this with a condition cache everywhere
 func (c *Condition) InsertOnce(db orm.DB) error {
 	if c.ID == 0 {
 		_, err := db.Model(c).
@@ -22,7 +27,7 @@ func (c *Condition) InsertOnce(db orm.DB) error {
 	return nil
 }
 
-// FIXME we probably should replace this with a condition cache everywhere
+// FIXME consider replacing this with a condition cache everywhere
 func (c *Condition) SelectByID(db orm.DB) error {
 	return db.Select(c)
 }
@@ -66,19 +71,60 @@ func (cache ConditionCache) SetConditionID(db orm.DB, c *Condition) error {
 	return nil
 }
 
-// LoadConditionCache creates a new condition cache with all the conditions in a given database.
-func LoadConditionCache(db orm.DB) (ConditionCache, error) {
-
-	cache := make(ConditionCache)
+func (cache ConditionCache) Reload(db orm.DB) error {
 	var conditions []Condition
 
 	if err := db.Model(&conditions).Select(); err != nil {
-		return nil, err
+		return err
 	}
 
 	for _, c := range conditions {
 		cache[c.Name] = c.ID
 	}
 
+	return nil
+}
+
+func (cache ConditionCache) ConditionsByName(db orm.DB, conditionName string) ([]Condition, error) {
+	var out []Condition
+
+	if strings.HasSuffix(conditionName, ".*") {
+		// Wildcard. Reload cache and find everything that matches.
+		if err := cache.Reload(db); err != nil {
+			return nil, err
+		}
+		out = make([]Condition, 0)
+		for cachedName := range cache {
+			if strings.HasPrefix(cachedName, conditionName[:len(conditionName)-1]) {
+				out = append(out, Condition{Name: cachedName, ID: cache[cachedName]})
+			}
+		}
+	} else {
+		// No wildcard, just look up by name.
+		if cache[conditionName] == 0 {
+			if err := cache.Reload(db); err != nil {
+				return nil, err
+			}
+		}
+		if cache[conditionName] == 0 {
+			return nil, PTOErrorf("unknown condition %s", conditionName).StatusIs(http.StatusBadRequest)
+		}
+		out = make([]Condition, 1)
+		out[0] = Condition{Name: conditionName, ID: cache[conditionName]}
+	}
+
+	return out, nil
+}
+
+// LoadConditionCache creates a new condition cache with all the conditions in a given database.
+func LoadConditionCache(db orm.DB) (ConditionCache, error) {
+
+	cache := make(ConditionCache)
+
+	if err := cache.Reload(db); err != nil {
+		return nil, err
+	}
+
 	return cache, nil
+
 }

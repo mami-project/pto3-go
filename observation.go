@@ -437,6 +437,17 @@ func DropTables(db *pg.DB) error {
 	})
 }
 
+func EnableQueryLogging(db *pg.DB) {
+	db.OnQueryProcessed(func(event *pg.QueryProcessedEvent) {
+		query, err := event.FormattedQuery()
+		if err != nil {
+			panic(err)
+		}
+
+		log.Printf("%s %s", time.Since(event.StartTime), query)
+	})
+}
+
 // obsFileFirstPass scans a file, getting metadata (in the form of an observation set), a set of paths, and a set of conditions
 func obsFileFirstPass(r *os.File) (*ObservationSet, map[string]struct{}, map[string]struct{}, error) {
 	filename := r.Name()

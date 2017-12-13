@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/go-pg/pg"
 	"github.com/gorilla/mux"
@@ -325,14 +324,7 @@ func (oa *ObsAPI) DropTables() error {
 }
 
 func (oa *ObsAPI) EnableQueryLogging() {
-	oa.db.OnQueryProcessed(func(event *pg.QueryProcessedEvent) {
-		query, err := event.FormattedQuery()
-		if err != nil {
-			panic(err)
-		}
-
-		log.Printf("%s %s", time.Since(event.StartTime), query)
-	})
+	pto3.EnableQueryLogging(oa.db)
 }
 
 func (oa *ObsAPI) addRoutes(r *mux.Router, l *log.Logger) {
