@@ -3,11 +3,13 @@ package pto3
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-pg/pg"
@@ -349,9 +351,65 @@ func (q *Query) generateIdentifier() {
 	q.Identifier = hex.EncodeToString(hashbytes[:])
 }
 
+func (q *Query) generateSources() {
+	if len(q.selectSets) > 0 {
+		// Sets specified in query. Let's just use them.
+		q.Sources = q.selectSets
+	} else {
+		// We have to actually run a query here.
+		// For that we have to figure out how queries run.
+		// WORK POINTER
+		panic("set select not yet working")
+	}
+}
+
+// ResultLink generates a link to the file containing query results.
+func (q *Query) ResultLink() string {
+	link, _ := q.qc.config.LinkTo(fmt.Sprintf("query/%s/result", q.Identifier))
+	return link
+}
+
+// SourceLinks generates links to the observation sets contributing to this query
+func (q *Query) SourceLinks() string {
+	panic("not yet implemented")
+}
+
 func (q *Query) MarshalJSON() ([]byte, error) {
-	// TODO write me
-	return nil, nil
+	jobj := make(map[string]interface{})
+
+	// Store the query itself in its urlencoded form
+	jobj["__encoded"] = q.URLEncoded()
+
+	// Cache the identifier (we'll ignore this on unmarshaling, but it's nice to have)
+	jobj["__id"] = q.Identifier
+
+	// Determine state and additional information
+	if q.HasResult {
+		jobj["__results"] = q.ResultLink()
+		jobj["__sources"] = q.SourceLinks()
+		if q.ExtRef != "" {
+			jobj["__state"] = "permanent"
+			jobj["_ext_ref"] = q.ExtRef
+		} else {
+			jobj["__state"] = "complete"
+		}
+	} else if q.ExecutionError != nil {
+		jobj["__state"] = "failed"
+		jobj["__error"] = q.ExecutionError.Error()
+	} else if q.IsExecuting {
+		jobj["__state"] = "pending"
+	} else {
+		jobj["__state"] = "submitted"
+	}
+
+	// copy metadata
+	for k := range q.Metadata {
+		if !strings.HasPrefix(q.Metadata[k], "__") {
+			jobj[k] = q.Metadata[k]
+		}
+	}
+
+	return json.Marshal(jobj)
 }
 
 func (q *Query) UnmarshalJSON(b []byte) error {
@@ -386,8 +444,6 @@ func (q *Query) selectAndStoreIntersectPaths() error {
 }
 
 func (q *Query) Execute() error {
-	// So Execute() should open an output file,
-	// run the query, and dump the result to the file.
 
 	// Results should be ndjson.
 	return nil
