@@ -448,6 +448,24 @@ func EnableQueryLogging(db *pg.DB) {
 	})
 }
 
+func WriteObservations(obsdat []Observation, out io.Writer) error {
+	for _, obs := range obsdat {
+		b, err := json.Marshal(&obs)
+		if err != nil {
+			return err
+		}
+		_, err = out.Write(b)
+		if err != nil {
+			return err
+		}
+		_, err = out.Write([]byte("\n"))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // obsFileFirstPass scans a file, getting metadata (in the form of an observation set), a set of paths, and a set of conditions
 func obsFileFirstPass(r *os.File) (*ObservationSet, map[string]struct{}, map[string]struct{}, error) {
 	filename := r.Name()
@@ -791,24 +809,6 @@ func (set *ObservationSet) CopyDataToStream(db orm.DB, out io.Writer) error {
 // 	}
 
 // 	return obsdat, nil
-// }
-
-// func WriteObservations(obsdat []Observation, out io.Writer) error {
-// 	for _, obs := range obsdat {
-// 		b, err := json.Marshal(&obs)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		_, err = out.Write(b)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		_, err = out.Write([]byte("\n"))
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-// 	return nil
 // }
 
 // func MarshalObservations(obsdat []Observation) ([]byte, error) {

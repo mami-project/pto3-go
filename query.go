@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -65,6 +67,14 @@ func (qc *QueryCache) LoadTestData(obsFilename string) error {
 	pidCache := make(PathCache)
 	_, err := CopySetFromObsFile(obsFilename, qc.db, qc.cidCache, pidCache)
 	return err
+}
+
+func (qc *QueryCache) writeResultFile(identifier string) (*os.File, error) {
+	return os.Create(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", identifier)))
+}
+
+func (qc *QueryCache) readResultFile(identifier string) (*os.File, error) {
+	return os.Open(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", identifier)))
 }
 
 func (qc *QueryCache) QueryByIdentifier(identifier string) (*Query, error) {
@@ -148,6 +158,7 @@ type Query struct {
 	Identifier string
 
 	// State and metadata
+	// FIXME states should be implemented as timestamps
 	IsExecuting    bool
 	HasResult      bool
 	ExecutionError error
@@ -165,7 +176,9 @@ type Query struct {
 	selectConditions    []Condition
 	groups              []GroupSpec
 	intersectConditions []IntersectCondition
-	options             []string
+
+	// Query options
+	optionSetsOnly bool
 }
 
 func (qc *QueryCache) NewQueryFromForm(form url.Values) (*Query, error) {
@@ -370,8 +383,12 @@ func (q *Query) ResultLink() string {
 }
 
 // SourceLinks generates links to the observation sets contributing to this query
-func (q *Query) SourceLinks() string {
-	panic("not yet implemented")
+func (q *Query) SourceLinks() []string {
+	out := make([]string, len(q.Sources))
+	for i, setid := range q.Sources {
+		out[i] = LinkForSetID(q.qc.config, setid)
+	}
+	return out
 }
 
 func (q *Query) MarshalJSON() ([]byte, error) {
@@ -417,10 +434,67 @@ func (q *Query) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+func (q *Query) whereClauses(pq *orm.Query) *orm.Query {
+	// time
+	pq = pq.Where("time_start > ?", q.timeStart).Where("time_end < ?", q.timeEnd)
+
+	// sets
+	if len(q.selectSets) > 0 {
+		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
+			for _, setid := range q.selectSets {
+				qq = qq.WhereOr("set_id = ?", setid)
+			}
+			return qq, nil
+		})
+	}
+
+	// conditions
+	if len(q.selectConditions) > 0 {
+		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
+			for _, c := range q.selectConditions {
+				qq = qq.WhereOr("condition_id = ?", c.ID)
+			}
+			return qq, nil
+		})
+	}
+
+	// FIXME source
+
+	// FIXME target
+
+	// FIXME on path
+
+	return pq
+}
+
 // selectAndStoreObservations selects observations from this query and dumps
 // them to the data file for this query as an NDJSON observation file.
 func (q *Query) selectAndStoreObservations() error {
+	var obsdat []Observation
+
+	pq := q.qc.db.Model(&obsdat).Column("observation.*", "Condition", "Path")
+	pq = q.whereClauses(pq)
+	if err := pq.Select(); err != nil {
+		return err
+	}
+
+	outfile, err := q.qc.writeResultFile(q.Identifier)
+	if err != nil {
+		return err
+	}
+	defer outfile.Close()
+
+	if err := WriteObservations(obsdat, outfile); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// selectObservationSetIDs selects observation set IDs responding to
+// this query.
+func (q *Query) selectObservationSetIDs() ([]int, error) {
+	return nil, nil
 }
 
 // selectAndStoreObservationSetIDs selects observation set IDs responding to
@@ -443,8 +517,29 @@ func (q *Query) selectAndStoreIntersectPaths() error {
 	return nil
 }
 
-func (q *Query) Execute() error {
+func (q *Query) Execute() {
+	// fire off a goroutine to actually run the query
+	go func() {
+		// mark query as executing
+		q.IsExecuting = true
 
-	// Results should be ndjson.
-	return nil
+		// switch and run query
+		if len(q.intersectConditions) > 0 {
+			q.ExecutionError = q.selectAndStoreIntersectPaths()
+		} else if len(q.groups) > 0 {
+			q.ExecutionError = q.selectAndStoreGroups()
+		} else if q.optionSetsOnly {
+			q.ExecutionError = q.selectAndStoreObservationSetIDs()
+		} else {
+			q.ExecutionError = q.selectAndStoreObservations()
+		}
+
+		// mark query as done
+		q.IsExecuting = false
+
+		// and as having a result if appropriate
+		if q.ExecutionError == nil {
+			q.HasResult = true
+		}
+	}()
 }
