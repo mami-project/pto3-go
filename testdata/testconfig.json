@@ -1,0 +1,11 @@
+{
+    "RawRoot": "./testdata/rawroot",
+    "BindTo": ":8383",
+    "BaseURL": "http://localhost:8383/",
+    "ObsDatabase": {
+        "Addr": ":5432",
+        "Database": "ptotest",
+        "User": "ptotest",
+        "Password": "helpful guide sheep train"
+    }
+}

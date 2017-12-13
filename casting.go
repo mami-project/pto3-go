@@ -3,6 +3,8 @@ package pto3
 import (
 	"fmt"
 	"log"
+	"math"
+	"net/http"
 	"strconv"
 	"time"
 )
@@ -36,19 +38,46 @@ func AsStringArray(v interface{}) ([]string, bool) {
 	}
 }
 
+// ParseTimeString takes a string and attempts to parse it as an ISO, PostgreSQL, or Unix epoch second string
+func ParseTime(s string) (time.Time, error) {
+	var t time.Time
+	var err error
+
+	// ISO
+	t, err = time.Parse(time.RFC3339, s)
+	if err == nil {
+		return t, nil
+	}
+
+	// PostgreSQL
+	t, err = time.Parse("2006-01-02 15:04:05-07", s)
+	if err == nil {
+		return t, nil
+	}
+
+	// epoch seconds
+	t64, err := strconv.ParseFloat(s, 64)
+	if err == nil {
+		s, ns := math.Modf(t64)
+		return time.Unix(int64(s), int64(ns*1e9)), nil
+	}
+
+	return time.Time{}, PTOErrorf("%s not parseable as time", s).StatusIs(http.StatusBadRequest)
+}
+
 // AsTime tries to typeswitch an interface to a time.Time.
 func AsTime(v interface{}) (time.Time, error) {
 	switch cv := v.(type) {
 	case time.Time:
 		return cv, nil
 	case string:
-		return time.Parse(time.RFC3339, cv)
+		return ParseTime(cv)
 	case int64:
 		return time.Unix(cv, 0), nil
 	case int:
 		return time.Unix(int64(cv), 0), nil
 	default:
-		return time.Parse(time.RFC3339, AsString(cv))
+		return ParseTime(AsString(cv))
 	}
 }
 

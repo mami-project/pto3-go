@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"sort"
 	"strconv"
 	"time"
@@ -57,15 +56,13 @@ func NewQueryCache(config *PTOConfiguration) (*QueryCache, error) {
 	return &qc, nil
 }
 
-// Ensure that the directories backing the query cache exist. Used for testing.
-func (qc *QueryCache) CreateDirectories() error {
-	return os.Mkdir(qc.path, 0755)
-}
-
-// Remove the directories backing the query cache incluing all their contents.
-// Used for testing.
-func (qc *QueryCache) RemoveDirectories() error {
-	return os.RemoveAll(qc.path)
+// LoadTestData loads an observation file into a database. It is used as part
+// of the setup for testing the query cache, and should not be called in the
+// normal case.
+func (qc *QueryCache) LoadTestData(obsFilename string) error {
+	pidCache := make(PathCache)
+	_, err := CopySetFromObsFile(obsFilename, qc.db, qc.cidCache, pidCache)
+	return err
 }
 
 func (qc *QueryCache) QueryByIdentifier(identifier string) (*Query, error) {
@@ -90,6 +87,7 @@ type IntersectCondition struct {
 // GroupSpec can group a pg-go query by some set of criteria
 type GroupSpec interface {
 	GroupBy(q *orm.Query) *orm.Query
+	URLEncoded() string
 }
 
 // SimpleGroupSpec groups a pg-go query by a single column
@@ -99,6 +97,45 @@ type SimpleGroupSpec struct {
 
 func (gs *SimpleGroupSpec) GroupBy(q *orm.Query) *orm.Query {
 	return q.Group(gs.ColumnName)
+}
+
+func (gs *SimpleGroupSpec) URLEncoded() string {
+	return gs.ColumnName
+}
+
+// DateTruncGroupSpec groups a pg-go query by applying PostgreSQL's date_trunc function to a column
+type DateTruncGroupSpec struct {
+	Truncation string
+	ColumnName string
+}
+
+func (gs *DateTruncGroupSpec) GroupBy(q *orm.Query) *orm.Query {
+	return q.Group(fmt.Sprintf("date_trunc(%s, %s)"), gs.Truncation, gs.ColumnName)
+}
+
+func (gs *DateTruncGroupSpec) URLEncoded() string {
+	return gs.Truncation
+}
+
+// DatePartGroupSpec groups a pg-go query by applying PostgreSQL's date_part function to a column
+type DatePartGroupSpec struct {
+	Part       string
+	ColumnName string
+}
+
+func (gs *DatePartGroupSpec) GroupBy(q *orm.Query) *orm.Query {
+	return q.Group(fmt.Sprintf("date_part(%s, %s)"), gs.Part, gs.ColumnName)
+}
+
+func (gs *DatePartGroupSpec) URLEncoded() string {
+	switch gs.Part {
+	case "dow":
+		return "week_day"
+	case "hour":
+		return "day_hour"
+	default:
+		panic("bad date part group specification")
+	}
 }
 
 type Query struct {
@@ -139,7 +176,7 @@ func (qc *QueryCache) NewQueryFromForm(form url.Values) (*Query, error) {
 	if !ok || len(timeStartStrs) < 1 || timeStartStrs[0] == "" {
 		return nil, errors.New("Query missing mandatory time_start parameter")
 	}
-	timeStart, err := time.Parse(time.RFC3339, timeStartStrs[0])
+	timeStart, err := ParseTime(timeStartStrs[0])
 	if err != nil {
 		return nil, fmt.Errorf("Error parsing time_start: %s", err.Error())
 	}
@@ -149,7 +186,7 @@ func (qc *QueryCache) NewQueryFromForm(form url.Values) (*Query, error) {
 	if !ok || len(timeEndStrs) < 1 || timeEndStrs[0] == "" {
 		return nil, errors.New("Query missing mandatory time_end parameter")
 	}
-	timeEnd, err := time.Parse(time.RFC3339, timeEndStrs[0])
+	timeEnd, err := ParseTime(timeEndStrs[0])
 	if err != nil {
 		return nil, fmt.Errorf("Error parsing time_end: %s", err.Error())
 	}
@@ -191,40 +228,32 @@ func (qc *QueryCache) NewQueryFromForm(form url.Values) (*Query, error) {
 		}
 	}
 
-	groupStrs, ok := form["groups"]
+	groupStrs, ok := form["group"]
 	if ok {
-		return nil, errors.New("group support not yet implemented")
 
 		q.groups = make([]GroupSpec, 0)
 		for _, groupStr := range groupStrs {
 			switch groupStr {
 			case "year":
-				// FIXME determine how to group by year of start date
-				// in postgres: date_trunc('year', column)
+				q.groups = append(q.groups, &DateTruncGroupSpec{Truncation: "year", ColumnName: "time_start"})
 			case "month":
-				// FIXME determine how to group by month of start date
-				// in postgres: date_trunc('month', column)
+				q.groups = append(q.groups, &DateTruncGroupSpec{Truncation: "month", ColumnName: "time_start"})
 			case "week":
-				// FIXME determine how to group by week of start date
-				// in postgres: date_trunc('week', column)
+				q.groups = append(q.groups, &DateTruncGroupSpec{Truncation: "week", ColumnName: "time_start"})
 			case "day":
-				// FIXME determine how to group by day of start date
-				// in postgres: date_trunc('day', column)
+				q.groups = append(q.groups, &DateTruncGroupSpec{Truncation: "day", ColumnName: "time_start"})
 			case "hour":
-				// FIXME determine how to group by hour of start date
-				// date_trunc('hour', column)
+				q.groups = append(q.groups, &DateTruncGroupSpec{Truncation: "hour", ColumnName: "time_start"})
 			case "week_day":
-				// FIXME determine how to group by weekday of start date
-				// date_part('dow', column)
+				q.groups = append(q.groups, &DatePartGroupSpec{Part: "dow", ColumnName: "time_start"})
 			case "day_hour":
-				// FIXME determine how to group by day hour of start date
-				// date_part('hour', column)
+				q.groups = append(q.groups, &DatePartGroupSpec{Part: "hour", ColumnName: "time_start"})
 			case "condition":
 				q.groups = append(q.groups, &SimpleGroupSpec{ColumnName: "condition"})
 			case "source":
-				// FIXME need to denormalize model to make source groups work
+				return nil, errors.New("source groups not yet implemented")
 			case "target":
-				// FIXME need to denormalize model to make target groups work
+				return nil, errors.New("target groups not yet implemented")
 			}
 		}
 	}
@@ -233,7 +262,6 @@ func (qc *QueryCache) NewQueryFromForm(form url.Values) (*Query, error) {
 	_, ok = form["intersect_condition"]
 	if ok {
 		return nil, errors.New("intersecting path support not yet implemented")
-
 	}
 
 	// FIXME parse options
@@ -300,8 +328,16 @@ func (q *Query) URLEncoded() string {
 	sort.SliceStable(q.selectConditions, func(i, j int) bool {
 		return q.selectConditions[i].Name < q.selectConditions[j].Name
 	})
+	for i := range q.selectConditions {
+		out += fmt.Sprintf("&condition=%s", q.selectConditions[i].Name)
+	}
+
+	// add sorted groups
+	sort.SliceStable(q.groups, func(i, j int) bool {
+		return q.groups[i].URLEncoded() < q.groups[j].URLEncoded()
+	})
 	for i := range q.selectTarget {
-		out += fmt.Sprintf("&conditions=%s", q.selectConditions[i].Name)
+		out += fmt.Sprintf("&group=%s", q.groups[i].URLEncoded())
 	}
 
 	return out

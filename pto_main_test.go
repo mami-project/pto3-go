@@ -75,6 +75,11 @@ func setupQC(config *pto3.PTOConfiguration) *pto3.QueryCache {
 		log.Fatal(err)
 	}
 
+	// ensure the query test data is loaded
+	if err := qc.LoadTestData("testdata/test_obs.ndjson"); err != nil {
+		log.Fatal(err)
+	}
+
 	return qc
 }
 
