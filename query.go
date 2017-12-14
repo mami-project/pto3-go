@@ -494,12 +494,38 @@ func (q *Query) selectAndStoreObservations() error {
 // selectObservationSetIDs selects observation set IDs responding to
 // this query.
 func (q *Query) selectObservationSetIDs() ([]int, error) {
-	return nil, nil
+	var setids []int
+
+	pq := q.qc.db.Model(&setids).ColumnExpr("DISTINCT set_id")
+	pq = q.whereClauses(pq)
+	if err := pq.Select(); err != nil {
+		return nil, err
+	}
+
+	return setids, nil
+
 }
 
 // selectAndStoreObservationSetIDs selects observation set IDs responding to
 // this query and dumps them to the data file as NDJSON: one URL per line.
-func (q *Query) selectAndStoreObservationSetIDs() error {
+func (q *Query) selectAndStoreObservationSetLinks() error {
+	setids, err := q.selectObservationSetIDs()
+	if err != nil {
+		return err
+	}
+
+	outfile, err := q.qc.writeResultFile(q.Identifier)
+	if err != nil {
+		return err
+	}
+	defer outfile.Close()
+
+	for _, setid := range setids {
+		if _, err := fmt.Fprintf(outfile, "\"%s\"\n", LinkForSetID(q.qc.config, setid)); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -529,7 +555,7 @@ func (q *Query) Execute() {
 		} else if len(q.groups) > 0 {
 			q.ExecutionError = q.selectAndStoreGroups()
 		} else if q.optionSetsOnly {
-			q.ExecutionError = q.selectAndStoreObservationSetIDs()
+			q.ExecutionError = q.selectAndStoreObservationSetLinks()
 		} else {
 			q.ExecutionError = q.selectAndStoreObservations()
 		}
