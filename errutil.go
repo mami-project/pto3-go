@@ -16,7 +16,7 @@ type PTOError struct {
 }
 
 // PTOWrapError creates a new PTO error wrapping a lower level error,
-func PTOWrapError(err error, during string) *PTOError {
+func PTOWrapError(err error) *PTOError {
 	e := new(PTOError)
 	e.s = http.StatusInternalServerError
 	e.e = err.Error()

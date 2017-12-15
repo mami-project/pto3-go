@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -78,7 +79,7 @@ func (qc *QueryCache) writeResultFile(identifier string) (*os.File, error) {
 	return os.Create(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", identifier)))
 }
 
-func (qc *QueryCache) readResultFile(identifier string) (*os.File, error) {
+func (qc *QueryCache) ReadResultFile(identifier string) (*os.File, error) {
 	return os.Open(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", identifier)))
 }
 
@@ -256,21 +257,21 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 	// Parse start and end times
 	timeStartStrs, ok := form["time_start"]
 	if !ok || len(timeStartStrs) < 1 || timeStartStrs[0] == "" {
-		return nil, errors.New("Query missing mandatory time_start parameter")
+		return nil, PTOErrorf("Query missing mandatory time_start parameter").StatusIs(http.StatusBadRequest)
 	}
 	timeStart, err := ParseTime(timeStartStrs[0])
 	if err != nil {
-		return nil, fmt.Errorf("Error parsing time_start: %s", err.Error())
+		return nil, PTOErrorf("Error parsing time_start: %s", err.Error()).StatusIs(http.StatusBadRequest)
 	}
 	q.timeStart = &timeStart
 
 	timeEndStrs, ok := form["time_end"]
 	if !ok || len(timeEndStrs) < 1 || timeEndStrs[0] == "" {
-		return nil, errors.New("Query missing mandatory time_end parameter")
+		return nil, PTOErrorf("Query missing mandatory time_start parameter").StatusIs(http.StatusBadRequest)
 	}
 	timeEnd, err := ParseTime(timeEndStrs[0])
 	if err != nil {
-		return nil, fmt.Errorf("Error parsing time_end: %s", err.Error())
+		return nil, PTOErrorf("Error parsing time_end: %s", err.Error()).StatusIs(http.StatusBadRequest)
 	}
 	q.timeEnd = &timeEnd
 
@@ -285,7 +286,7 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 		for i := range setStrs {
 			seti64, err := strconv.ParseInt(setStrs[i], 16, 32)
 			if err != nil {
-				return nil, fmt.Errorf("Error parsing set ID: %s", err.Error())
+				return nil, PTOErrorf("Error parsing set ID: %s", err.Error()).StatusIs(http.StatusBadRequest)
 			}
 			q.selectSets[i] = int(seti64)
 		}
@@ -333,9 +334,9 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 			case "condition":
 				q.groups = append(q.groups, &SimpleGroupSpec{ColumnName: "condition"})
 			case "source":
-				return nil, errors.New("source groups not yet implemented")
+				return nil, PTOErrorf("source groups not yet implemented").StatusIs(http.StatusNotImplemented)
 			case "target":
-				return nil, errors.New("target groups not yet implemented")
+				return nil, PTOErrorf("target groups not yet implemented").StatusIs(http.StatusNotImplemented)
 			}
 		}
 	}
@@ -554,7 +555,27 @@ func (q *Query) MarshalJSON() ([]byte, error) {
 }
 
 func (q *Query) UnmarshalJSON(b []byte) error {
-	// TODO write me
+	// FIXME need parser to distinguish between metadata update (PutMetadata)
+	// and read from disk file, same as with raw data. Probably a stream
+	// reader API with a different entry point, that UnmarshalJSON calls.
+	return PTOErrorf("JSON unmarshal not implemented").StatusIs(http.StatusNotImplemented)
+}
+
+func (q *Query) FlushMetadata() error {
+	out, err := q.qc.writeMetadataFile(q.Identifier)
+	if err != nil {
+		return PTOWrapError(err)
+	}
+
+	b, err := q.MarshalJSON()
+	if err != nil {
+		return PTOWrapError(err)
+	}
+
+	if _, err = out.Write(b); err != nil {
+		return PTOWrapError(err)
+	}
+
 	return nil
 }
 
@@ -688,6 +709,9 @@ func (q *Query) Execute(done chan<- struct{}) {
 		// mark query as done
 		endTime := time.Now()
 		q.Completed = &endTime
+
+		// flush to disk
+		q.FlushMetadata()
 
 		// and notify if we have a channel
 		if done != nil {

@@ -49,7 +49,4 @@ func TestTimeQuery(t *testing.T) {
 	done := make(chan struct{})
 	q.Execute(done)
 	<-done
-
-	//
-
 }
