@@ -4,21 +4,33 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"time"
 )
 
 // PTOError represents an error with an associated status code (usually an HTTP status code)
 type PTOError struct {
-	e string
-	s int
+	e  string
+	s  int
+	at []byte
+}
+
+// PTOWrapError creates a new PTO error wrapping a lower level error,
+func PTOWrapError(err error, during string) *PTOError {
+	e := new(PTOError)
+	e.s = http.StatusInternalServerError
+	e.e = err.Error()
+	e.at = debug.Stack()
+	return e
 }
 
 // PTOErrorf creates a new PTOError with a given format string and arguments
 func PTOErrorf(format string, args ...interface{}) *PTOError {
-	out := new(PTOError)
-	out.s = http.StatusInternalServerError
-	out.e = fmt.Sprintf(format, args...)
-	return out
+	e := new(PTOError)
+	e.s = http.StatusInternalServerError
+	e.e = fmt.Sprintf(format, args...)
+	e.at = debug.Stack()
+	return e
 }
 
 // StatusIs sets the status of a PTOError, returning the error.
@@ -35,6 +47,11 @@ func (e *PTOError) Error() string {
 // Status returns the status associated with a PTOError
 func (e *PTOError) Status() int {
 	return e.s
+}
+
+// Stack returns the stack backtrace associated with a PTOError
+func (e *PTOError) Stack() []byte {
+	return e.at
 }
 
 // PTONotFoundError returns an error for a subject of a given type that does not exist
@@ -61,9 +78,13 @@ func logtoken() string {
 	return fmt.Sprintf("%016x", time.Now().UTC().UnixNano())
 }
 
-func handleInternalServerErrorHTTP(w http.ResponseWriter, during string, errmsg string) {
+func handleInternalServerErrorHTTP(w http.ResponseWriter, during string, errmsg string, stack []byte) {
 	token := logtoken()
-	log.Printf("internal error %s %s: %s\n", during, token, errmsg)
+	log.Printf("**********\ninternal error %s %s: %s **********\n", during, token, errmsg)
+	if stack != nil {
+		log.Printf("backtrace:\n%s", stack)
+	}
+
 	http.Error(w, fmt.Sprintf("internal error %s: refer to %s in server log", during, token),
 		http.StatusInternalServerError)
 }
@@ -78,15 +99,15 @@ func HandleErrorHTTP(w http.ResponseWriter, during string, err error) {
 		m := ev.Error()
 		s := ev.Status()
 		if s == http.StatusInternalServerError {
-			handleInternalServerErrorHTTP(w, during, m)
+			handleInternalServerErrorHTTP(w, during, m, ev.Stack())
 		} else {
 			http.Error(w, m, s)
 		}
 	default:
 		if err == nil {
-			handleInternalServerErrorHTTP(w, during, "[nil]")
+			handleInternalServerErrorHTTP(w, during, "[nil]", nil)
 		} else {
-			handleInternalServerErrorHTTP(w, during, err.Error())
+			handleInternalServerErrorHTTP(w, during, err.Error(), nil)
 		}
 	}
 

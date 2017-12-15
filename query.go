@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-pg/pg"
@@ -32,10 +34,13 @@ type QueryCache struct {
 	path string
 
 	// Submitted queries not yet running
-	submitted []*Query
+	submitted map[string]*Query
 
 	// Queries executing and cached in memory (recently executed)
 	cached map[string]*Query
+
+	// Lock for submitted and cached maps
+	lock sync.RWMutex
 }
 
 // NewQueryCache creates a query cache given a configuration and an
@@ -47,7 +52,7 @@ func NewQueryCache(config *PTOConfiguration) (*QueryCache, error) {
 		config:    config,
 		db:        pg.Connect(&config.ObsDatabase),
 		path:      config.QueryCacheRoot,
-		submitted: make([]*Query, 0),
+		submitted: make(map[string]*Query),
 		cached:    make(map[string]*Query),
 	}
 
@@ -77,17 +82,70 @@ func (qc *QueryCache) readResultFile(identifier string) (*os.File, error) {
 	return os.Open(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", identifier)))
 }
 
-func (qc *QueryCache) QueryByIdentifier(identifier string) (*Query, error) {
-	// check in memory
-
-	// then check on disk
-
-	return nil, nil
+func (qc *QueryCache) writeMetadataFile(identifier string) (*os.File, error) {
+	return os.Create(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.json", identifier)))
 }
 
-// Flush ensures that any state stored in the in-memory cache is written to disk.
-func (qc *QueryCache) Flush() error {
-	return nil
+func (qc *QueryCache) readMetadataFile(identifier string) (*os.File, error) {
+	return os.Open(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.json", identifier)))
+}
+
+func (qc *QueryCache) fetchQuery(identifier string) (*Query, error) {
+	// we're modifying the cache
+	qc.lock.Lock()
+	defer qc.lock.Unlock()
+
+	in, err := qc.readMetadataFile(identifier)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// nothing on disk, but that's not an error.
+			return nil, nil
+		} else {
+			return nil, err
+		}
+	}
+	defer in.Close()
+
+	b, err := ioutil.ReadAll(in)
+	if err != nil {
+		return nil, err
+	}
+
+	var q Query
+	if err := json.Unmarshal(b, &q); err != nil {
+		return nil, err
+	}
+
+	if q.Identifier != identifier {
+		return nil, PTOErrorf("Identifier mismatch on query fetch: fetched %s got %s", identifier, q.Identifier)
+	}
+
+	if q.Completed == nil {
+		qc.submitted[identifier] = &q
+	} else {
+		qc.cached[identifier] = &q
+	}
+
+	// FIXME any query we fetch in executing state necessarily crashed. should we restart it?
+
+	return &q, nil
+}
+
+func (qc *QueryCache) QueryByIdentifier(identifier string) (*Query, error) {
+	// in in-memory submitted queue?
+	q := qc.submitted[identifier]
+	if q != nil {
+		return q, nil
+	}
+
+	// in in-memory cache?
+	q = qc.cached[identifier]
+	if q != nil {
+		return q, nil
+	}
+
+	// nope, check on disk
+	return qc.fetchQuery(identifier)
 }
 
 // IntersectCondition represents a condition together with a negation flag
@@ -157,14 +215,19 @@ type Query struct {
 	// Hash-based identifier
 	Identifier string
 
-	// State and metadata
-	// FIXME states should be implemented as timestamps
-	IsExecuting    bool
-	HasResult      bool
+	// Timestamps for state management
+	Submitted     *time.Time
+	Executed      *time.Time
+	Completed     *time.Time
+	MadePermanent *time.Time
+
+	// Errors, references, and sources
 	ExecutionError error
 	ExtRef         string
 	Sources        []int
-	Metadata       map[string]string
+
+	// Arbitrary metadata
+	Metadata map[string]string
 
 	// Parsed query parameters
 	timeStart           *time.Time
@@ -181,10 +244,14 @@ type Query struct {
 	optionSetsOnly bool
 }
 
-func (qc *QueryCache) NewQueryFromForm(form url.Values) (*Query, error) {
-	var q Query
+// ParseQueryFromForm creates a new query from an HTTP form, but does not
+// submit it. Used by SubmitQueryFromForm, and for testing.
+func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 	var ok bool
 	var err error
+
+	// new query bound to this cache
+	q := Query{qc: qc}
 
 	// Parse start and end times
 	timeStartStrs, ok := form["time_start"]
@@ -280,9 +347,13 @@ func (qc *QueryCache) NewQueryFromForm(form url.Values) (*Query, error) {
 	}
 
 	// FIXME parse options
-	_, ok = form["option"]
+	optionStrs, ok := form["option"]
 	if ok {
-		return nil, errors.New("query option support not yet implemented")
+		for _, optionStr := range optionStrs {
+			if optionStr == "sets_only" {
+				q.optionSetsOnly = true
+			}
+		}
 	}
 
 	// hash everything into an identifier
@@ -291,14 +362,54 @@ func (qc *QueryCache) NewQueryFromForm(form url.Values) (*Query, error) {
 	return &q, nil
 }
 
-func (qc *QueryCache) NewQueryFromURLEncoded(urlencoded string) (*Query, error) {
+// SubmitQueryFromForm submits a new query to a cache from an HTTP form. If an
+// identical query is already cached, it returns the cached query. Use this to
+// handle POST queries.
+func (qc *QueryCache) SubmitQueryFromForm(form url.Values) (*Query, error) {
+	// parse the query
+	q, err := qc.ParseQueryFromForm(form)
+	if err != nil {
+		return nil, err
+	}
+
+	// check to see if it's been cached
+	oq, err := qc.QueryByIdentifier(q.Identifier)
+	if err != nil {
+		return nil, err
+	}
+	if oq != nil {
+		return oq, nil
+	}
+
+	// nope, new query. set submitted timestamp.
+	t := time.Now()
+	q.Submitted = &t
+
+	// and add to submitted queue
+	qc.submitted[q.Identifier] = q
+
+	return q, nil
+}
+
+// ParseQueryFromURLEncoded creates a new query bound to a cache from a URL encoded query string. Used for parser testing and JSON unmarshaling.
+func (qc *QueryCache) ParseQueryFromURLEncoded(urlencoded string) (*Query, error) {
 	v, err := url.ParseQuery(urlencoded)
 	if err != nil {
 		return nil, err
 	}
-	return qc.NewQueryFromForm(v)
+	return qc.ParseQueryFromForm(v)
 }
 
+// SubmitQueryFromURLEncoded creates a new query bound to a cache from a URL encoded query string. Use this to handle GET queries.
+func (qc *QueryCache) SubmitQueryFromURLEncoded(urlencoded string) (*Query, error) {
+	v, err := url.ParseQuery(urlencoded)
+	if err != nil {
+		return nil, err
+	}
+	return qc.SubmitQueryFromForm(v)
+}
+
+// URLEncoded returns the normalized query string representing this query. This is used to generate query identifiers.
 func (q *Query) URLEncoded() string {
 	// generate query specification as normalized, urlencoded
 
@@ -355,6 +466,11 @@ func (q *Query) URLEncoded() string {
 		out += fmt.Sprintf("&group=%s", q.groups[i].URLEncoded())
 	}
 
+	// add options
+	if q.optionSetsOnly {
+		out += "&option=sets_only"
+	}
+
 	return out
 }
 
@@ -364,16 +480,18 @@ func (q *Query) generateIdentifier() {
 	q.Identifier = hex.EncodeToString(hashbytes[:])
 }
 
-func (q *Query) generateSources() {
+func (q *Query) generateSources() error {
 	if len(q.selectSets) > 0 {
 		// Sets specified in query. Let's just use them.
 		q.Sources = q.selectSets
 	} else {
 		// We have to actually run a query here.
-		// For that we have to figure out how queries run.
-		// WORK POINTER
-		panic("set select not yet working")
+		var err error
+		if q.Sources, err = q.selectObservationSetIDs(); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // ResultLink generates a link to the file containing query results.
@@ -401,21 +519,27 @@ func (q *Query) MarshalJSON() ([]byte, error) {
 	jobj["__id"] = q.Identifier
 
 	// Determine state and additional information
-	if q.HasResult {
-		jobj["__results"] = q.ResultLink()
-		jobj["__sources"] = q.SourceLinks()
-		if q.ExtRef != "" {
+	if q.Completed != nil {
+		if q.ExecutionError != nil {
+			jobj["__state"] = "failed"
+			jobj["__error"] = q.ExecutionError.Error()
+		} else if q.ExtRef != "" {
 			jobj["__state"] = "permanent"
 			jobj["_ext_ref"] = q.ExtRef
 		} else {
 			jobj["__state"] = "complete"
 		}
-	} else if q.ExecutionError != nil {
-		jobj["__state"] = "failed"
-		jobj["__error"] = q.ExecutionError.Error()
-	} else if q.IsExecuting {
+		jobj["__completion_time"] = q.Completed.Format(time.RFC3339)
+		jobj["__execution_time"] = q.Executed.Format(time.RFC3339)
+		jobj["__submission_time"] = q.Submitted.Format(time.RFC3339)
+	} else if q.Executed != nil {
 		jobj["__state"] = "pending"
+		jobj["__execution_time"] = q.Executed.Format(time.RFC3339)
+		jobj["__submission_time"] = q.Submitted.Format(time.RFC3339)
 	} else {
+		if q.Submitted != nil {
+			jobj["__submission_time"] = q.Submitted.Format(time.RFC3339)
+		}
 		jobj["__state"] = "submitted"
 	}
 
@@ -534,20 +658,21 @@ func (q *Query) selectAndStoreObservationSetLinks() error {
 // with elements 0 to n-1 being group names, and element n being the count of
 // observations in the group.
 func (q *Query) selectAndStoreGroups() error {
-	return nil
+	return errors.New("Group query execution not yet supported")
 }
 
 // selectAndStoreIntersectPaths selects paths in the condition intersection of
 // this query and dumps them to the data file as NDJSON, one path per line.
 func (q *Query) selectAndStoreIntersectPaths() error {
-	return nil
+	return errors.New("Intersection query execution not yet supported")
 }
 
-func (q *Query) Execute() {
+func (q *Query) Execute(done chan<- struct{}) {
 	// fire off a goroutine to actually run the query
 	go func() {
 		// mark query as executing
-		q.IsExecuting = true
+		startTime := time.Now()
+		q.Executed = &startTime
 
 		// switch and run query
 		if len(q.intersectConditions) > 0 {
@@ -561,11 +686,12 @@ func (q *Query) Execute() {
 		}
 
 		// mark query as done
-		q.IsExecuting = false
+		endTime := time.Now()
+		q.Completed = &endTime
 
-		// and as having a result if appropriate
-		if q.ExecutionError == nil {
-			q.HasResult = true
+		// and notify if we have a channel
+		if done != nil {
+			done <- struct{}{}
 		}
 	}()
 }
