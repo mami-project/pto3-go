@@ -180,6 +180,7 @@ func (ra *RawAPI) handlePutCampaignMetadata(w http.ResponseWriter, r *http.Reque
 
 	// now look up the campaig and create if necessary.
 	cam, err := ra.rds.CampaignForName(camname)
+	didCreateCampaign := false
 	if err != nil {
 		switch ev := err.(type) {
 		case *pto3.PTOError:
@@ -190,6 +191,7 @@ func (ra *RawAPI) handlePutCampaignMetadata(w http.ResponseWriter, r *http.Reque
 					pto3.HandleErrorHTTP(w, "creating campaign", err)
 					return
 				}
+				didCreateCampaign = true
 			} else {
 				pto3.HandleErrorHTTP(w, "retrieving campaign", err)
 				return
@@ -200,11 +202,13 @@ func (ra *RawAPI) handlePutCampaignMetadata(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	// overwrite metadata
-	err = cam.PutCampaignMetadata(&in)
-	if err != nil {
-		pto3.HandleErrorHTTP(w, "writing metadata", err)
-		return
+	// overwrite metadata unless we created the campaign
+	if !didCreateCampaign {
+		err = cam.PutCampaignMetadata(&in)
+		if err != nil {
+			pto3.HandleErrorHTTP(w, "writing metadata", err)
+			return
+		}
 	}
 
 	metadataResponse(w, http.StatusCreated, cam, "")

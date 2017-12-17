@@ -10,8 +10,8 @@ import (
 	"github.com/mami-project/pto3-go"
 )
 
-const SuppressDropTables = true
-const SuppressDeleteRawStore = false
+const SuppressDropTables = false
+const SuppressDeleteRawStore = true
 const SuppressDeleteQueryCache = false
 
 var TestConfig *pto3.PTOConfiguration
@@ -40,7 +40,7 @@ func setupRDS(config *pto3.PTOConfiguration) *pto3.RawDataStore {
 
 func teardownRDS(config *pto3.PTOConfiguration) {
 	if SuppressDeleteRawStore {
-		log.Printf("Leaving temporary raw data store at %s", config.QueryCacheRoot)
+		log.Printf("Leaving temporary raw data store at %s", config.RawRoot)
 	} else if err := os.RemoveAll(config.RawRoot); err != nil {
 		log.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestMain(m *testing.M) {
 	os.Exit(func() int {
 
 		// build a raw data store (and prepare to clean up after it)
-		setupRDS(TestConfig)
+		TestRDS = setupRDS(TestConfig)
 		defer teardownRDS(TestConfig)
 
 		// build an observation store
