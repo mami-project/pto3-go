@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/go-pg/pg/orm"
 )
@@ -13,6 +14,26 @@ import (
 type Path struct {
 	ID     int
 	String string
+	Source string
+	Target string
+}
+
+func extractSource(pathstring string) string {
+	elements := strings.Split(pathstring, " ")
+	if len(elements) > 0 && elements[0] != "*" {
+		return elements[0]
+	} else {
+		return ""
+	}
+}
+
+func extractTarget(pathstring string) string {
+	elements := strings.Split(pathstring, " ")
+	if len(elements) > 0 && elements[len(elements)-1] != "*" {
+		return elements[len(elements)-1]
+	} else {
+		return ""
+	}
 }
 
 // PathCache maps a path string to a path ID
@@ -58,7 +79,7 @@ func (cache PathCache) CacheNewPaths(db orm.DB, pathSet map[string]struct{}) err
 		defer pathpipe.Close()
 
 		for pathstring := range pathSet {
-			p := []string{fmt.Sprintf("%d", pidseq), pathstring}
+			p := []string{fmt.Sprintf("%d", pidseq), pathstring, extractSource(pathstring), extractTarget(pathstring)}
 			cache[pathstring] = pidseq
 
 			if err := out.Write(p); err != nil {
@@ -73,7 +94,7 @@ func (cache PathCache) CacheNewPaths(db orm.DB, pathSet map[string]struct{}) err
 	}()
 
 	// copy from the goroutine to the database
-	if _, err = db.CopyFrom(dbpipe, "COPY paths (id, string) FROM STDIN WITH CSV"); err != nil {
+	if _, err = db.CopyFrom(dbpipe, "COPY paths (id, string, source, target) FROM STDIN WITH CSV"); err != nil {
 		return err
 	}
 
@@ -84,6 +105,10 @@ func (cache PathCache) CacheNewPaths(db orm.DB, pathSet map[string]struct{}) err
 // InsertOnce retrieves a path's ID if it has already been inserted into the
 // database, inserting it into the database if it's not already there.
 func (p *Path) InsertOnce(db orm.DB) error {
+	// force source and target before insertion
+	p.Source = extractSource(p.String)
+	p.Target = extractTarget(p.String)
+
 	if p.ID == 0 {
 		_, err := db.Model(p).
 			Column("id").
@@ -95,4 +120,13 @@ func (p *Path) InsertOnce(db orm.DB) error {
 		}
 	}
 	return nil
+}
+
+func NewPath(pathstring string) *Path {
+	p := new(Path)
+	p.String = pathstring
+	p.Source = extractSource(pathstring)
+	p.Target = extractTarget(pathstring)
+
+	return p
 }

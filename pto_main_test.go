@@ -10,16 +10,21 @@ import (
 	"github.com/mami-project/pto3-go"
 )
 
+const SuppressDropTables = true
+const SuppressDeleteRawStore = false
+const SuppressDeleteQueryCache = false
+
 var TestConfig *pto3.PTOConfiguration
 var TestRDS *pto3.RawDataStore
 var TestDB *pg.DB
 var TestQueryCache *pto3.QueryCache
+var TestQueryCacheSetID int
 var TestRC int
 
 func setupRDS(config *pto3.PTOConfiguration) *pto3.RawDataStore {
 	// create temporary RDS directory
 	var err error
-	config.RawRoot, err = ioutil.TempDir("", "pto3-test-raw")
+	config.RawRoot, err = ioutil.TempDir("", "pto3-test-rds")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -34,7 +39,9 @@ func setupRDS(config *pto3.PTOConfiguration) *pto3.RawDataStore {
 }
 
 func teardownRDS(config *pto3.PTOConfiguration) {
-	if err := os.RemoveAll(config.RawRoot); err != nil {
+	if SuppressDeleteRawStore {
+		log.Printf("Leaving temporary raw data store at %s", config.QueryCacheRoot)
+	} else if err := os.RemoveAll(config.RawRoot); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -56,15 +63,17 @@ func setupDB(config *pto3.PTOConfiguration) *pg.DB {
 
 func teardownDB(db *pg.DB) {
 	// drop tables
-	if err := pto3.DropTables(db); err != nil {
-		log.Fatal(err)
+	if !SuppressDropTables {
+		if err := pto3.DropTables(db); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
 func setupQC(config *pto3.PTOConfiguration) *pto3.QueryCache {
 	// create temporary query cache directory
 	var err error
-	config.QueryCacheRoot, err = ioutil.TempDir("", "pto3-test-query")
+	config.QueryCacheRoot, err = ioutil.TempDir("", "pto3-test-qc")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -75,8 +84,9 @@ func setupQC(config *pto3.PTOConfiguration) *pto3.QueryCache {
 		log.Fatal(err)
 	}
 
-	// ensure the query test data is loaded
-	if err := qc.LoadTestData("testdata/test_obs.ndjson"); err != nil {
+	// ensure the query test data is loaded and stash its set ID
+	TestQueryCacheSetID, err = qc.LoadTestData("testdata/test_query.ndjson")
+	if err != nil {
 		log.Fatal(err)
 	}
 
@@ -84,7 +94,9 @@ func setupQC(config *pto3.PTOConfiguration) *pto3.QueryCache {
 }
 
 func teardownQC(config *pto3.PTOConfiguration) {
-	if err := os.RemoveAll(config.QueryCacheRoot); err != nil {
+	if SuppressDeleteQueryCache {
+		log.Printf("Leaving temporary query cache at %s", config.QueryCacheRoot)
+	} else if err := os.RemoveAll(config.QueryCacheRoot); err != nil {
 		log.Fatal(err)
 	}
 }

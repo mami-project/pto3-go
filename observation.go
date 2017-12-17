@@ -286,8 +286,8 @@ type Observation struct {
 	ID          int `sql:",pk"`
 	SetID       int
 	Set         *ObservationSet
-	StartTime   *time.Time
-	EndTime     *time.Time
+	TimeStart   *time.Time
+	TimeEnd     *time.Time
 	PathID      int
 	Path        *Path
 	ConditionID int
@@ -300,8 +300,8 @@ type Observation struct {
 func (obs *Observation) MarshalJSON() ([]byte, error) {
 	jslice := []string{
 		fmt.Sprintf("%x", obs.SetID),
-		obs.StartTime.UTC().Format(time.RFC3339),
-		obs.EndTime.UTC().Format(time.RFC3339),
+		obs.TimeStart.UTC().Format(time.RFC3339),
+		obs.TimeEnd.UTC().Format(time.RFC3339),
 		obs.Path.String,
 		obs.Condition.Name,
 	}
@@ -331,13 +331,13 @@ func (obs *Observation) unmarshalStringSlice(jslice []string, time_format string
 	if err != nil {
 		return err
 	}
-	obs.StartTime = &starttime
+	obs.TimeStart = &starttime
 
 	endtime, err := time.Parse(time_format, jslice[2])
 	if err != nil {
 		return err
 	}
-	obs.EndTime = &endtime
+	obs.TimeEnd = &endtime
 
 	obs.Path = &Path{String: jslice[3]}
 	obs.Condition = &Condition{Name: jslice[4]}
@@ -576,7 +576,7 @@ func loadObservations(
 	}()
 
 	// now copy from the CSV pipe
-	if _, err := t.CopyFrom(dbpipe, "COPY observations (set_id, start_time, end_time, path_id, condition_id, value) FROM STDIN WITH CSV"); err != nil {
+	if _, err := t.CopyFrom(dbpipe, "COPY observations (set_id, time_start, time_end, path_id, condition_id, value) FROM STDIN WITH CSV"); err != nil {
 		return err
 	}
 
@@ -751,7 +751,7 @@ func (set *ObservationSet) CopyDataToStream(db orm.DB, out io.Writer) error {
 	}()
 
 	// now kick off a copy query
-	if _, err := db.CopyTo(dbpipe, "COPY (SELECT set_id, start_time, end_time, string, name, value from observations JOIN conditions ON conditions.id = observations.condition_id JOIN paths ON paths.id = observations.path_id WHERE set_id = ?) TO STDOUT WITH CSV", set.ID); err != nil {
+	if _, err := db.CopyTo(dbpipe, "COPY (SELECT set_id, time_start, time_end, string, name, value from observations JOIN conditions ON conditions.id = observations.condition_id JOIN paths ON paths.id = observations.path_id WHERE set_id = ?) TO STDOUT WITH CSV", set.ID); err != nil {
 		return err
 	}
 

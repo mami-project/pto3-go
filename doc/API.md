@@ -385,13 +385,13 @@ available:
 
 | Value         | Meaning                                            |
 | ------------- | -------------------------------------------------- |
-| `year`        | Count by year of start_time                        | 
-| `month`       | Count by year/month of start_time                  |
-| `day`         | Count by year/month/day of start_time              |
-| `hour`        | Count by year/month/day/hour of start_time         |
-| `week`        | Count by year/week (starting Monday) of start_time |
-| `week_day`    | Count by day of week of start_time (7 groups)      |
-| `day_hour`    | Count by hour of day of start_time (24 groups)     | 
+| `year`        | Count by year of time_start                        | 
+| `month`       | Count by year/month of time_start                  |
+| `day`         | Count by year/month/day of time_start              |
+| `hour`        | Count by year/month/day/hour of time_start         |
+| `week`        | Count by year/week (starting Monday) of time_start |
+| `week_day`    | Count by day of week of time_start (7 groups)      |
+| `day_hour`    | Count by hour of day of time_start (24 groups)     | 
 | `condition`   | Count by condition                                 |
 | `source`      | Count by first element in path                     |
 | `target`      | Count by last element in path                      |

@@ -69,18 +69,14 @@ func NewQueryCache(config *PTOConfiguration) (*QueryCache, error) {
 // LoadTestData loads an observation file into a database. It is used as part
 // of the setup for testing the query cache, and should not be called in the
 // normal case.
-func (qc *QueryCache) LoadTestData(obsFilename string) error {
+func (qc *QueryCache) LoadTestData(obsFilename string) (int, error) {
 	pidCache := make(PathCache)
-	_, err := CopySetFromObsFile(obsFilename, qc.db, qc.cidCache, pidCache)
-	return err
-}
-
-func (qc *QueryCache) writeResultFile(identifier string) (*os.File, error) {
-	return os.Create(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", identifier)))
-}
-
-func (qc *QueryCache) ReadResultFile(identifier string) (*os.File, error) {
-	return os.Open(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", identifier)))
+	set, err := CopySetFromObsFile(obsFilename, qc.db, qc.cidCache, pidCache)
+	if err != nil {
+		return 0, err
+	} else {
+		return set.ID, nil
+	}
 }
 
 func (qc *QueryCache) writeMetadataFile(identifier string) (*os.File, error) {
@@ -159,43 +155,53 @@ type IntersectCondition struct {
 type GroupSpec interface {
 	GroupBy(q *orm.Query) *orm.Query
 	URLEncoded() string
+	ColumnSpec() string
 }
 
 // SimpleGroupSpec groups a pg-go query by a single column
 type SimpleGroupSpec struct {
-	ColumnName string
+	Name   string
+	Column string
 }
 
 func (gs *SimpleGroupSpec) GroupBy(q *orm.Query) *orm.Query {
-	return q.Group(gs.ColumnName)
+	return q.Group(gs.Column)
 }
 
 func (gs *SimpleGroupSpec) URLEncoded() string {
-	return gs.ColumnName
+	return gs.Name
+}
+
+func (gs *SimpleGroupSpec) ColumnSpec() string {
+	return gs.Column
 }
 
 // DateTruncGroupSpec groups a pg-go query by applying PostgreSQL's date_trunc function to a column
 type DateTruncGroupSpec struct {
 	Truncation string
-	ColumnName string
+	Column     string
 }
 
 func (gs *DateTruncGroupSpec) GroupBy(q *orm.Query) *orm.Query {
-	return q.Group(fmt.Sprintf("date_trunc(%s, %s)"), gs.Truncation, gs.ColumnName)
+	return q.Group(gs.ColumnSpec())
 }
 
 func (gs *DateTruncGroupSpec) URLEncoded() string {
 	return gs.Truncation
 }
 
+func (gs *DateTruncGroupSpec) ColumnSpec() string {
+	return fmt.Sprintf("date_trunc(%s, %s)", gs.Truncation, gs.Column)
+}
+
 // DatePartGroupSpec groups a pg-go query by applying PostgreSQL's date_part function to a column
 type DatePartGroupSpec struct {
-	Part       string
-	ColumnName string
+	Part   string
+	Column string
 }
 
 func (gs *DatePartGroupSpec) GroupBy(q *orm.Query) *orm.Query {
-	return q.Group(fmt.Sprintf("date_part(%s, %s)"), gs.Part, gs.ColumnName)
+	return q.Group(gs.ColumnSpec())
 }
 
 func (gs *DatePartGroupSpec) URLEncoded() string {
@@ -207,6 +213,10 @@ func (gs *DatePartGroupSpec) URLEncoded() string {
 	default:
 		panic("bad date part group specification")
 	}
+}
+
+func (gs *DatePartGroupSpec) ColumnSpec() string {
+	return fmt.Sprintf("date_part(%s, %s)", gs.Part, gs.Column)
 }
 
 type Query struct {
@@ -235,8 +245,8 @@ type Query struct {
 	timeEnd             *time.Time
 	selectSets          []int
 	selectOnPath        []string
-	selectSource        []string
-	selectTarget        []string
+	selectSources       []string
+	selectTargets       []string
 	selectConditions    []Condition
 	groups              []GroupSpec
 	intersectConditions []IntersectCondition
@@ -294,9 +304,10 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 
 	// Can't really validate paths, so just store these slices directly from the form.
 	q.selectOnPath = form["on_path"]
-	q.selectSource = form["source"]
-	q.selectTarget = form["target"]
+	q.selectSources = form["source"]
+	q.selectTargets = form["target"]
 
+	// Validate and expand conditions
 	conditionStrs, ok := form["condition"]
 	if ok {
 		q.selectConditions = make([]Condition, 0)
@@ -313,30 +324,32 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 
 	groupStrs, ok := form["group"]
 	if ok {
-
-		q.groups = make([]GroupSpec, 0)
-		for _, groupStr := range groupStrs {
+		if len(groupStrs) > 2 {
+			return nil, PTOErrorf("Group by more than two dimensions not supported").StatusIs(http.StatusBadRequest)
+		}
+		q.groups = make([]GroupSpec, len(groupStrs))
+		for i, groupStr := range groupStrs {
 			switch groupStr {
 			case "year":
-				q.groups = append(q.groups, &DateTruncGroupSpec{Truncation: "year", ColumnName: "time_start"})
+				q.groups[i] = &DateTruncGroupSpec{Truncation: "year", Column: "time_start"}
 			case "month":
-				q.groups = append(q.groups, &DateTruncGroupSpec{Truncation: "month", ColumnName: "time_start"})
+				q.groups[i] = &DateTruncGroupSpec{Truncation: "month", Column: "time_start"}
 			case "week":
-				q.groups = append(q.groups, &DateTruncGroupSpec{Truncation: "week", ColumnName: "time_start"})
+				q.groups[i] = &DateTruncGroupSpec{Truncation: "week", Column: "time_start"}
 			case "day":
-				q.groups = append(q.groups, &DateTruncGroupSpec{Truncation: "day", ColumnName: "time_start"})
+				q.groups[i] = &DateTruncGroupSpec{Truncation: "day", Column: "time_start"}
 			case "hour":
-				q.groups = append(q.groups, &DateTruncGroupSpec{Truncation: "hour", ColumnName: "time_start"})
+				q.groups[i] = &DateTruncGroupSpec{Truncation: "hour", Column: "time_start"}
 			case "week_day":
-				q.groups = append(q.groups, &DatePartGroupSpec{Part: "dow", ColumnName: "time_start"})
+				q.groups[i] = &DatePartGroupSpec{Part: "dow", Column: "time_start"}
 			case "day_hour":
-				q.groups = append(q.groups, &DatePartGroupSpec{Part: "hour", ColumnName: "time_start"})
+				q.groups[i] = &DatePartGroupSpec{Part: "hour", Column: "time_start"}
 			case "condition":
-				q.groups = append(q.groups, &SimpleGroupSpec{ColumnName: "condition"})
+				q.groups[i] = &SimpleGroupSpec{Name: "condition", Column: "conditions.name"}
 			case "source":
-				return nil, PTOErrorf("source groups not yet implemented").StatusIs(http.StatusNotImplemented)
+				q.groups[i] = &SimpleGroupSpec{Name: "source", Column: "paths.source"}
 			case "target":
-				return nil, PTOErrorf("target groups not yet implemented").StatusIs(http.StatusNotImplemented)
+				q.groups[i] = &SimpleGroupSpec{Name: "target", Column: "paths.target"}
 			}
 		}
 	}
@@ -344,7 +357,7 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 	// FIXME parse intersect conditions
 	_, ok = form["intersect_condition"]
 	if ok {
-		return nil, errors.New("intersecting path support not yet implemented")
+		return nil, PTOErrorf("intersecting path support not yet implemented").StatusIs(http.StatusNotImplemented)
 	}
 
 	// FIXME parse options
@@ -436,19 +449,19 @@ func (q *Query) URLEncoded() string {
 	}
 
 	// add sorted sources
-	sort.SliceStable(q.selectSource, func(i, j int) bool {
-		return q.selectSource[i] < q.selectSource[j]
+	sort.SliceStable(q.selectSources, func(i, j int) bool {
+		return q.selectSources[i] < q.selectSources[j]
 	})
-	for i := range q.selectSource {
-		out += fmt.Sprintf("&source=%s", q.selectSource[i])
+	for i := range q.selectSources {
+		out += fmt.Sprintf("&source=%s", q.selectSources[i])
 	}
 
 	// add sorted target
-	sort.SliceStable(q.selectTarget, func(i, j int) bool {
-		return q.selectTarget[i] < q.selectTarget[j]
+	sort.SliceStable(q.selectTargets, func(i, j int) bool {
+		return q.selectTargets[i] < q.selectTargets[j]
 	})
-	for i := range q.selectTarget {
-		out += fmt.Sprintf("&target=%s", q.selectTarget[i])
+	for i := range q.selectTargets {
+		out += fmt.Sprintf("&target=%s", q.selectTargets[i])
 	}
 
 	// add sorted conditions
@@ -463,7 +476,7 @@ func (q *Query) URLEncoded() string {
 	sort.SliceStable(q.groups, func(i, j int) bool {
 		return q.groups[i].URLEncoded() < q.groups[j].URLEncoded()
 	})
-	for i := range q.selectTarget {
+	for i := range q.groups {
 		out += fmt.Sprintf("&group=%s", q.groups[i].URLEncoded())
 	}
 
@@ -579,6 +592,14 @@ func (q *Query) FlushMetadata() error {
 	return nil
 }
 
+func (q *Query) writeResultFile() (*os.File, error) {
+	return os.Create(filepath.Join(q.qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", q.Identifier)))
+}
+
+func (q *Query) ReadResultFile() (*os.File, error) {
+	return os.Open(filepath.Join(q.qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", q.Identifier)))
+}
+
 func (q *Query) whereClauses(pq *orm.Query) *orm.Query {
 	// time
 	pq = pq.Where("time_start > ?", q.timeStart).Where("time_end < ?", q.timeEnd)
@@ -604,10 +625,34 @@ func (q *Query) whereClauses(pq *orm.Query) *orm.Query {
 	}
 
 	// FIXME source
+	if len(q.selectSources) > 0 {
+		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
+			for _, src := range q.selectSources {
+				qq = qq.WhereOr("path.source = ?", src)
+			}
+			return qq, nil
+		})
+	}
 
 	// FIXME target
+	if len(q.selectTargets) > 0 {
+		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
+			for _, tgt := range q.selectTargets {
+				qq = qq.WhereOr("path.target = ?", tgt)
+			}
+			return qq, nil
+		})
+	}
 
 	// FIXME on path
+	if len(q.selectOnPath) > 0 {
+		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
+			for _, onpath := range q.selectOnPath {
+				qq = qq.WhereOr("position(? in path.string) > 0", onpath)
+			}
+			return qq, nil
+		})
+	}
 
 	return pq
 }
@@ -620,10 +665,10 @@ func (q *Query) selectAndStoreObservations() error {
 	pq := q.qc.db.Model(&obsdat).Column("observation.*", "Condition", "Path")
 	pq = q.whereClauses(pq)
 	if err := pq.Select(); err != nil {
-		return err
+		return PTOWrapError(err)
 	}
 
-	outfile, err := q.qc.writeResultFile(q.Identifier)
+	outfile, err := q.writeResultFile()
 	if err != nil {
 		return err
 	}
@@ -644,11 +689,10 @@ func (q *Query) selectObservationSetIDs() ([]int, error) {
 	pq := q.qc.db.Model(&setids).ColumnExpr("DISTINCT set_id")
 	pq = q.whereClauses(pq)
 	if err := pq.Select(); err != nil {
-		return nil, err
+		return nil, PTOWrapError(err)
 	}
 
 	return setids, nil
-
 }
 
 // selectAndStoreObservationSetIDs selects observation set IDs responding to
@@ -659,7 +703,7 @@ func (q *Query) selectAndStoreObservationSetLinks() error {
 		return err
 	}
 
-	outfile, err := q.qc.writeResultFile(q.Identifier)
+	outfile, err := q.writeResultFile()
 	if err != nil {
 		return err
 	}
@@ -674,12 +718,96 @@ func (q *Query) selectAndStoreObservationSetLinks() error {
 	return nil
 }
 
+func (q *Query) selectAndStoreOneGroup() error {
+	var results []struct {
+		Group0 string
+		Count  int
+	}
+
+	pq := q.qc.db.Model(&results).ColumnExpr("? as group0, count(*)", q.groups[0].ColumnSpec())
+	pq = q.groups[0].GroupBy(q.whereClauses(pq))
+	if err := pq.Select(); err != nil {
+		return PTOWrapError(err)
+	}
+
+	outfile, err := q.writeResultFile()
+	if err != nil {
+		return err
+	}
+	defer outfile.Close()
+
+	for _, result := range results {
+		out := make([]interface{}, 2)
+		out[0] = result.Group0
+		out[1] = result.Count
+
+		b, err := json.Marshal(out)
+		if err != nil {
+			return PTOWrapError(err)
+		}
+
+		if _, err := fmt.Fprintf(outfile, "%s\n", b); err != nil {
+			return PTOWrapError(err)
+		}
+	}
+
+	return nil
+}
+
+func (q *Query) selectAndStoreTwoGroups() error {
+	var results []struct {
+		Group0 string
+		Group1 string
+		Count  int
+	}
+
+	pq := q.qc.db.Model(&results).ColumnExpr("? as group0, ? as group1 count(*)",
+		q.groups[0].ColumnSpec(), q.groups[1].ColumnSpec())
+	pq = q.groups[1].GroupBy(q.groups[0].GroupBy(q.whereClauses(pq)))
+	if err := pq.Select(); err != nil {
+		return PTOWrapError(err)
+	}
+
+	outfile, err := q.writeResultFile()
+	if err != nil {
+		return err
+	}
+	defer outfile.Close()
+
+	for _, result := range results {
+		out := make([]interface{}, 3)
+		out[0] = result.Group0
+		out[1] = result.Group1
+		out[2] = result.Count
+
+		b, err := json.Marshal(out)
+		if err != nil {
+			return PTOWrapError(err)
+		}
+
+		if _, err := fmt.Fprintf(outfile, "%s\n", b); err != nil {
+			return PTOWrapError(err)
+		}
+	}
+
+	return nil
+}
+
 // selectAndStoreGroups selects groups responding to this query and dumps them
 // to the data file as NDJSON, one line containing a JSON array per group,
 // with elements 0 to n-1 being group names, and element n being the count of
 // observations in the group.
 func (q *Query) selectAndStoreGroups() error {
-	return errors.New("Group query execution not yet supported")
+	switch len(q.groups) {
+	case 0:
+		panic("Programmer error: Query.selectAndStoreGroups() called on a non-group query")
+	case 1:
+		return q.selectAndStoreOneGroup()
+	case 2:
+		return q.selectAndStoreTwoGroups()
+	default:
+		return PTOErrorf("Group by more than two dimensions not presently supported").StatusIs(http.StatusBadRequest)
+	}
 }
 
 // selectAndStoreIntersectPaths selects paths in the condition intersection of

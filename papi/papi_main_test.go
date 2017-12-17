@@ -23,7 +23,7 @@ const SuppressDropTables = false
 func setupRaw(config *pto3.PTOConfiguration, azr papi.Authorizer, r *mux.Router) *papi.RawAPI {
 	// create temporary RDS directory
 	var err error
-	config.RawRoot, err = ioutil.TempDir("", "pto3-test-raw")
+	config.RawRoot, err = ioutil.TempDir("", "papi-test-raw")
 	if err != nil {
 		log.Fatal(err)
 	}
