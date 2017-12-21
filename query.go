@@ -624,7 +624,7 @@ func (q *Query) whereClauses(pq *orm.Query) *orm.Query {
 		})
 	}
 
-	// FIXME source
+	// source
 	if len(q.selectSources) > 0 {
 		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
 			for _, src := range q.selectSources {
@@ -634,7 +634,7 @@ func (q *Query) whereClauses(pq *orm.Query) *orm.Query {
 		})
 	}
 
-	// FIXME target
+	// target
 	if len(q.selectTargets) > 0 {
 		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
 			for _, tgt := range q.selectTargets {
@@ -644,7 +644,7 @@ func (q *Query) whereClauses(pq *orm.Query) *orm.Query {
 		})
 	}
 
-	// FIXME on path
+	// on path
 	if len(q.selectOnPath) > 0 {
 		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
 			for _, onpath := range q.selectOnPath {
@@ -813,7 +813,7 @@ func (q *Query) selectAndStoreGroups() error {
 // selectAndStoreIntersectPaths selects paths in the condition intersection of
 // this query and dumps them to the data file as NDJSON, one path per line.
 func (q *Query) selectAndStoreIntersectPaths() error {
-	return errors.New("Intersection query execution not yet supported")
+	return errors.New("Path intersection query execution not yet supported")
 }
 
 func (q *Query) Execute(done chan<- struct{}) {

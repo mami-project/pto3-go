@@ -49,6 +49,12 @@ func ParseTime(s string) (time.Time, error) {
 		return t, nil
 	}
 
+	// ISO Date
+	t, err = time.Parse("2006-01-02", s)
+	if err == nil {
+		return t, nil
+	}
+
 	// PostgreSQL
 	t, err = time.Parse("2006-01-02 15:04:05-07", s)
 	if err == nil {
