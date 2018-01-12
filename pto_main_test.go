@@ -11,7 +11,7 @@ import (
 )
 
 const SuppressDropTables = false
-const SuppressDeleteRawStore = true
+const SuppressDeleteRawStore = false
 const SuppressDeleteQueryCache = false
 
 var TestConfig *pto3.PTOConfiguration

@@ -2,9 +2,62 @@ package pto3_test
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
 	"testing"
+
+	pto3 "github.com/mami-project/pto3-go"
 )
+
+type groupQueryResult struct {
+	groups []string
+	count  int
+}
+
+func parseGroupQueryResults(in io.Reader) ([]groupQueryResult, error) {
+	s := bufio.NewScanner(in)
+	out := make([]groupQueryResult, 0)
+	lineno := 0
+
+	for s.Scan() {
+		var line []interface{}
+		lineno++
+
+		if err := json.Unmarshal([]byte(s.Text()), &line); err != nil {
+			return nil, err
+		}
+
+		switch len(line) {
+		case 2:
+			g0, ok := line[0].(string)
+			if !ok {
+				return nil, pto3.PTOErrorf("result group 0 not a string at line %d", lineno)
+			}
+			count, ok := line[1].(float64)
+			if !ok {
+				return nil, pto3.PTOErrorf("result count not a number at line %d", lineno)
+			}
+			out = append(out, groupQueryResult{[]string{g0}, int(count)})
+		case 3:
+			g0, ok := line[0].(string)
+			if !ok {
+				return nil, pto3.PTOErrorf("result group 0 not a string at line %d", lineno)
+			}
+			g1, ok := line[1].(string)
+			if !ok {
+				return nil, pto3.PTOErrorf("result group 1 not a string at line %d", lineno)
+			}
+			count, ok := line[2].(float64)
+			if !ok {
+				return nil, pto3.PTOErrorf("result count not a number at line %d", lineno)
+			}
+			out = append(out, groupQueryResult{[]string{g0, g1}, int(count)})
+		}
+	}
+
+	return out, nil
+}
 
 func TestQueryParsing(t *testing.T) {
 	encodedTestQueries := []string{
@@ -65,7 +118,7 @@ func TestSelectQueries(t *testing.T) {
 
 		// verify we think have a result
 		if q.Completed == nil {
-			t.Fatal("Query %d did not complete", i)
+			t.Fatalf("Query %d did not complete", i)
 		}
 
 		// verify the query thinks it completed
@@ -98,7 +151,7 @@ func TestOneGroupQueries(t *testing.T) {
 		group   string
 		count   int
 	}{
-		{"time_start=2017-12-05&time_end=2017-12-06&group=condition", "pto.test.color.red", 0},
+		{"time_start=2017-12-05&time_end=2017-12-06&group=condition", "pto.test.color.red", 3195},
 	}
 
 	for i, qspec := range testGroupQueries {
@@ -118,7 +171,7 @@ func TestOneGroupQueries(t *testing.T) {
 
 		// verify we think have a result
 		if q.Completed == nil {
-			t.Fatal("Query %d did not complete", i)
+			t.Fatalf("Query %d did not complete", i)
 		}
 
 		// verify the query thinks it completed
@@ -133,7 +186,24 @@ func TestOneGroupQueries(t *testing.T) {
 		}
 		defer resfile.Close()
 
-		// FIXME work pointer
-		// we need a utility function here that iterates over ndjson arrays for reading stored result data
+		// load query results
+		groupResults, err := parseGroupQueryResults(resfile)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// search through them to find the group we care about them
+		gotExpectedGroup := false
+		for j := range groupResults {
+			if groupResults[j].groups[0] == qspec.group {
+				gotExpectedGroup = true
+				if groupResults[j].count != qspec.count {
+					t.Fatalf("Query %d expected count %d for group %s, got %d", i, qspec.count, qspec.group, groupResults[j].count)
+				}
+			}
+		}
+		if !gotExpectedGroup {
+			t.Fatalf("Query %d results missing group %s", i, qspec.group)
+		}
 	}
 }

@@ -726,7 +726,7 @@ func (q *Query) selectAndStoreOneGroup() error {
 		Count     int
 	}
 
-	pq := q.qc.db.Model(&results).ColumnExpr("? as group0, count(*)", q.groups[0].ColumnSpec())
+	pq := q.qc.db.Model(&results).ColumnExpr(q.groups[0].ColumnSpec() + " as group0, count(*)")
 
 	// add join clause if necessary
 	sgs, ok := q.groups[0].(*SimpleGroupSpec)
