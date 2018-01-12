@@ -159,7 +159,7 @@ type SimpleGroupSpec struct {
 }
 
 func (gs *SimpleGroupSpec) GroupBy(q *orm.Query) *orm.Query {
-	return q.Group(gs.Column)
+	return q.Group(gs.ColumnSpec())
 }
 
 func (gs *SimpleGroupSpec) URLEncoded() string {
@@ -338,11 +338,11 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 			case "day_hour":
 				q.groups[i] = &DatePartGroupSpec{Part: "hour", Column: "time_start"}
 			case "condition":
-				q.groups[i] = &SimpleGroupSpec{Name: "condition", Column: "conditions.name", ExtTable: "conditions"}
+				q.groups[i] = &SimpleGroupSpec{Name: "condition", Column: "condition.name", ExtTable: "conditions"}
 			case "source":
-				q.groups[i] = &SimpleGroupSpec{Name: "source", Column: "paths.source", ExtTable: "paths"}
+				q.groups[i] = &SimpleGroupSpec{Name: "source", Column: "path.source", ExtTable: "paths"}
 			case "target":
-				q.groups[i] = &SimpleGroupSpec{Name: "target", Column: "paths.target", ExtTable: "paths"}
+				q.groups[i] = &SimpleGroupSpec{Name: "target", Column: "path.target", ExtTable: "paths"}
 			default:
 				return nil, PTOErrorf("unsupported group name %s", groupStr).StatusIs(http.StatusBadRequest)
 			}
@@ -710,21 +710,23 @@ func (q *Query) selectAndStoreObservationSetLinks() error {
 func joinGroupExtTable(q *orm.Query, extTable string) *orm.Query {
 	switch extTable {
 	case "conditions":
-		return q.Join("JOIN conditions ON conditions.id = observations.condition_id")
+		return q.Join("JOIN conditions AS condition ON condition.id = observation.condition_id")
 	case "paths":
-		return q.Join("JOIN paths ON paths.id = observations.path_id")
+		return q.Join("JOIN paths AS path ON path.id = observation.path_id")
 	default:
 		panic("internal error: attempt to join unjoinable external table while grouping")
 	}
 }
 
 func (q *Query) selectAndStoreOneGroup() error {
+
 	var results []struct {
-		Group0 string
-		Count  int
+		tableName struct{} `sql:"observations,alias:observation"` // OMG this is a freaking hack
+		Group0    string
+		Count     int
 	}
 
-	pq := q.qc.db.Model(&results).ColumnExpr("? as group0, count(*) FROM observations", q.groups[0].ColumnSpec())
+	pq := q.qc.db.Model(&results).ColumnExpr("? as group0, count(*)", q.groups[0].ColumnSpec())
 
 	// add join clause if necessary
 	sgs, ok := q.groups[0].(*SimpleGroupSpec)
