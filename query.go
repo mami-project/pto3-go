@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -145,12 +144,6 @@ func (qc *QueryCache) QueryByIdentifier(identifier string) (*Query, error) {
 	return qc.fetchQuery(identifier)
 }
 
-// IntersectCondition represents a condition together with a negation flag
-type IntersectCondition struct {
-	Condition
-	Negate bool
-}
-
 // GroupSpec can group a pg-go query by some set of criteria
 type GroupSpec interface {
 	GroupBy(q *orm.Query) *orm.Query
@@ -160,8 +153,9 @@ type GroupSpec interface {
 
 // SimpleGroupSpec groups a pg-go query by a single column
 type SimpleGroupSpec struct {
-	Name   string
-	Column string
+	Name     string
+	Column   string
+	ExtTable string
 }
 
 func (gs *SimpleGroupSpec) GroupBy(q *orm.Query) *orm.Query {
@@ -241,15 +235,14 @@ type Query struct {
 	Metadata map[string]string
 
 	// Parsed query parameters
-	timeStart           *time.Time
-	timeEnd             *time.Time
-	selectSets          []int
-	selectOnPath        []string
-	selectSources       []string
-	selectTargets       []string
-	selectConditions    []Condition
-	groups              []GroupSpec
-	intersectConditions []IntersectCondition
+	timeStart        *time.Time
+	timeEnd          *time.Time
+	selectSets       []int
+	selectOnPath     []string
+	selectSources    []string
+	selectTargets    []string
+	selectConditions []Condition
+	groups           []GroupSpec
 
 	// Query options
 	optionSetsOnly bool
@@ -345,22 +338,18 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 			case "day_hour":
 				q.groups[i] = &DatePartGroupSpec{Part: "hour", Column: "time_start"}
 			case "condition":
-				q.groups[i] = &SimpleGroupSpec{Name: "condition", Column: "conditions.name"}
+				q.groups[i] = &SimpleGroupSpec{Name: "condition", Column: "conditions.name", ExtTable: "conditions"}
 			case "source":
-				q.groups[i] = &SimpleGroupSpec{Name: "source", Column: "paths.source"}
+				q.groups[i] = &SimpleGroupSpec{Name: "source", Column: "paths.source", ExtTable: "paths"}
 			case "target":
-				q.groups[i] = &SimpleGroupSpec{Name: "target", Column: "paths.target"}
+				q.groups[i] = &SimpleGroupSpec{Name: "target", Column: "paths.target", ExtTable: "paths"}
+			default:
+				return nil, PTOErrorf("unsupported group name %s", groupStr).StatusIs(http.StatusBadRequest)
 			}
 		}
 	}
 
-	// FIXME parse intersect conditions
-	_, ok = form["intersect_condition"]
-	if ok {
-		return nil, PTOErrorf("intersecting path support not yet implemented").StatusIs(http.StatusNotImplemented)
-	}
-
-	// FIXME parse options
+	// parse options
 	optionStrs, ok := form["option"]
 	if ok {
 		for _, optionStr := range optionStrs {
@@ -718,13 +707,32 @@ func (q *Query) selectAndStoreObservationSetLinks() error {
 	return nil
 }
 
+func joinGroupExtTable(q *orm.Query, extTable string) *orm.Query {
+	switch extTable {
+	case "conditions":
+		return q.Join("JOIN conditions ON conditions.id = observations.condition_id")
+	case "paths":
+		return q.Join("JOIN paths ON paths.id = observations.path_id")
+	default:
+		panic("internal error: attempt to join unjoinable external table while grouping")
+	}
+}
+
 func (q *Query) selectAndStoreOneGroup() error {
 	var results []struct {
 		Group0 string
 		Count  int
 	}
 
-	pq := q.qc.db.Model(&results).ColumnExpr("? as group0, count(*)", q.groups[0].ColumnSpec())
+	pq := q.qc.db.Model(&results).ColumnExpr("? as group0, count(*) FROM observations", q.groups[0].ColumnSpec())
+
+	// add join clause if necessary
+	sgs, ok := q.groups[0].(*SimpleGroupSpec)
+	if ok && sgs.ExtTable != "" {
+		pq = joinGroupExtTable(pq, sgs.ExtTable)
+	}
+
+	// now group
 	pq = q.groups[0].GroupBy(q.whereClauses(pq))
 	if err := pq.Select(); err != nil {
 		return PTOWrapError(err)
@@ -761,8 +769,23 @@ func (q *Query) selectAndStoreTwoGroups() error {
 		Count  int
 	}
 
-	pq := q.qc.db.Model(&results).ColumnExpr("? as group0, ? as group1 count(*)",
+	pq := q.qc.db.Model(&results).ColumnExpr("? as group0, ? as group1, count(*) FROM observations",
 		q.groups[0].ColumnSpec(), q.groups[1].ColumnSpec())
+
+	// now join as necessary
+	extTableSet := make(map[string]struct{})
+	for i := 0; i < 2; i++ {
+		sgs, ok := q.groups[i].(*SimpleGroupSpec)
+		if ok && sgs.ExtTable != "" {
+			extTableSet[sgs.ExtTable] = struct{}{}
+		}
+	}
+
+	for k := range extTableSet {
+		pq = joinGroupExtTable(pq, k)
+	}
+
+	// and group
 	pq = q.groups[1].GroupBy(q.groups[0].GroupBy(q.whereClauses(pq)))
 	if err := pq.Select(); err != nil {
 		return PTOWrapError(err)
@@ -810,12 +833,6 @@ func (q *Query) selectAndStoreGroups() error {
 	}
 }
 
-// selectAndStoreIntersectPaths selects paths in the condition intersection of
-// this query and dumps them to the data file as NDJSON, one path per line.
-func (q *Query) selectAndStoreIntersectPaths() error {
-	return errors.New("Path intersection query execution not yet supported")
-}
-
 func (q *Query) Execute(done chan<- struct{}) {
 	// fire off a goroutine to actually run the query
 	go func() {
@@ -824,9 +841,7 @@ func (q *Query) Execute(done chan<- struct{}) {
 		q.Executed = &startTime
 
 		// switch and run query
-		if len(q.intersectConditions) > 0 {
-			q.ExecutionError = q.selectAndStoreIntersectPaths()
-		} else if len(q.groups) > 0 {
+		if len(q.groups) > 0 {
 			q.ExecutionError = q.selectAndStoreGroups()
 		} else if q.optionSetsOnly {
 			q.ExecutionError = q.selectAndStoreObservationSetLinks()

@@ -91,49 +91,49 @@ func TestSelectQueries(t *testing.T) {
 	}
 }
 
-// func TestOneGroupQueries(t *testing.T) {
+func TestOneGroupQueries(t *testing.T) {
 
-// 	testGroupQueries := []struct {
-// 		encoded string
-// 		group   string
-// 		count   int
-// 	}{
-// 		{"time_start=2017-12-05&time_end=2017-12-06&group=conditions", "pto.test.color.red", 0},
-// 	}
+	testGroupQueries := []struct {
+		encoded string
+		group   string
+		count   int
+	}{
+		{"time_start=2017-12-05&time_end=2017-12-06&group=condition", "pto.test.color.red", 0},
+	}
 
-// 	for i, qspec := range testGroupQueries {
+	for i, qspec := range testGroupQueries {
 
-// 		// verify we're only querying our test set, for repeatability
-// 		encoded := qspec.encoded + fmt.Sprintf("&set=%x", TestQueryCacheSetID)
+		// verify we're only querying our test set, for repeatability
+		encoded := qspec.encoded + fmt.Sprintf("&set=%x", TestQueryCacheSetID)
 
-// 		q, err := TestQueryCache.SubmitQueryFromURLEncoded(encoded)
-// 		if err != nil {
-// 			t.Fatal(err)
-// 		}
+		q, err := TestQueryCache.SubmitQueryFromURLEncoded(encoded)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-// 		// execute query and wait for result
-// 		done := make(chan struct{})
-// 		q.Execute(done)
-// 		<-done
+		// execute query and wait for result
+		done := make(chan struct{})
+		q.Execute(done)
+		<-done
 
-// 		// verify we think have a result
-// 		if q.Completed == nil {
-// 			t.Fatal("Query %d did not complete", i)
-// 		}
+		// verify we think have a result
+		if q.Completed == nil {
+			t.Fatal("Query %d did not complete", i)
+		}
 
-// 		// verify the query thinks it completed
-// 		if q.ExecutionError != nil {
-// 			t.Fatalf("Query %d failed: %v", i, q.ExecutionError)
-// 		}
+		// verify the query thinks it completed
+		if q.ExecutionError != nil {
+			t.Fatalf("Query %d failed: %v", i, q.ExecutionError)
+		}
 
-// 		// load query data from file
-// 		resfile, err := q.ReadResultFile()
-// 		if err != nil {
-// 			t.Fatal(err)
-// 		}
-// 		defer resfile.Close()
+		// load query data from file
+		resfile, err := q.ReadResultFile()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resfile.Close()
 
-// 		// FIXME work pointer
-// 		// we need a utility function here that iterates over ndjson arrays for reading stored result data
-// 	}
-// }
+		// FIXME work pointer
+		// we need a utility function here that iterates over ndjson arrays for reading stored result data
+	}
+}
