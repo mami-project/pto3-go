@@ -146,15 +146,18 @@ func TestSelectQueries(t *testing.T) {
 
 func TestOneGroupQueries(t *testing.T) {
 
-	testGroupQueries := []struct {
+	testQueries := []struct {
 		encoded string
 		group   string
 		count   int
 	}{
 		{"time_start=2017-12-05&time_end=2017-12-06&group=condition", "pto.test.color.red", 3195},
+		{"time_start=2017-12-05&time_end=2017-12-06&group=source", "2001:db8:e55:5::33", 3273},
+		{"time_start=2017-12-05&time_end=2017-12-06&group=target", "10.15.16.17", 7},
+		{"time_start=2017-12-05&time_end=2017-12-06&group=day_hour", "14", 3412},
 	}
 
-	for i, qspec := range testGroupQueries {
+	for i, qspec := range testQueries {
 
 		// verify we're only querying our test set, for repeatability
 		encoded := qspec.encoded + fmt.Sprintf("&set=%x", TestQueryCacheSetID)
@@ -192,7 +195,7 @@ func TestOneGroupQueries(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// search through them to find the group we care about them
+		// search through them to find the group we care about
 		gotExpectedGroup := false
 		for j := range groupResults {
 			if groupResults[j].groups[0] == qspec.group {
@@ -204,6 +207,71 @@ func TestOneGroupQueries(t *testing.T) {
 		}
 		if !gotExpectedGroup {
 			t.Fatalf("Query %d results missing group %s", i, qspec.group)
+		}
+	}
+}
+
+func TestTwoGroupQueries(t *testing.T) {
+
+	testQueries := []struct {
+		encoded string
+		group0  string
+		group1  string
+		count   int
+	}{
+		{"time_start=2017-12-05&time_end=2017-12-06&group=condition&group=day_hour", "pto.test.color.red", "14", 758},
+	}
+
+	for i, qspec := range testQueries {
+
+		// verify we're only querying our test set, for repeatability
+		encoded := qspec.encoded + fmt.Sprintf("&set=%x", TestQueryCacheSetID)
+
+		q, err := TestQueryCache.SubmitQueryFromURLEncoded(encoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// execute query and wait for result
+		done := make(chan struct{})
+		q.Execute(done)
+		<-done
+
+		// verify we think have a result
+		if q.Completed == nil {
+			t.Fatalf("Query %d did not complete", i)
+		}
+
+		// verify the query thinks it completed
+		if q.ExecutionError != nil {
+			t.Fatalf("Query %d failed: %v", i, q.ExecutionError)
+		}
+
+		// load query data from file
+		resfile, err := q.ReadResultFile()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resfile.Close()
+
+		// load query results
+		groupResults, err := parseGroupQueryResults(resfile)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// search through them to find the group we care about
+		gotExpectedGroup := false
+		for j := range groupResults {
+			if groupResults[j].groups[0] == qspec.group0 && groupResults[j].groups[1] == qspec.group1 {
+				gotExpectedGroup = true
+				if groupResults[j].count != qspec.count {
+					t.Fatalf("Query %d expected count %d for group %s/%s, got %d", i, qspec.count, qspec.group0, qspec.group1, groupResults[j].count)
+				}
+			}
+		}
+		if !gotExpectedGroup {
+			t.Fatalf("Query %d results missing group %s/%s", i, qspec.group0, qspec.group1)
 		}
 	}
 }

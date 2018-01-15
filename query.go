@@ -146,7 +146,6 @@ func (qc *QueryCache) QueryByIdentifier(identifier string) (*Query, error) {
 
 // GroupSpec can group a pg-go query by some set of criteria
 type GroupSpec interface {
-	GroupBy(q *orm.Query) *orm.Query
 	URLEncoded() string
 	ColumnSpec() string
 }
@@ -156,10 +155,6 @@ type SimpleGroupSpec struct {
 	Name     string
 	Column   string
 	ExtTable string
-}
-
-func (gs *SimpleGroupSpec) GroupBy(q *orm.Query) *orm.Query {
-	return q.Group(gs.ColumnSpec())
 }
 
 func (gs *SimpleGroupSpec) URLEncoded() string {
@@ -176,26 +171,18 @@ type DateTruncGroupSpec struct {
 	Column     string
 }
 
-func (gs *DateTruncGroupSpec) GroupBy(q *orm.Query) *orm.Query {
-	return q.Group(gs.ColumnSpec())
-}
-
 func (gs *DateTruncGroupSpec) URLEncoded() string {
 	return gs.Truncation
 }
 
 func (gs *DateTruncGroupSpec) ColumnSpec() string {
-	return fmt.Sprintf("date_trunc(%s, %s)", gs.Truncation, gs.Column)
+	return fmt.Sprintf("date_trunc('%s', %s)", gs.Truncation, gs.Column)
 }
 
 // DatePartGroupSpec groups a pg-go query by applying PostgreSQL's date_part function to a column
 type DatePartGroupSpec struct {
 	Part   string
 	Column string
-}
-
-func (gs *DatePartGroupSpec) GroupBy(q *orm.Query) *orm.Query {
-	return q.Group(gs.ColumnSpec())
 }
 
 func (gs *DatePartGroupSpec) URLEncoded() string {
@@ -210,7 +197,7 @@ func (gs *DatePartGroupSpec) URLEncoded() string {
 }
 
 func (gs *DatePartGroupSpec) ColumnSpec() string {
-	return fmt.Sprintf("date_part(%s, %s)", gs.Part, gs.Column)
+	return fmt.Sprintf("date_part('%s', %s)", gs.Part, gs.Column)
 }
 
 type Query struct {
@@ -735,7 +722,7 @@ func (q *Query) selectAndStoreOneGroup() error {
 	}
 
 	// now group
-	pq = q.groups[0].GroupBy(q.whereClauses(pq))
+	pq = q.whereClauses(pq).Group("group0")
 	if err := pq.Select(); err != nil {
 		return PTOWrapError(err)
 	}
@@ -765,14 +752,17 @@ func (q *Query) selectAndStoreOneGroup() error {
 }
 
 func (q *Query) selectAndStoreTwoGroups() error {
+
 	var results []struct {
-		Group0 string
-		Group1 string
-		Count  int
+		tableName struct{} `sql:"observations,alias:observation"` // OMG this is a freaking hack
+		Group0    string
+		Group1    string
+		Count     int
 	}
 
-	pq := q.qc.db.Model(&results).ColumnExpr("? as group0, ? as group1, count(*) FROM observations",
-		q.groups[0].ColumnSpec(), q.groups[1].ColumnSpec())
+	pq := q.qc.db.Model(&results).ColumnExpr(
+		q.groups[0].ColumnSpec() + " as group0, " +
+			q.groups[1].ColumnSpec() + "as group1, count(*)")
 
 	// now join as necessary
 	extTableSet := make(map[string]struct{})
@@ -788,7 +778,7 @@ func (q *Query) selectAndStoreTwoGroups() error {
 	}
 
 	// and group
-	pq = q.groups[1].GroupBy(q.groups[0].GroupBy(q.whereClauses(pq)))
+	pq = q.whereClauses(pq).Group("group0").Group("group1")
 	if err := pq.Select(); err != nil {
 		return PTOWrapError(err)
 	}
