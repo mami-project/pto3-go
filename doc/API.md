@@ -301,8 +301,9 @@ the query answers.
 
 | Key             | Description                                                  |
 | --------------- | ------------------------------------------------------------ |
-| `__parameters`  | URL-encoded parameters from which the query was generated                |
+| `__encoded`     | URL-encoded parameters from which the query was generated    |
 | `__state`       | Query state; see below                                       |
+| `__link`        | URL pointing to canonical query metadata, when available |
 | `__result`      | URL of the resource containing complete result, when available |
 | `__sources`     | Array of PTO URLs of observation sets covered by the query, when available   |
 | `_ext_ref`      | External reference for a permanence request; see below |

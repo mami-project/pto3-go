@@ -1,6 +1,7 @@
 package pto3
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -97,19 +98,19 @@ func (qc *QueryCache) fetchQuery(identifier string) (*Query, error) {
 			// nothing on disk, but that's not an error.
 			return nil, nil
 		} else {
-			return nil, err
+			return nil, PTOWrapError(err)
 		}
 	}
 	defer in.Close()
 
 	b, err := ioutil.ReadAll(in)
 	if err != nil {
-		return nil, err
+		return nil, PTOWrapError(err)
 	}
 
 	var q Query
 	if err := json.Unmarshal(b, &q); err != nil {
-		return nil, err
+		return nil, PTOWrapError(err)
 	}
 
 	if q.Identifier != identifier {
@@ -355,20 +356,20 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 // SubmitQueryFromForm submits a new query to a cache from an HTTP form. If an
 // identical query is already cached, it returns the cached query. Use this to
 // handle POST queries.
-func (qc *QueryCache) SubmitQueryFromForm(form url.Values) (*Query, error) {
+func (qc *QueryCache) SubmitQueryFromForm(form url.Values) (*Query, bool, error) {
 	// parse the query
 	q, err := qc.ParseQueryFromForm(form)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// check to see if it's been cached
 	oq, err := qc.QueryByIdentifier(q.Identifier)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if oq != nil {
-		return oq, nil
+		return oq, false, nil
 	}
 
 	// nope, new query. set submitted timestamp.
@@ -378,7 +379,7 @@ func (qc *QueryCache) SubmitQueryFromForm(form url.Values) (*Query, error) {
 	// and add to submitted queue
 	qc.submitted[q.Identifier] = q
 
-	return q, nil
+	return q, true, nil
 }
 
 // ParseQueryFromURLEncoded creates a new query bound to a cache from a URL encoded query string. Used for parser testing and JSON unmarshaling.
@@ -391,10 +392,10 @@ func (qc *QueryCache) ParseQueryFromURLEncoded(urlencoded string) (*Query, error
 }
 
 // SubmitQueryFromURLEncoded creates a new query bound to a cache from a URL encoded query string. Use this to handle GET queries.
-func (qc *QueryCache) SubmitQueryFromURLEncoded(urlencoded string) (*Query, error) {
+func (qc *QueryCache) SubmitQueryFromURLEncoded(urlencoded string) (*Query, bool, error) {
 	v, err := url.ParseQuery(urlencoded)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	return qc.SubmitQueryFromForm(v)
 }
@@ -500,13 +501,17 @@ func (q *Query) SourceLinks() []string {
 }
 
 func (q *Query) MarshalJSON() ([]byte, error) {
-	jobj := make(map[string]interface{})
+	jobj := make(map[string]string)
 
 	// Store the query itself in its urlencoded form
 	jobj["__encoded"] = q.URLEncoded()
 
-	// Cache the identifier (we'll ignore this on unmarshaling, but it's nice to have)
-	jobj["__id"] = q.Identifier
+	// Store a link to the query using the API
+	var err error
+	jobj["__link"], err = q.qc.config.LinkTo("query/" + q.Identifier)
+	if err != nil {
+		return nil, err
+	}
 
 	// Determine state and additional information
 	if q.Completed != nil {
@@ -516,8 +521,10 @@ func (q *Query) MarshalJSON() ([]byte, error) {
 		} else if q.ExtRef != "" {
 			jobj["__state"] = "permanent"
 			jobj["_ext_ref"] = q.ExtRef
+			jobj["__result"] = jobj["__link"] + "/result"
 		} else {
 			jobj["__state"] = "complete"
+			jobj["__result"] = jobj["__link"] + "/result"
 		}
 		jobj["__completion_time"] = q.Completed.Format(time.RFC3339)
 		jobj["__execution_time"] = q.Executed.Format(time.RFC3339)
@@ -543,10 +550,13 @@ func (q *Query) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jobj)
 }
 
+func (q *Query) UpdateFromJSON(b []byte) error {
+	// This only handles updating a query from metadata sent via the web. Use UnmarshalJSON for reading from files.
+	return PTOErrorf("JSON unmarshal not implemented").StatusIs(http.StatusNotImplemented)
+}
+
 func (q *Query) UnmarshalJSON(b []byte) error {
-	// FIXME need parser to distinguish between metadata update (PutMetadata)
-	// and read from disk file, same as with raw data. Probably a stream
-	// reader API with a different entry point, that UnmarshalJSON calls.
+	// This only handles reading from files. Use UpdateFromJSON for metadata put.
 	return PTOErrorf("JSON unmarshal not implemented").StatusIs(http.StatusNotImplemented)
 }
 
@@ -574,6 +584,42 @@ func (q *Query) writeResultFile() (*os.File, error) {
 
 func (q *Query) ReadResultFile() (*os.File, error) {
 	return os.Open(filepath.Join(q.qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", q.Identifier)))
+}
+
+func (q *Query) PaginateResultObject(offset int, count int) (map[string][]interface{}, bool, error) {
+
+	// create output object
+	outData := make([]interface{}, 0)
+
+	// open result file
+	resultFile, err := q.ReadResultFile()
+	if err != nil {
+		return nil, false, PTOWrapError(err)
+	}
+	defer resultFile.Close()
+
+	// attempt to seek to offset
+	lineno := 0
+	resultScanner := bufio.NewScanner(resultFile)
+	for resultScanner.Scan() {
+		lineno++
+
+		if offset >= lineno {
+			continue
+		}
+		if offset+count > lineno {
+			break
+		}
+
+		// unmarshal data from JSON and add to output
+		var lineData interface{}
+		if err := json.Unmarshal([]byte(resultScanner.Text()), &lineData); err != nil {
+			return nil, false, PTOWrapError(err)
+		}
+		outData = append(outData, lineData)
+	}
+
+	return map[string][]interface{}{q.resultObjectLabel(): outData}, lineno > offset+count, nil
 }
 
 func (q *Query) whereClauses(pq *orm.Query) *orm.Query {
@@ -825,6 +871,26 @@ func (q *Query) selectAndStoreGroups() error {
 	}
 }
 
+func (q *Query) executionFunc() func() error {
+	if len(q.groups) > 0 {
+		return q.selectAndStoreGroups
+	} else if q.optionSetsOnly {
+		return q.selectAndStoreObservationSetLinks
+	} else {
+		return q.selectAndStoreObservations
+	}
+}
+
+func (q *Query) resultObjectLabel() string {
+	if len(q.groups) > 0 {
+		return "groups"
+	} else if q.optionSetsOnly {
+		return "sets"
+	} else {
+		return "obs"
+	}
+}
+
 func (q *Query) Execute(done chan<- struct{}) {
 	// fire off a goroutine to actually run the query
 	go func() {
@@ -833,13 +899,7 @@ func (q *Query) Execute(done chan<- struct{}) {
 		q.Executed = &startTime
 
 		// switch and run query
-		if len(q.groups) > 0 {
-			q.ExecutionError = q.selectAndStoreGroups()
-		} else if q.optionSetsOnly {
-			q.ExecutionError = q.selectAndStoreObservationSetLinks()
-		} else {
-			q.ExecutionError = q.selectAndStoreObservations()
-		}
+		q.ExecutionError = q.executionFunc()()
 
 		// mark query as done
 		endTime := time.Now()

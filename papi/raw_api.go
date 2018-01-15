@@ -18,7 +18,7 @@ type RawAPI struct {
 	azr    Authorizer
 }
 
-func metadataResponse(w http.ResponseWriter, status int, cam *pto3.Campaign, filename string) {
+func rawMetadataResponse(w http.ResponseWriter, status int, cam *pto3.Campaign, filename string) {
 	var md *pto3.RawMetadata
 	var err error
 	if filename == "" {
@@ -211,7 +211,7 @@ func (ra *RawAPI) handlePutCampaignMetadata(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	metadataResponse(w, http.StatusCreated, cam, "")
+	rawMetadataResponse(w, http.StatusCreated, cam, "")
 }
 
 // handleGetFileMetadata handles GET /raw/<campaign>/<file>, returning
@@ -244,7 +244,7 @@ func (ra *RawAPI) handleGetFileMetadata(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	metadataResponse(w, http.StatusOK, cam, filename)
+	rawMetadataResponse(w, http.StatusOK, cam, filename)
 }
 
 // handlePutFileMetadata handles PUT /raw/<campaign>/<file>, overwriting metadata for
@@ -307,7 +307,7 @@ func (ra *RawAPI) handlePutFileMetadata(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	metadataResponse(w, http.StatusCreated, cam, filename)
+	rawMetadataResponse(w, http.StatusCreated, cam, filename)
 }
 
 // handleDeleteFile handles DELETE /raw/<campaign>/<file>, deleting a file's
@@ -421,7 +421,7 @@ func (ra *RawAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// and now a reply... return file metadata
-	metadataResponse(w, http.StatusCreated, cam, filename)
+	rawMetadataResponse(w, http.StatusCreated, cam, filename)
 }
 
 func (ra *RawAPI) addRoutes(r *mux.Router, l *log.Logger) {

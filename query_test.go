@@ -106,7 +106,7 @@ func TestSelectQueries(t *testing.T) {
 		// verify we're only querying our test set, for repeatability
 		encoded := qspec.encoded + fmt.Sprintf("&set=%x", TestQueryCacheSetID)
 
-		q, err := TestQueryCache.SubmitQueryFromURLEncoded(encoded)
+		q, _, err := TestQueryCache.SubmitQueryFromURLEncoded(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -162,7 +162,7 @@ func TestOneGroupQueries(t *testing.T) {
 		// verify we're only querying our test set, for repeatability
 		encoded := qspec.encoded + fmt.Sprintf("&set=%x", TestQueryCacheSetID)
 
-		q, err := TestQueryCache.SubmitQueryFromURLEncoded(encoded)
+		q, _, err := TestQueryCache.SubmitQueryFromURLEncoded(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -227,7 +227,7 @@ func TestTwoGroupQueries(t *testing.T) {
 		// verify we're only querying our test set, for repeatability
 		encoded := qspec.encoded + fmt.Sprintf("&set=%x", TestQueryCacheSetID)
 
-		q, err := TestQueryCache.SubmitQueryFromURLEncoded(encoded)
+		q, _, err := TestQueryCache.SubmitQueryFromURLEncoded(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}

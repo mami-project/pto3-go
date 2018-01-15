@@ -44,7 +44,7 @@ type PTOConfiguration struct {
 func (config *PTOConfiguration) LinkTo(relative string) (string, error) {
 	u, err := url.Parse(relative)
 	if err != nil {
-		return "", err
+		return "", PTOWrapError(err)
 	}
 
 	return config.baseURL.ResolveReference(u).String(), nil
