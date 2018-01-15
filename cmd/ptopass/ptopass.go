@@ -87,7 +87,7 @@ func ObsPassthrough(in io.Reader, metain io.Reader, out io.Writer) error {
 	mdout["_time_start"] = md.TimeStart.Format(time.RFC3339)
 	mdout["_time_end"] = md.TimeStart.Format(time.RFC3339)
 
-	// hardcode analyzer path (FIXME, tag?)
+	// hardcode analyzer path
 	mdout["_analyzer"] = "https://github.com/mami-project/pto3-go/tree/master/ptopass/ptopass_analyzer.json"
 
 	// note that we expect the local serialization harness to fill in _sources, so we will leave it blank.

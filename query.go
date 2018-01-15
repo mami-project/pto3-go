@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -123,26 +124,61 @@ func (qc *QueryCache) fetchQuery(identifier string) (*Query, error) {
 		qc.cached[identifier] = &q
 	}
 
-	// FIXME any query we fetch in executing state necessarily crashed. should we restart it?
+	// FIXME any query we fetch in executing state necessarily crashed. need a way to revive these.
 
 	return &q, nil
 }
 
 func (qc *QueryCache) QueryByIdentifier(identifier string) (*Query, error) {
-	// in in-memory submitted queue?
-	q := qc.submitted[identifier]
-	if q != nil {
-		return q, nil
-	}
 
-	// in in-memory cache?
-	q = qc.cached[identifier]
+	q := func() *Query {
+		qc.lock.RLock()
+		defer qc.lock.RUnlock()
+
+		// in in-memory submitted queue?
+		q := qc.submitted[identifier]
+		if q != nil {
+			return q
+		}
+
+		// in in-memory cache?
+		q = qc.cached[identifier]
+		if q != nil {
+			return q
+		}
+
+		return nil
+
+	}()
+
 	if q != nil {
 		return q, nil
 	}
 
 	// nope, check on disk
 	return qc.fetchQuery(identifier)
+}
+
+func (qc *QueryCache) CachedQueryLinks() ([]string, error) {
+	out := make([]string, 0)
+
+	// FIXME: cache this somewhere, allow invalidation
+	direntries, err := ioutil.ReadDir(qc.config.QueryCacheRoot)
+
+	if err != nil {
+		return nil, PTOWrapError(err)
+	}
+
+	for _, direntry := range direntries {
+		metafilename := direntry.Name()
+		if strings.HasSuffix(metafilename, ".json") {
+			linkname := metafilename[0 : len(metafilename)-len(".json")]
+			link, _ := qc.config.LinkTo(fmt.Sprintf("/query/%s", linkname))
+			out = append(out, link)
+		}
+	}
+
+	return out, nil
 }
 
 // GroupSpec can group a pg-go query by some set of criteria
@@ -236,33 +272,27 @@ type Query struct {
 	optionSetsOnly bool
 }
 
-// ParseQueryFromForm creates a new query from an HTTP form, but does not
-// submit it. Used by SubmitQueryFromForm, and for testing.
-func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
+func (q *Query) populateFromForm(form url.Values) error {
 	var ok bool
-	var err error
-
-	// new query bound to this cache
-	q := Query{qc: qc}
 
 	// Parse start and end times
 	timeStartStrs, ok := form["time_start"]
 	if !ok || len(timeStartStrs) < 1 || timeStartStrs[0] == "" {
-		return nil, PTOErrorf("Query missing mandatory time_start parameter").StatusIs(http.StatusBadRequest)
+		return PTOErrorf("Query missing mandatory time_start parameter").StatusIs(http.StatusBadRequest)
 	}
 	timeStart, err := ParseTime(timeStartStrs[0])
 	if err != nil {
-		return nil, PTOErrorf("Error parsing time_start: %s", err.Error()).StatusIs(http.StatusBadRequest)
+		return PTOErrorf("Error parsing time_start: %s", err.Error()).StatusIs(http.StatusBadRequest)
 	}
 	q.timeStart = &timeStart
 
 	timeEndStrs, ok := form["time_end"]
 	if !ok || len(timeEndStrs) < 1 || timeEndStrs[0] == "" {
-		return nil, PTOErrorf("Query missing mandatory time_start parameter").StatusIs(http.StatusBadRequest)
+		return PTOErrorf("Query missing mandatory time_start parameter").StatusIs(http.StatusBadRequest)
 	}
 	timeEnd, err := ParseTime(timeEndStrs[0])
 	if err != nil {
-		return nil, PTOErrorf("Error parsing time_end: %s", err.Error()).StatusIs(http.StatusBadRequest)
+		return PTOErrorf("Error parsing time_end: %s", err.Error()).StatusIs(http.StatusBadRequest)
 	}
 	q.timeEnd = &timeEnd
 
@@ -277,7 +307,7 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 		for i := range setStrs {
 			seti64, err := strconv.ParseInt(setStrs[i], 16, 32)
 			if err != nil {
-				return nil, PTOErrorf("Error parsing set ID: %s", err.Error()).StatusIs(http.StatusBadRequest)
+				return PTOErrorf("Error parsing set ID: %s", err.Error()).StatusIs(http.StatusBadRequest)
 			}
 			q.selectSets[i] = int(seti64)
 		}
@@ -293,9 +323,9 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 	if ok {
 		q.selectConditions = make([]Condition, 0)
 		for _, conditionStr := range conditionStrs {
-			conditions, err := qc.cidCache.ConditionsByName(qc.db, conditionStr)
+			conditions, err := q.qc.cidCache.ConditionsByName(q.qc.db, conditionStr)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			for _, condition := range conditions {
 				q.selectConditions = append(q.selectConditions, condition)
@@ -306,7 +336,7 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 	groupStrs, ok := form["group"]
 	if ok {
 		if len(groupStrs) > 2 {
-			return nil, PTOErrorf("Group by more than two dimensions not supported").StatusIs(http.StatusBadRequest)
+			return PTOErrorf("Group by more than two dimensions not supported").StatusIs(http.StatusBadRequest)
 		}
 		q.groups = make([]GroupSpec, len(groupStrs))
 		for i, groupStr := range groupStrs {
@@ -332,7 +362,7 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 			case "target":
 				q.groups[i] = &SimpleGroupSpec{Name: "target", Column: "path.target", ExtTable: "paths"}
 			default:
-				return nil, PTOErrorf("unsupported group name %s", groupStr).StatusIs(http.StatusBadRequest)
+				return PTOErrorf("unsupported group name %s", groupStr).StatusIs(http.StatusBadRequest)
 			}
 		}
 	}
@@ -349,6 +379,28 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 
 	// hash everything into an identifier
 	q.generateIdentifier()
+
+	return nil
+}
+
+func (q *Query) populateFromEncoded(urlencoded string) error {
+	v, err := url.ParseQuery(urlencoded)
+	if err != nil {
+		return PTOWrapError(err)
+	}
+
+	return q.populateFromForm(v)
+}
+
+// ParseQueryFromForm creates a new query from an HTTP form, but does not
+// submit it. Used by SubmitQueryFromForm, and for testing.
+func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
+	// new query bound to this cache
+	q := Query{qc: qc}
+
+	if err := q.populateFromForm(form); err != nil {
+		return nil, err
+	}
 
 	return &q, nil
 }
@@ -384,11 +436,14 @@ func (qc *QueryCache) SubmitQueryFromForm(form url.Values) (*Query, bool, error)
 
 // ParseQueryFromURLEncoded creates a new query bound to a cache from a URL encoded query string. Used for parser testing and JSON unmarshaling.
 func (qc *QueryCache) ParseQueryFromURLEncoded(urlencoded string) (*Query, error) {
-	v, err := url.ParseQuery(urlencoded)
-	if err != nil {
+	// new query bound to this cache
+	q := Query{qc: qc}
+
+	if err := q.populateFromEncoded(urlencoded); err != nil {
 		return nil, err
 	}
-	return qc.ParseQueryFromForm(v)
+
+	return &q, nil
 }
 
 // SubmitQueryFromURLEncoded creates a new query bound to a cache from a URL encoded query string. Use this to handle GET queries.
@@ -400,7 +455,9 @@ func (qc *QueryCache) SubmitQueryFromURLEncoded(urlencoded string) (*Query, bool
 	return qc.SubmitQueryFromForm(v)
 }
 
-// URLEncoded returns the normalized query string representing this query. This is used to generate query identifiers.
+// URLEncoded returns the normalized query string representing this query.
+// This is used to generate query identifiers, and to serialize queries to
+// disk.
 func (q *Query) URLEncoded() string {
 	// generate query specification as normalized, urlencoded
 
@@ -542,7 +599,7 @@ func (q *Query) MarshalJSON() ([]byte, error) {
 
 	// copy metadata
 	for k := range q.Metadata {
-		if !strings.HasPrefix(q.Metadata[k], "__") {
+		if !strings.HasPrefix(k, "__") {
 			jobj[k] = q.Metadata[k]
 		}
 	}
@@ -550,14 +607,76 @@ func (q *Query) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jobj)
 }
 
-func (q *Query) UpdateFromJSON(b []byte) error {
-	// This only handles updating a query from metadata sent via the web. Use UnmarshalJSON for reading from files.
-	return PTOErrorf("JSON unmarshal not implemented").StatusIs(http.StatusNotImplemented)
+func (q *Query) setMetadata(jmap map[string]string) {
+	// store external reference
+	q.ExtRef = jmap["_ext_ref"]
+
+	// copy and replace arbitrary metadata
+	q.Metadata = make(map[string]string)
+	for k := range jmap {
+		if !strings.HasPrefix(k, "__") && k != "_ext_ref" {
+			q.Metadata[k] = jmap[k]
+		}
+	}
 }
 
 func (q *Query) UnmarshalJSON(b []byte) error {
-	// This only handles reading from files. Use UpdateFromJSON for metadata put.
-	return PTOErrorf("JSON unmarshal not implemented").StatusIs(http.StatusNotImplemented)
+	// get a JSON map
+	var jmap map[string]string
+	if err := json.Unmarshal(b, &jmap); err != nil {
+		return PTOWrapError(err)
+	}
+
+	// parse the query from its encoded representation
+	encoded := jmap["__encoded"]
+	if err := q.populateFromEncoded(encoded); err != nil {
+		return err
+	}
+
+	// store timestamps
+	if jmap["__submission_time"] != "" {
+		ts, err := time.Parse(time.RFC3339, jmap["__submission_time"])
+		if err != nil {
+			return PTOWrapError(err)
+		}
+		q.Submitted = &ts
+	}
+
+	if jmap["__execution_time"] != "" {
+		ts, err := time.Parse(time.RFC3339, jmap["__execution_time"])
+		if err != nil {
+			return PTOWrapError(err)
+		}
+		q.Executed = &ts
+	}
+
+	if jmap["__completion_time"] != "" {
+		ts, err := time.Parse(time.RFC3339, jmap["__completion_time"])
+		if err != nil {
+			return PTOWrapError(err)
+		}
+		q.Completed = &ts
+	}
+
+	if jmap["__error"] != "" {
+		q.ExecutionError = errors.New(jmap["__error"])
+	}
+
+	q.setMetadata(jmap)
+
+	return nil
+}
+
+func (q *Query) UpdateFromJSON(b []byte) error {
+	// get a JSON map
+	var jmap map[string]string
+	if err := json.Unmarshal(b, &jmap); err != nil {
+		return PTOWrapError(err)
+	}
+
+	q.setMetadata(jmap)
+
+	return nil
 }
 
 func (q *Query) FlushMetadata() error {
@@ -586,7 +705,7 @@ func (q *Query) ReadResultFile() (*os.File, error) {
 	return os.Open(filepath.Join(q.qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", q.Identifier)))
 }
 
-func (q *Query) PaginateResultObject(offset int, count int) (map[string][]interface{}, bool, error) {
+func (q *Query) PaginateResultObject(offset int, count int) (map[string]interface{}, bool, error) {
 
 	// create output object
 	outData := make([]interface{}, 0)
@@ -619,7 +738,10 @@ func (q *Query) PaginateResultObject(offset int, count int) (map[string][]interf
 		outData = append(outData, lineData)
 	}
 
-	return map[string][]interface{}{q.resultObjectLabel(): outData}, lineno > offset+count, nil
+	out := make(map[string]interface{})
+	out[q.resultObjectLabel()] = outData
+
+	return out, lineno > offset+count, nil
 }
 
 func (q *Query) whereClauses(pq *orm.Query) *orm.Query {

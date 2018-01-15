@@ -35,6 +35,9 @@ type PTOConfiguration struct {
 	// PostgreSQL options for connection to observation database; leave default for no OBS.
 	ObsDatabase pg.Options
 
+	// Page size for things that can be paginated
+	PageLength int
+
 	// Access logging file path
 	AccessLogPath string
 	accessLogger  *log.Logger
@@ -76,6 +79,10 @@ func NewConfigFromJSON(b []byte) (*PTOConfiguration, error) {
 			return nil, err
 		}
 		config.accessLogger = log.New(accessLogFile, "access: ", log.LstdFlags)
+	}
+
+	if config.PageLength == 0 {
+		config.PageLength = 1000
 	}
 
 	return &config, nil

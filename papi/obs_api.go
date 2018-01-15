@@ -44,7 +44,7 @@ func (oa *ObsAPI) handleListSets(w http.ResponseWriter, r *http.Request) {
 	var setIds []int
 
 	// select set IDs into an array
-	// FIXME this should go into model.go
+	// FIXME this should go into observation.go
 	if err := oa.db.Model(&pto3.ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&setIds)); err != nil && err != pg.ErrNoRows {
 		pto3.HandleErrorHTTP(w, "listing set IDs", err)
 		return

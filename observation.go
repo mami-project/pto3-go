@@ -167,7 +167,6 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 		}
 
 		// TODO file a bug against go-pg or its docs: this should be automatic.
-		// FIXME should we use a prepared statement here?
 		for i := range set.Conditions {
 			_, err := db.Exec("INSERT INTO observation_set_conditions VALUES (?, ?)", set.ID, set.Conditions[i].ID)
 			if err != nil {

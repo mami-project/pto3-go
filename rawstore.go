@@ -233,13 +233,15 @@ func RawMetadataFromFile(pathname string, parent *RawMetadata) (*RawMetadata, er
 	return RawMetadataFromReader(f, parent)
 }
 
-// RawFiletype encapsulates a filetype in the raw data store FIXME not quite the right type
+// RawFiletype encapsulates a filetype in the raw data store
 type RawFiletype struct {
 	// PTO filetype name
 	Filetype string `json:"file_type"`
 	// Associated MIME type
 	ContentType string `json:"mime_type"`
 }
+
+// FIXME reconsider design of RawFiletype
 
 // Campaign encapsulates a single campaign in a raw data store,
 // and caches metadata for the campaign and files within it.
