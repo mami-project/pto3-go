@@ -1,7 +1,6 @@
 package pto3_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -11,23 +10,48 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-func TestRawRoundtrip(t *testing.T) {
+func TestRawExisting(t *testing.T) {
 
-	// create a campaign with some metadata
-	var cammd_up pto3.RawMetadata
-	campaignMetadata := `
-		{
-			"_owner": "brian@trammell.ch",
-			"_file_type": "obs",
-			"override_me_0": "campaign",
-			"override_me_1": "campaign"
-		}	
-`
-	if err := json.Unmarshal([]byte(campaignMetadata), &cammd_up); err != nil {
+	// get campaign
+	cam, err := TestRDS.CampaignForName("test0")
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	cam, err := TestRDS.CreateCampaign("test_0", &cammd_up)
+	// list files
+	files, err := cam.FileNames()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(files) != 1 {
+		t.Fatalf("expected one file in existing repository, found %d", len(files))
+	}
+
+	// get file metadata
+	filemd, err := cam.GetFileMetadata(files[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if filemd.Owner(true) != "brian@trammell.ch" {
+		t.Fatalf("bad owner on existing file, found %d", filemd.Owner(true))
+	}
+
+	if filemd.Get("override_me_1", true) != "file" {
+		t.Fatalf("bad overriden metadata on existing file, found %d", filemd.Get("override_me_1", true))
+	}
+}
+
+func TestRawRoundtrip(t *testing.T) {
+
+	// create a campaign with some metadata
+	cammd_up, err := pto3.RawMetadataFromFile("testdata/test_raw_campaign_metadata.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cam, err := TestRDS.CreateCampaign("test1", cammd_up)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +64,7 @@ func TestRawRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := cam.PutFileMetadata("test_raw.ndjson", filemd_up); err != nil {
+	if err := cam.PutFileMetadata("test-1-0-obs.ndjson", filemd_up); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,7 +79,7 @@ func TestRawRoundtrip(t *testing.T) {
 	}
 
 	// retrieve file metadata and verify stored value
-	filemd_down, err := cam.GetFileMetadata("test_raw.ndjson")
+	filemd_down, err := cam.GetFileMetadata("test-1-0-obs.ndjson")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,10 +93,10 @@ func TestRawRoundtrip(t *testing.T) {
 	// verify metadata inheritance works across overwrite in file
 	filemd_up.Metadata["override_me_0"] = "file"
 
-	if err := cam.PutFileMetadata("test_raw.ndjson", filemd_up); err != nil {
+	if err := cam.PutFileMetadata("test-1-0-obs.ndjson", filemd_up); err != nil {
 		t.Fatal(err)
 	}
-	filemd_down, err = cam.GetFileMetadata("test_raw.ndjson")
+	filemd_down, err = cam.GetFileMetadata("test-1-0-obs.ndjson")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,10 +107,10 @@ func TestRawRoundtrip(t *testing.T) {
 	// verify metadata inheritance works across overwrite in campaign
 	cammd_up.Metadata["override_me_2"] = "campaign"
 
-	if err := cam.PutCampaignMetadata(&cammd_up); err != nil {
+	if err := cam.PutCampaignMetadata(cammd_up); err != nil {
 		t.Fatal(err)
 	}
-	filemd_down, err = cam.GetFileMetadata("test_raw.ndjson")
+	filemd_down, err = cam.GetFileMetadata("test-1-0-obs.ndjson")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,10 +121,10 @@ func TestRawRoundtrip(t *testing.T) {
 	// verify metadata inheritance works across overwrite in file
 	delete(filemd_up.Metadata, "override_me_1")
 
-	if err := cam.PutFileMetadata("test_raw.ndjson", filemd_up); err != nil {
+	if err := cam.PutFileMetadata("test-1-0-obs.ndjson", filemd_up); err != nil {
 		t.Fatal(err)
 	}
-	filemd_down, err = cam.GetFileMetadata("test_raw.ndjson")
+	filemd_down, err = cam.GetFileMetadata("test-1-0-obs.ndjson")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,13 +138,13 @@ func TestRawRoundtrip(t *testing.T) {
 
 	// stream a file into the store
 	func() {
-		datafile, err := cam.WriteFileData("test_raw.ndjson", false)
+		datafile, err := cam.WriteFileData("test-1-0-obs.ndjson", false)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer datafile.Close()
 
-		testfile, err := os.Open("testdata/test_raw.ndjson")
+		testfile, err := os.Open("testdata/test_raw_data.ndjson")
 		defer testfile.Close()
 
 		// store the test file hash for later
@@ -146,7 +170,7 @@ func TestRawRoundtrip(t *testing.T) {
 
 	// download the file and hash it to verify the contents match
 	func() {
-		datafile, err := cam.ReadFileData("test_raw.ndjson")
+		datafile, err := cam.ReadFileData("test-1-0-obs.ndjson")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/go-pg/pg"
@@ -11,7 +12,7 @@ import (
 )
 
 const SuppressDropTables = false
-const SuppressDeleteRawStore = false
+const SuppressDeleteRawStore = true
 const SuppressDeleteQueryCache = false
 
 var TestConfig *pto3.PTOConfiguration
@@ -26,6 +27,14 @@ func setupRDS(config *pto3.PTOConfiguration) *pto3.RawDataStore {
 	var err error
 	config.RawRoot, err = ioutil.TempDir("", "pto3-test-rds")
 	if err != nil {
+		log.Fatal(err)
+	}
+
+	// prepopulate it with a test campaign to ensure scanning on startup works
+	// FIXME this is UNIX only at the moment
+	cp := exec.Command("cp", "-a", "testdata/test_raw_init/test0", config.RawRoot)
+	log.Printf("will copy using %+v", cp)
+	if err := cp.Run(); err != nil {
 		log.Fatal(err)
 	}
 

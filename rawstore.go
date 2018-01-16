@@ -694,7 +694,7 @@ func (rds *RawDataStore) ScanCampaigns() error {
 			}
 
 			// create a new (stale) campaign
-			cam, _ := newCampaign(rds.config, filepath.Join(rds.path, direntry.Name()), nil)
+			cam, _ := newCampaign(rds.config, direntry.Name(), nil)
 			rds.campaigns[direntry.Name()] = cam
 		}
 	}
