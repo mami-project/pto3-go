@@ -33,13 +33,13 @@ func ObsPassthrough(in io.Reader, metain io.Reader, out io.Writer) error {
 
 	// check filetype and select scanner
 	var scanner *bufio.Scanner
-	switch md.Filetype() {
+	switch md.Filetype(true) {
 	case "obs":
 		scanner = bufio.NewScanner(in)
 	case "obs-bz2":
 		scanner = bufio.NewScanner(bzip2.NewReader(in))
 	default:
-		return fmt.Errorf("unsupported filetype %s", md.Filetype())
+		return fmt.Errorf("unsupported filetype %s", md.Filetype(true))
 	}
 
 	// track conditions in the input
@@ -83,9 +83,9 @@ func ObsPassthrough(in io.Reader, metain io.Reader, out io.Writer) error {
 	mdout["_conditions"] = mdcond
 
 	// add start and end time and owner, since we have it
-	mdout["_owner"] = md.Owner
-	mdout["_time_start"] = md.TimeStart.Format(time.RFC3339)
-	mdout["_time_end"] = md.TimeStart.Format(time.RFC3339)
+	mdout["_owner"] = md.Owner(true)
+	mdout["_time_start"] = md.TimeStart(true).Format(time.RFC3339)
+	mdout["_time_end"] = md.TimeStart(true).Format(time.RFC3339)
 
 	// hardcode analyzer path
 	mdout["_analyzer"] = "https://github.com/mami-project/pto3-go/tree/master/ptopass/ptopass_analyzer.json"
