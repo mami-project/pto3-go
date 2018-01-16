@@ -50,7 +50,7 @@ func TestRawRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if cammd_down.Owner != "brian@trammell.ch" {
+	if cammd_down.Owner(true) != "brian@trammell.ch" {
 		t.Fatal("owner mismatch on campaign metadata")
 	}
 
@@ -59,57 +59,56 @@ func TestRawRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filemd_down.Metadata["override_me_1"] != "file" {
-		t.Fatal("arbitrary metadata owner mismatch on file metadata")
-
+	if filemd_down.Get("override_me_0", true) != "campaign" {
+		t.Fatalf("metadata retrieval error; raw metadata is %v", filemd_down.Metadata)
+	}
+	if filemd_down.Get("override_me_1", true) != "file" {
+		t.Fatalf("metadata retrieval error; raw metadata is %v", filemd_down.Metadata)
 	}
 
-	// FIXME the test below tests metadata inheritance, which isn't actually
-	// implemented by the raw store outside JSON serialization. This is
-	// probably a design error; RawMetadata should have a Get() method that
-	// implements inheritance, a Keys() method that lists available values,
-	// and the JSON output should be implemented in terms of that.
+	// verify metadata inheritance works across overwrite in file
+	filemd_up.Metadata["override_me_0"] = "file"
 
-	// // verify metadata inheritance works via retrieval
-	// filemd_down, err := cam.GetFileMetadata("test_raw.ndjson")
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-	// if filemd_down.Metadata["override_me_0"] != "campaign" {
-	// 	t.Fatalf("metadata retrieval error; raw metadata is %v", filemd_down.Metadata)
-	// }
+	if err := cam.PutFileMetadata("test_raw.ndjson", filemd_up); err != nil {
+		t.Fatal(err)
+	}
+	filemd_down, err = cam.GetFileMetadata("test_raw.ndjson")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filemd_down.Get("override_me_0", true) != "file" {
+		t.Fatalf("metadata retrieval error; raw metadata is %v", filemd_down.Metadata)
+	}
 
-	// // verify metadata inheritance works across overwrite in file
-	// filemd_up.Metadata["override_me_0"] = "file"
+	// verify metadata inheritance works across overwrite in campaign
+	cammd_up.Metadata["override_me_2"] = "campaign"
 
-	// if err := cam.PutFileMetadata("test_raw.ndjson", filemd_up); err != nil {
-	// 	t.Fatal(err)
-	// }
-	// filemd_down, err = cam.GetFileMetadata("test_raw.ndjson")
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-	// if filemd_down.Metadata["override_me_0"] != "file" {
-	// 	t.Fatalf("metadata retrieval error; raw metadata is %v", filemd_down.Metadata)
-	// }
-	// if filemd_down.Metadata["override_me_1"] != "campaign" {
-	// 	t.Fatalf("metadata retrieval error; raw metadata is %v", filemd_down.Metadata)
-	// }
+	if err := cam.PutCampaignMetadata(&cammd_up); err != nil {
+		t.Fatal(err)
+	}
+	filemd_down, err = cam.GetFileMetadata("test_raw.ndjson")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filemd_down.Get("override_me_2", true) != "campaign" {
+		t.Fatalf("metadata retrieval error; raw metadata is %v", filemd_down.Metadata)
+	}
 
-	// // verify metadata inheritance works across overwrite in campaign
-	// delete(cammd_up.Metadata, "override_me_1")
+	// verify metadata inheritance works across overwrite in file
+	delete(filemd_up.Metadata, "override_me_1")
 
-	// if err := cam.PutCampaignMetadata(&cammd_up); err != nil {
-	// 	t.Fatal(err)
-	// }
-	// filemd_down, err = cam.GetFileMetadata("test_raw.ndjson")
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-	// if filemd_down.Metadata["override_me_1"] != "" {
-	// 	t.Fatalf("metadata retrieval error; raw metadata is %v", filemd_down.Metadata)
-	// }
+	if err := cam.PutFileMetadata("test_raw.ndjson", filemd_up); err != nil {
+		t.Fatal(err)
+	}
+	filemd_down, err = cam.GetFileMetadata("test_raw.ndjson")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filemd_down.Get("override_me_1", true) != "campaign" {
+		t.Fatalf("metadata retrieval error; raw metadata is %v", filemd_down.Metadata)
+	}
 
+	// now let's test data storage
 	var testbytes []byte
 	testhash := make([]byte, 64)
 

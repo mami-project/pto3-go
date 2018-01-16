@@ -37,11 +37,11 @@ type RawMetadata struct {
 	// Name of filetype
 	filetype string
 	// Owner identifier
-	Owner string
+	owner string
 	// Start time for records in the file
-	TimeStart *time.Time
+	timeStart *time.Time
 	// End time for records in the file
-	TimeEnd *time.Time
+	timeEnd *time.Time
 	// Arbitrary metadata
 	Metadata map[string]string
 	// Link to data object
@@ -50,53 +50,109 @@ type RawMetadata struct {
 	datasize int
 }
 
+func (md *RawMetadata) Keys(inherit bool) []string {
+	keymap := make(map[string]struct{})
+
+	for k := range md.Metadata {
+		if !strings.HasPrefix(k, "__") {
+			keymap[k] = struct{}{}
+		}
+	}
+
+	if inherit && md.Parent != nil {
+		for k := range md.Parent.Metadata {
+			if !strings.HasPrefix(k, "__") {
+				keymap[k] = struct{}{}
+			}
+		}
+	}
+
+	out := make([]string, len(keymap))
+	i := 0
+	for k := range keymap {
+		out[i] = k
+		i++
+	}
+
+	return out
+}
+
+// Filetype returns the filetype name associated with a given metadata object,
+// or inherited from its parent.
+func (md *RawMetadata) Filetype(inherit bool) string {
+	if md.filetype == "" && inherit && md.Parent != nil {
+		return md.Parent.filetype
+	} else {
+		return md.filetype
+	}
+}
+
+// Owner returns the owner name associated with a given metadata object,
+// or inherited from its parent.
+func (md *RawMetadata) Owner(inherit bool) string {
+	if md.owner == "" && inherit && md.Parent != nil {
+		return md.Parent.owner
+	} else {
+		return md.owner
+	}
+}
+
+// TimeStart returns the start time associated with a given metadata object,
+// or inherited from its parent.
+func (md *RawMetadata) TimeStart(inherit bool) *time.Time {
+	if md.timeStart == nil && inherit && md.Parent != nil {
+		return md.Parent.timeStart
+	} else {
+		return md.timeStart
+	}
+}
+
+// TimeEnd returns the end time associated with a given metadata object,
+// or inherited from its parent.
+func (md *RawMetadata) TimeEnd(inherit bool) *time.Time {
+	if md.timeEnd == nil && inherit && md.Parent != nil {
+		return md.Parent.timeEnd
+	} else {
+		return md.timeEnd
+	}
+}
+
+func (md *RawMetadata) Get(k string, inherit bool) string {
+	out := md.Metadata[k]
+	if out == "" && inherit && md.Parent != nil {
+		out = md.Parent.Metadata[k]
+	}
+	return out
+}
+
 // DumpJSONObject serializes a RawMetadata object to JSON. If inherit is true,
 // this inherits data and metadata items from the parent; if false, it only
 // dumps information in this object itself.
 func (md *RawMetadata) DumpJSONObject(inherit bool) ([]byte, error) {
 	jmap := make(map[string]interface{})
 
-	// first inherit from parent
-	if inherit && md.Parent != nil {
-		if md.Parent.filetype != "" {
-			jmap["_file_type"] = md.Parent.filetype
-		}
-
-		if md.Parent.Owner != "" {
-			jmap["_owner"] = md.Parent.Owner
-		}
-
-		if md.Parent.TimeStart != nil {
-			jmap["_time_start"] = md.Parent.TimeStart.Format(time.RFC3339)
-		}
-
-		if md.Parent.TimeEnd != nil {
-			jmap["_time_start"] = md.Parent.TimeEnd.Format(time.RFC3339)
-		}
-
-		for k, v := range md.Parent.Metadata {
-			jmap[k] = v
-		}
+	// dump required keys
+	ft := md.Filetype(inherit)
+	if ft != "" {
+		jmap["_file_type"] = ft
 	}
 
-	// then overwrite with own values
-	if md.filetype != "" {
-		jmap["_file_type"] = md.filetype
+	ow := md.Owner(inherit)
+	if ow != "" {
+		jmap["_owner"] = ow
 	}
 
-	if md.Owner != "" {
-		jmap["_owner"] = md.Owner
+	ts := md.TimeStart(inherit)
+	if ts != nil {
+		jmap["_time_start"] = ts.Format(time.RFC3339)
 	}
 
-	if md.TimeStart != nil {
-		jmap["_time_start"] = md.TimeStart.Format(time.RFC3339)
+	te := md.TimeEnd(inherit)
+	if te != nil {
+		jmap["_time_end"] = te.Format(time.RFC3339)
 	}
 
-	if md.TimeEnd != nil {
-		jmap["_time_end"] = md.TimeEnd.Format(time.RFC3339)
-	}
-
-	// data link and data size are not inheritable
+	// dump derived keys (not inheritable)
 	if md.datalink != "" {
 		jmap["__data"] = md.datalink
 	}
@@ -105,8 +161,9 @@ func (md *RawMetadata) DumpJSONObject(inherit bool) ([]byte, error) {
 		jmap["__data_size"] = md.datasize
 	}
 
-	for k, v := range md.Metadata {
-		jmap[k] = v
+	// dump arbitrary keys
+	for _, k := range md.Keys(inherit) {
+		jmap[k] = md.Get(k, inherit)
 	}
 
 	return json.Marshal(jmap)
@@ -135,19 +192,19 @@ func (md *RawMetadata) UnmarshalJSON(b []byte) error {
 		if k == "_file_type" {
 			md.filetype = AsString(v)
 		} else if k == "_owner" {
-			md.Owner = AsString(v)
+			md.owner = AsString(v)
 		} else if k == "_time_start" {
 			var t time.Time
 			if t, err = AsTime(v); err != nil {
 				return err
 			}
-			md.TimeStart = &t
+			md.timeStart = &t
 		} else if k == "_time_end" {
 			var t time.Time
 			if t, err = AsTime(v); err != nil {
 				return err
 			}
-			md.TimeEnd = &t
+			md.timeEnd = &t
 		} else if strings.HasPrefix(k, "__") {
 			// Ignore all (incoming) __ keys instead of stuffing them in metadata
 		} else {
@@ -170,7 +227,8 @@ func (md *RawMetadata) writeToFile(pathname string) error {
 
 // validate returns nil if the metadata is valid (i.e., it or its parent has all required keys), or an error if not
 func (md *RawMetadata) validate(isCampaign bool) error {
-	if md.Owner == "" && (md.Parent == nil || md.Parent.Owner == "") {
+	// everything needs an error
+	if md.Owner(true) == "" {
 		return PTOMissingMetadataError("_owner")
 	}
 
@@ -179,28 +237,19 @@ func (md *RawMetadata) validate(isCampaign bool) error {
 		return nil
 	}
 
-	if md.filetype == "" && (md.Parent == nil || md.Parent.filetype == "") {
+	if md.Filetype(true) == "" {
 		return PTOMissingMetadataError("_file_type")
 	}
 
-	if md.TimeStart == nil && (md.Parent == nil || md.Parent.TimeStart == nil) {
+	if md.TimeStart(true) == nil {
 		return PTOMissingMetadataError("_time_start")
 	}
 
-	if md.TimeEnd == nil && (md.Parent == nil || md.Parent.TimeEnd == nil) {
+	if md.TimeEnd(true) == nil {
 		return PTOMissingMetadataError("_time_end")
 	}
 
 	return nil
-}
-
-// Filetype returns the filetype associated with a given metadata object, or inherited from its parent.
-func (md *RawMetadata) Filetype() string {
-	if md.filetype == "" && md.Parent != nil {
-		return md.Parent.filetype
-	}
-
-	return md.filetype
 }
 
 // RawMetadataFromReader reads metadata for a raw data file from a stream. It
@@ -485,7 +534,7 @@ func (cam *Campaign) PutFileMetadata(filename string, md *RawMetadata) error {
 	md.Parent = cam.campaignMetadata
 
 	// ensure we have a filetype
-	if md.Filetype() == "" {
+	if md.Filetype(true) == "" {
 		return PTOMissingMetadataError("_file_type")
 	}
 
@@ -515,7 +564,7 @@ func (cam *Campaign) GetFiletype(filename string) *RawFiletype {
 		return nil
 	}
 
-	ftname := md.Filetype()
+	ftname := md.Filetype(true)
 	ctype, ok := cam.config.ContentTypes[ftname]
 	if !ok {
 		return nil
