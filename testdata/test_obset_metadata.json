@@ -1,0 +1,1 @@
+{"_analyzer":"https://raw.githubusercontent.com/mami-project/pto3-go/master/obsgen/ptoanalyzer.json","_sources":[],"_conditions":["pto.test.color.red","pto.test.color.yellow","pto.test.color.none_more_black","pto.test.color.orange","pto.test.color.green","pto.test.color.blue","pto.test.color.indigo","pto.test.color.violet"]}

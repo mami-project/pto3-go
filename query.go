@@ -428,6 +428,11 @@ func (qc *QueryCache) SubmitQueryFromForm(form url.Values) (*Query, bool, error)
 	t := time.Now()
 	q.Submitted = &t
 
+	// write to disk
+	if err := q.FlushMetadata(); err != nil {
+		return nil, false, err
+	}
+
 	// and add to submitted queue
 	qc.submitted[q.Identifier] = q
 
@@ -1019,6 +1024,9 @@ func (q *Query) Execute(done chan<- struct{}) {
 		// mark query as executing
 		startTime := time.Now()
 		q.Executed = &startTime
+
+		// flush to disk
+		q.FlushMetadata()
 
 		// switch and run query
 		q.ExecutionError = q.executionFunc()()

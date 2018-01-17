@@ -1,6 +1,9 @@
 package pto3_test
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -9,6 +12,7 @@ import (
 
 	"github.com/go-pg/pg"
 	"github.com/mami-project/pto3-go"
+	"golang.org/x/crypto/sha3"
 )
 
 const SuppressDropTables = false
@@ -109,6 +113,45 @@ func teardownQC(config *pto3.PTOConfiguration) {
 		log.Fatal(err)
 	}
 }
+
+// compare data files returned by ReadClosers by hashing them
+func compareData(afn, bfn func() (io.ReadCloser, error)) error {
+
+	af, err := afn()
+	if err != nil {
+		return err
+	}
+	defer af.Close()
+
+	ab, err := ioutil.ReadAll(af)
+	if err != nil {
+		return err
+	}
+
+	ah := make([]byte, 64)
+	sha3.ShakeSum256(ah, ab)
+
+	bf, err := bfn()
+	if err != nil {
+		return err
+	}
+	defer bf.Close()
+
+	bb, err := ioutil.ReadAll(bf)
+	if err != nil {
+		return err
+	}
+
+	bh := make([]byte, 64)
+	sha3.ShakeSum256(bh, bb)
+
+	if fmt.Sprintf("%x", ah) != fmt.Sprintf("%x", bh) {
+		return errors.New("file hashes do not match")
+	}
+
+	return nil
+}
+
 func TestMain(m *testing.M) {
 	// define a configuration
 	testConfigJSON := []byte(`
