@@ -106,14 +106,12 @@ func TestSelectQueries(t *testing.T) {
 		// verify we're only querying our test set, for repeatability
 		encoded := qspec.encoded + fmt.Sprintf("&set=%x", TestQueryCacheSetID)
 
-		q, _, err := TestQueryCache.SubmitQueryFromURLEncoded(encoded)
+		// submit query and wait for result
+		done := make(chan struct{})
+		q, _, err := TestQueryCache.ExecuteQueryFromURLEncoded(encoded, done)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		// execute query and wait for result
-		done := make(chan struct{})
-		q.Execute(done)
 		<-done
 
 		// verify we think have a result
@@ -162,14 +160,12 @@ func TestOneGroupQueries(t *testing.T) {
 		// verify we're only querying our test set, for repeatability
 		encoded := qspec.encoded + fmt.Sprintf("&set=%x", TestQueryCacheSetID)
 
-		q, _, err := TestQueryCache.SubmitQueryFromURLEncoded(encoded)
+		// submit query and wait for result
+		done := make(chan struct{})
+		q, _, err := TestQueryCache.ExecuteQueryFromURLEncoded(encoded, done)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		// execute query and wait for result
-		done := make(chan struct{})
-		q.Execute(done)
 		<-done
 
 		// verify we think have a result
@@ -227,14 +223,12 @@ func TestTwoGroupQueries(t *testing.T) {
 		// verify we're only querying our test set, for repeatability
 		encoded := qspec.encoded + fmt.Sprintf("&set=%x", TestQueryCacheSetID)
 
-		q, _, err := TestQueryCache.SubmitQueryFromURLEncoded(encoded)
+		// submit query and wait for result
+		done := make(chan struct{})
+		q, _, err := TestQueryCache.ExecuteQueryFromURLEncoded(encoded, done)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		// execute query and wait for result
-		done := make(chan struct{})
-		q.Execute(done)
 		<-done
 
 		// verify we think have a result

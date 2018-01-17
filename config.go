@@ -38,6 +38,12 @@ type PTOConfiguration struct {
 	// Page size for things that can be paginated
 	PageLength int
 
+	// Immediate query delay
+	ImmediateQueryDelay int
+
+	// Number of concurrent queries
+	ConcurrentQueries int
+
 	// Access logging file path
 	AccessLogPath string
 	accessLogger  *log.Logger
@@ -81,8 +87,19 @@ func NewConfigFromJSON(b []byte) (*PTOConfiguration, error) {
 		config.accessLogger = log.New(accessLogFile, "access: ", log.LstdFlags)
 	}
 
+	// default page length is 1000
 	if config.PageLength == 0 {
 		config.PageLength = 1000
+	}
+
+	// default immediate query delay is 2s
+	if config.ImmediateQueryDelay == 0 {
+		config.ImmediateQueryDelay = 2000
+	}
+
+	// default query concurrency is 8
+	if config.ConcurrentQueries == 0 {
+		config.ConcurrentQueries = 8
 	}
 
 	return &config, nil

@@ -265,19 +265,11 @@ func (set *ObservationSet) verifyConditionSet(conditionNames map[string]struct{}
 	// look for name in condition names not declared in the set, raise error if so
 	for conditionName := range conditionNames {
 		if _, ok := conditionDeclared[conditionName]; !ok {
-			return &undeclaredConditionError{conditionName}
+			return PTOErrorf("observation has condition %s not declared in set", conditionName)
 		}
 	}
 
 	return nil
-}
-
-type undeclaredConditionError struct {
-	condition string
-}
-
-func (uec *undeclaredConditionError) Error() string {
-	return fmt.Sprintf("observation has condition %s not declared in set", uec.condition)
 }
 
 // Observation represents a single observation, within an observation set

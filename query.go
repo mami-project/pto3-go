@@ -41,6 +41,9 @@ type QueryCache struct {
 	// Queries executing and cached in memory (recently executed)
 	cached map[string]*Query
 
+	// channel for execution tokens
+	exectokens chan struct{}
+
 	// Lock for submitted and cached maps
 	lock sync.RWMutex
 }
@@ -51,11 +54,12 @@ type QueryCache struct {
 func NewQueryCache(config *PTOConfiguration) (*QueryCache, error) {
 
 	qc := QueryCache{
-		config:    config,
-		db:        pg.Connect(&config.ObsDatabase),
-		path:      config.QueryCacheRoot,
-		submitted: make(map[string]*Query),
-		cached:    make(map[string]*Query),
+		config:     config,
+		db:         pg.Connect(&config.ObsDatabase),
+		path:       config.QueryCacheRoot,
+		submitted:  make(map[string]*Query),
+		cached:     make(map[string]*Query),
+		exectokens: make(chan struct{}, config.ConcurrentQueries),
 	}
 
 	var err error
@@ -408,6 +412,7 @@ func (qc *QueryCache) ParseQueryFromForm(form url.Values) (*Query, error) {
 // SubmitQueryFromForm submits a new query to a cache from an HTTP form. If an
 // identical query is already cached, it returns the cached query. Use this to
 // handle POST queries.
+
 func (qc *QueryCache) SubmitQueryFromForm(form url.Values) (*Query, bool, error) {
 	// parse the query
 	q, err := qc.ParseQueryFromForm(form)
@@ -428,15 +433,35 @@ func (qc *QueryCache) SubmitQueryFromForm(form url.Values) (*Query, bool, error)
 	t := time.Now()
 	q.Submitted = &t
 
+	// we're modifying the cache
+	qc.lock.Lock()
+	defer qc.lock.Unlock()
+
 	// write to disk
 	if err := q.FlushMetadata(); err != nil {
 		return nil, false, err
 	}
 
-	// and add to submitted queue
+	// add to submitted queue
 	qc.submitted[q.Identifier] = q
 
 	return q, true, nil
+}
+
+func (qc *QueryCache) ExecuteQueryFromForm(form url.Values, done chan struct{}) (*Query, bool, error) {
+
+	// submit the query
+	q, new, err := qc.SubmitQueryFromForm(form)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// execute and do an immediate wait for it if it's new
+	if new {
+		q.ExecuteWaitImmediate(done)
+	}
+
+	return q, new, nil
 }
 
 // ParseQueryFromURLEncoded creates a new query bound to a cache from a URL encoded query string. Used for parser testing and JSON unmarshaling.
@@ -458,6 +483,22 @@ func (qc *QueryCache) SubmitQueryFromURLEncoded(urlencoded string) (*Query, bool
 		return nil, false, err
 	}
 	return qc.SubmitQueryFromForm(v)
+}
+
+func (qc *QueryCache) ExecuteQueryFromURLEncoded(encoded string, done chan struct{}) (*Query, bool, error) {
+
+	// submit the query
+	q, new, err := qc.SubmitQueryFromURLEncoded(encoded)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// execute and do an immediate wait for it if it's new
+	if new {
+		q.ExecuteWaitImmediate(done)
+	}
+
+	return q, new, nil
 }
 
 // URLEncoded returns the normalized query string representing this query.
@@ -1018,9 +1059,26 @@ func (q *Query) resultObjectLabel() string {
 	}
 }
 
-func (q *Query) Execute(done chan<- struct{}) {
+func (q *Query) ExecuteWaitImmediate(done chan struct{}) {
+	// start the immediate delay timer
+	itimer := time.NewTimer(time.Duration(q.qc.config.ImmediateQueryDelay) * time.Millisecond)
+
+	// start the query
+	q.Execute(done)
+
+	// wait for either the done timer or the immediate timer
+	select {
+	case <-itimer.C:
+	case <-done:
+	}
+}
+
+func (q *Query) Execute(done chan struct{}) {
 	// fire off a goroutine to actually run the query
 	go func() {
+		// grab a token
+		q.qc.exectokens <- struct{}{}
+
 		// mark query as executing
 		startTime := time.Now()
 		q.Executed = &startTime
@@ -1038,9 +1096,10 @@ func (q *Query) Execute(done chan<- struct{}) {
 		// flush to disk
 		q.FlushMetadata()
 
-		// and notify if we have a channel
-		if done != nil {
-			done <- struct{}{}
-		}
+		// return the waitgroup token
+		<-q.qc.exectokens
+
+		// and notify that we're done
+		close(done)
 	}()
 }
