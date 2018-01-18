@@ -58,7 +58,7 @@ type ClientSetList struct {
 // 	return out.Bytes(), err
 // }
 
-func readObservations(in io.Reader) ([]pto3.Observation, error) {
+func ReadObservations(in io.Reader) ([]pto3.Observation, error) {
 	sin := bufio.NewScanner(in)
 	out := make([]pto3.Observation, 0)
 	var obs pto3.Observation
@@ -210,7 +210,7 @@ func TestObsRoundtrip(t *testing.T) {
 	["e1337", "2017-10-01T10:06:07Z", "2017-10-01T10:06:11Z", "[2001:db8::33:a4] * [2001:db8:3]/64", "pto.test.succeeded"]
 	["e1337", "2017-10-01T10:06:09Z", "2017-10-01T10:06:14Z", "[2001:db8::33:a4] * [2001:db8:3]/64", "pto.test.succeeded"]`)
 
-	observations_up, err := readObservations(bytes.NewBuffer(observations_up_bytes))
+	observations_up, err := ReadObservations(bytes.NewBuffer(observations_up_bytes))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestObsRoundtrip(t *testing.T) {
 	// and try downloading it again
 	res = executeRequest(TestRouter, t, "GET", datalink, nil, "", GoodAPIKey, http.StatusOK)
 
-	observations_down, err := readObservations(res.Body)
+	observations_down, err := ReadObservations(res.Body)
 	if err != nil {
 		t.Fatal(err)
 	}

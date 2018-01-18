@@ -249,10 +249,9 @@ type Query struct {
 	Identifier string
 
 	// Timestamps for state management
-	Submitted     *time.Time
-	Executed      *time.Time
-	Completed     *time.Time
-	MadePermanent *time.Time
+	Submitted *time.Time
+	Executed  *time.Time
+	Completed *time.Time
 
 	// Errors, references, and sources
 	ExecutionError error
@@ -629,18 +628,17 @@ func (q *Query) MarshalJSON() ([]byte, error) {
 			jobj["__state"] = "complete"
 			jobj["__result"] = jobj["__link"] + "/result"
 		}
-		jobj["__completion_time"] = q.Completed.Format(time.RFC3339)
-		jobj["__execution_time"] = q.Executed.Format(time.RFC3339)
-		jobj["__submission_time"] = q.Submitted.Format(time.RFC3339)
-	} else if q.Executed != nil {
-		jobj["__state"] = "pending"
-		jobj["__execution_time"] = q.Executed.Format(time.RFC3339)
-		jobj["__submission_time"] = q.Submitted.Format(time.RFC3339)
+		jobj["__time_completed"] = q.Completed.Format(time.RFC3339)
+		jobj["__time_executed"] = q.Executed.Format(time.RFC3339)
+		jobj["__time_submitted"] = q.Submitted.Format(time.RFC3339)
 	} else {
-		if q.Submitted != nil {
-			jobj["__submission_time"] = q.Submitted.Format(time.RFC3339)
+		jobj["__state"] = "pending"
+		if q.Executed != nil {
+			jobj["__time_executed"] = q.Executed.Format(time.RFC3339)
 		}
-		jobj["__state"] = "submitted"
+		if q.Submitted != nil {
+			jobj["__time_submitted"] = q.Submitted.Format(time.RFC3339)
+		}
 	}
 
 	// copy metadata
@@ -680,24 +678,24 @@ func (q *Query) UnmarshalJSON(b []byte) error {
 	}
 
 	// store timestamps
-	if jmap["__submission_time"] != "" {
-		ts, err := time.Parse(time.RFC3339, jmap["__submission_time"])
+	if jmap["__time_submitted"] != "" {
+		ts, err := time.Parse(time.RFC3339, jmap["__time_submitted"])
 		if err != nil {
 			return PTOWrapError(err)
 		}
 		q.Submitted = &ts
 	}
 
-	if jmap["__execution_time"] != "" {
-		ts, err := time.Parse(time.RFC3339, jmap["__execution_time"])
+	if jmap["__time_executed"] != "" {
+		ts, err := time.Parse(time.RFC3339, jmap["__time_executed"])
 		if err != nil {
 			return PTOWrapError(err)
 		}
 		q.Executed = &ts
 	}
 
-	if jmap["__completion_time"] != "" {
-		ts, err := time.Parse(time.RFC3339, jmap["__completion_time"])
+	if jmap["__time_completed"] != "" {
+		ts, err := time.Parse(time.RFC3339, jmap["__time_completed"])
 		if err != nil {
 			return PTOWrapError(err)
 		}

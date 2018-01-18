@@ -35,7 +35,7 @@ type queryList struct {
 }
 
 func (qa *QueryAPI) handleList(w http.ResponseWriter, r *http.Request) {
-	// FIXME this isn't terribly useful.
+	// FIXME this isn't terribly useful (See #25)
 	// there should at least be a way to list pending queries only,
 	// and completed queries only, but this would require the cache
 	// to keep everything in memory. investigate this after we get things running.
@@ -71,24 +71,19 @@ func (qa *QueryAPI) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Submit the query; this will give us an existing query if it's already in the cache
+	// execute query, but don't wait for it beyond the immediate wait.
+	// This will give us an existing query if it's already in the cache.
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "error parsing form", http.StatusBadRequest)
 	}
 
-	q, isnew, err := qa.qc.SubmitQueryFromForm(r.Form)
+	q, _, err := qa.qc.ExecuteQueryFromForm(r.Form, make(chan struct{}))
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "parsing query", err)
 		return
 	}
 
-	// Serialize query
-	status := http.StatusOK
-	if isnew {
-		status = http.StatusAccepted
-	}
-
-	queryResponse(w, status, q)
+	queryResponse(w, http.StatusOK, q)
 }
 
 func (qa *QueryAPI) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
@@ -211,11 +206,20 @@ func (qa *QueryAPI) handleGetResults(w http.ResponseWriter, r *http.Request) {
 		prevLink, _ := qa.config.LinkTo(fmt.Sprintf("/query/%s/result?page=%d", q.Identifier, page-1))
 		robj["prev"] = prevLink
 	}
+
+	outb, err := json.Marshal(robj)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "marshaling result", err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(outb)
 }
 
 func (qa *QueryAPI) addRoutes(r *mux.Router, l *log.Logger) {
 	r.HandleFunc("/query", LogAccess(l, qa.handleList)).Methods("GET")
-	r.HandleFunc("/query/submit", LogAccess(l, qa.handleSubmit)).Methods("POST")
+	r.HandleFunc("/query/submit", LogAccess(l, qa.handleSubmit)).Methods("GET", "POST")
 	r.HandleFunc("/query/{query}", LogAccess(l, qa.handleGetMetadata)).Methods("GET")
 	r.HandleFunc("/query/{query}", LogAccess(l, qa.handlePutMetadata)).Methods("PUT")
 	r.HandleFunc("/query/{query}/data", LogAccess(l, qa.handleGetResults)).Methods("GET")
