@@ -715,7 +715,7 @@ func (set *ObservationSet) CopyDataToStream(db orm.DB, out io.Writer) error {
 				return
 			}
 
-			if err := obs.unmarshalStringSlice(cslice, "2006-01-02 15:04:05-07"); err != nil {
+			if err := obs.unmarshalStringSlice(cslice, PostgresTime); err != nil {
 				converr <- err
 				return
 			}

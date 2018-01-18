@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// Time format string for ISO date-only
+const ISODate = "2006-01-02"
+
+// Time format string for PostgreSQL
+const PostgresTime = "2006-01-02 15:04:05-07"
+
 // AsString tries to typeswitch an interface to a string, printing its value if not.
 func AsString(v interface{}) string {
 	switch cv := v.(type) {
@@ -50,13 +56,13 @@ func ParseTime(s string) (time.Time, error) {
 	}
 
 	// ISO Date
-	t, err = time.Parse("2006-01-02", s)
+	t, err = time.Parse(ISODate, s)
 	if err == nil {
 		return t, nil
 	}
 
 	// PostgreSQL
-	t, err = time.Parse("2006-01-02 15:04:05-07", s)
+	t, err = time.Parse(PostgresTime, s)
 	if err == nil {
 		return t, nil
 	}

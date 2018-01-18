@@ -4,31 +4,32 @@ package papi_test
 // post-bulk-copy. come back and rewrite this test after the pto3 core tests
 // are done.
 
-// import (
-// 	"bufio"
-// 	"bytes"
-// 	"encoding/json"
-// 	"io"
-// 	"log"
-// 	"net/http"
-// 	"testing"
+import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"testing"
+	"time"
 
-// 	pto3 "github.com/mami-project/pto3-go"
-// )
+	pto3 "github.com/mami-project/pto3-go"
+)
 
-// type ClientObservationSet struct {
-// 	Analyzer    string   `json:"_analyzer"`
-// 	Sources     []string `json:"_sources"`
-// 	Conditions  []string `json:"_conditions"`
-// 	Description string   `json:"description"`
-// 	Link        string   `json:"__link"`
-// 	Datalink    string   `json:"__data"`
-// 	Count       int      `json:"__obs_count"`
-// }
+type ClientObservationSet struct {
+	Analyzer    string   `json:"_analyzer"`
+	Sources     []string `json:"_sources"`
+	Conditions  []string `json:"_conditions"`
+	Description string   `json:"description"`
+	Link        string   `json:"__link"`
+	Datalink    string   `json:"__data"`
+	Count       int      `json:"__obs_count"`
+}
 
-// type ClientSetList struct {
-// 	Sets []string `json:"sets"`
-// }
+type ClientSetList struct {
+	Sets []string `json:"sets"`
+}
 
 // func WriteObservations(obsdat []pto3.Observation, out io.Writer) error {
 // 	for _, obs := range obsdat {
@@ -57,161 +58,190 @@ package papi_test
 // 	return out.Bytes(), err
 // }
 
-// func ReadObservations(in io.Reader) ([]pto3.Observation, error) {
-// 	sin := bufio.NewScanner(in)
-// 	out := make([]pto3.Observation, 0)
-// 	var obs pto3.Observation
-// 	for sin.Scan() {
-// 		log.Printf("got observation line %s", sin.Text())
-// 		if err := json.Unmarshal([]byte(sin.Text()), &obs); err != nil {
-// 			return nil, err
-// 		}
-// 		out = append(out, obs)
-// 	}
-// 	return out, nil
-// }
+func readObservations(in io.Reader) ([]pto3.Observation, error) {
+	sin := bufio.NewScanner(in)
+	out := make([]pto3.Observation, 0)
+	var obs pto3.Observation
+	for sin.Scan() {
+		if err := json.Unmarshal([]byte(sin.Text()), &obs); err != nil {
+			return nil, err
+		}
+		out = append(out, obs)
+	}
+	return out, nil
+}
 
-// func UnmarshalObservations(in []byte) ([]pto3.Observation, error) {
-// 	return ReadObservations(bytes.NewBuffer(in))
-// }
+func compareObservationSlices(a, b []pto3.Observation) error {
+	ma := make(map[string]struct{})
+	mb := make(map[string]struct{})
 
-// func TestObsRoundtrip(t *testing.T) {
-// 	// create a new observation set and retrieve the set ID
-// 	setUp := ClientObservationSet{
-// 		Analyzer: "https://ptotest.mami-project.eu/analysis/passthrough",
-// 		Sources:  []string{"https://ptotest.mami-project.eu/raw/test001.json"},
-// 		Conditions: []string{
-// 			"pto.test.schroedinger",
-// 			"pto.test.failed",
-// 			"pto.test.succeeded",
-// 		},
-// 		Description: "An observation set to exercise observation set metdata and data storage",
-// 	}
+	for _, oa := range a {
+		oas := fmt.Sprintf("%s|%s|%s|%s",
+			oa.TimeStart.Format(time.RFC3339),
+			oa.TimeEnd.Format(time.RFC3339),
+			oa.Path.String,
+			oa.Condition.Name)
+		ma[oas] = struct{}{}
+	}
 
-// 	res := executeWithJSON(TestRouter, t, "POST", "https://ptotest.mami-project.eu/obs/create",
-// 		setUp, GoodAPIKey, http.StatusCreated)
+	for _, ob := range b {
+		obs := fmt.Sprintf("%s|%s|%s|%s",
+			ob.TimeStart.Format(time.RFC3339),
+			ob.TimeEnd.Format(time.RFC3339),
+			ob.Path.String,
+			ob.Condition.Name)
+		mb[obs] = struct{}{}
+	}
 
-// 	setDown := ClientObservationSet{}
-// 	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
-// 		t.Fatal(err)
-// 	}
+	for ka := range ma {
+		if _, ok := mb[ka]; ok == false {
+			return fmt.Errorf("second observation set missing observation %s", ka)
+		}
+	}
 
-// 	if setDown.Link == "" {
-// 		t.Fatal("missing __link in /obs/create POST response")
-// 	}
+	for kb := range mb {
+		if _, ok := ma[kb]; ok == false {
+			return fmt.Errorf("first observation set missing observation %s", kb)
+		}
+	}
 
-// 	setlink := setDown.Link
+	return nil
+}
 
-// 	// list observation sets to ensure it shows up in the list
-// 	res = executeRequest(TestRouter, t, "GET", "https://ptotest.mami-project.eu/obs", nil, "", GoodAPIKey, http.StatusOK)
+func TestObsRoundtrip(t *testing.T) {
+	// create a new observation set and retrieve the set ID
+	setUp := ClientObservationSet{
+		Analyzer: "https://ptotest.mami-project.eu/analysis/passthrough",
+		Sources:  []string{"https://ptotest.mami-project.eu/raw/test001.json"},
+		Conditions: []string{
+			"pto.test.schroedinger",
+			"pto.test.failed",
+			"pto.test.succeeded",
+		},
+		Description: "An observation set to exercise observation set metdata and data storage",
+	}
 
-// 	var setlist ClientSetList
-// 	if err := json.Unmarshal(res.Body.Bytes(), &setlist); err != nil {
-// 		t.Fatal(err)
-// 	}
+	res := executeWithJSON(TestRouter, t, "POST", "https://ptotest.mami-project.eu/obs/create",
+		setUp, GoodAPIKey, http.StatusCreated)
 
-// 	ok := false
-// 	for i := range setlist.Sets {
-// 		if setlist.Sets[i] == setDown.Link {
-// 			ok = true
-// 			break
-// 		}
-// 	}
-// 	if !ok {
-// 		t.Fatal("created observation set not listed")
-// 	}
+	setDown := ClientObservationSet{}
+	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
+		t.Fatal(err)
+	}
 
-// 	// retrieve observation set to ensure the metadata is properly stored
-// 	res = executeRequest(TestRouter, t, "GET", setlink, nil, "", GoodAPIKey, http.StatusOK)
+	if setDown.Link == "" {
+		t.Fatal("missing __link in /obs/create POST response")
+	}
 
-// 	setDown = ClientObservationSet{}
-// 	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
-// 		t.Fatal(err)
-// 	}
+	setlink := setDown.Link
 
-// 	if setDown.Analyzer != setUp.Analyzer {
-// 		t.Fatalf("observation set metadata analyzer mismatch, sent %s got %s", setUp.Analyzer, setDown.Analyzer)
-// 	}
+	// list observation sets to ensure it shows up in the list
+	res = executeRequest(TestRouter, t, "GET", "https://ptotest.mami-project.eu/obs", nil, "", GoodAPIKey, http.StatusOK)
 
-// 	// compare condition lists order-independently
-// 	conditionSeen := make(map[string]bool)
-// 	for i := range setUp.Conditions {
-// 		conditionSeen[setUp.Conditions[i]] = false
-// 	}
-// 	for i := range setDown.Conditions {
-// 		conditionSeen[setDown.Conditions[i]] = true
-// 	}
-// 	for i := range conditionSeen {
-// 		if !conditionSeen[i] {
-// 			t.Fatalf("observation set metadata condition mismatch: sent %v got %v", setUp.Conditions, setDown.Conditions)
-// 		}
-// 	}
+	var setlist ClientSetList
+	if err := json.Unmarshal(res.Body.Bytes(), &setlist); err != nil {
+		t.Fatal(err)
+	}
 
-// 	if setDown.Datalink == "" {
-// 		t.Fatal("missing __datalink in observation set")
-// 	}
+	ok := false
+	for i := range setlist.Sets {
+		if setlist.Sets[i] == setDown.Link {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		t.Fatal("created observation set not listed")
+	}
 
-// 	datalink := setDown.Datalink
+	// retrieve observation set to ensure the metadata is properly stored
+	res = executeRequest(TestRouter, t, "GET", setlink, nil, "", GoodAPIKey, http.StatusOK)
 
-// 	// change the description and update the database
-// 	setDown.Description = "An updated observation set to exercise observation set metdata and data storage"
+	setDown = ClientObservationSet{}
+	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
+		t.Fatal(err)
+	}
 
-// 	res = executeWithJSON(TestRouter, t, "PUT", setlink, setDown, GoodAPIKey, http.StatusCreated)
+	if setDown.Analyzer != setUp.Analyzer {
+		t.Fatalf("observation set metadata analyzer mismatch, sent %s got %s", setUp.Analyzer, setDown.Analyzer)
+	}
 
-// 	setDown = ClientObservationSet{}
-// 	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
-// 		t.Fatal(err)
-// 	}
+	// compare condition lists order-independently
+	conditionSeen := make(map[string]bool)
+	for i := range setUp.Conditions {
+		conditionSeen[setUp.Conditions[i]] = false
+	}
+	for i := range setDown.Conditions {
+		conditionSeen[setDown.Conditions[i]] = true
+	}
+	for i := range conditionSeen {
+		if !conditionSeen[i] {
+			t.Fatalf("observation set metadata condition mismatch: sent %v got %v", setUp.Conditions, setDown.Conditions)
+		}
+	}
 
-// 	if setDown.Description != "An updated observation set to exercise observation set metdata and data storage" {
-// 		t.Fatal("failed to update description via PUT")
-// 	}
+	if setDown.Datalink == "" {
+		t.Fatal("missing __datalink in observation set")
+	}
 
-// 	// now write some data to the observation set data link
-// 	observations_up_bytes := []byte(`["e1337", "2017-10-01T10:06:00Z", "2017-10-01T10:06:00Z", "10.0.0.1 * 10.0.0.2", "pto.test.succeeded"]
-// 	["e1337", "2017-10-01T10:06:01Z", "2017-10-01T10:06:02Z", "10.0.0.1 AS1 * AS2 10.0.0.2", "pto.test.schroedinger"]
-// 	["e1337", "2017-10-01T10:06:03Z", "2017-10-01T10:06:05Z", "* AS2 10.0.0.0/24", "pto.test.failed"]
-// 	["e1337", "2017-10-01T10:06:07Z", "2017-10-01T10:06:11Z", "[2001:db8::33:a4] * [2001:db8:3]/64", "pto.test.succeeded"]
-// 	["e1337", "2017-10-01T10:06:09Z", "2017-10-01T10:06:14Z", "[2001:db8::33:a4] * [2001:db8:3]/64", "pto.test.succeeded"]`)
+	// save the datalink, we'll use it later
+	datalink := setDown.Datalink
 
-// 	observations_up, err := UnmarshalObservations(observations_up_bytes)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
+	// change the description, update the database, make sure PUT update works
+	setUp = setDown
 
-// 	res = executeRequest(TestRouter, t, "PUT", datalink, bytes.NewBuffer(observations_up_bytes),
-// 		"application/vnd.mami.ndjson", GoodAPIKey, http.StatusCreated)
+	setUp.Description = "An updated observation set to exercise observation set metdata and data storage"
 
-// 	// check count in resulting metadata
-// 	setDown = ClientObservationSet{}
-// 	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
-// 		t.Fatal(err)
-// 	}
+	res = executeWithJSON(TestRouter, t, "PUT", setlink, setUp, GoodAPIKey, http.StatusCreated)
 
-// 	if setDown.Count != len(observations_up) {
-// 		t.Fatalf("bad observation set __obs_count after data PUT: expected %d got %d", len(observations_up), setDown.Count)
-// 	}
+	setDown = ClientObservationSet{}
+	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
+		t.Fatal(err)
+	}
 
-// 	// and try downloading it again
-// 	res = executeRequest(TestRouter, t, "GET", datalink, nil, "", GoodAPIKey, http.StatusOK)
+	if setDown.Description != "An updated observation set to exercise observation set metdata and data storage" {
+		t.Fatal("failed to update description via PUT")
+	}
 
-// 	observations_down, err := ReadObservations(res.Body)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
+	// now upload some data
+	observations_up_bytes := []byte(`["e1337", "2017-10-01T10:06:00Z", "2017-10-01T10:06:00Z", "10.0.0.1 * 10.0.0.2", "pto.test.succeeded"]
+	["e1337", "2017-10-01T10:06:01Z", "2017-10-01T10:06:02Z", "10.0.0.1 AS1 * AS2 10.0.0.2", "pto.test.schroedinger"]
+	["e1337", "2017-10-01T10:06:03Z", "2017-10-01T10:06:05Z", "* AS2 10.0.0.0/24", "pto.test.failed"]
+	["e1337", "2017-10-01T10:06:07Z", "2017-10-01T10:06:11Z", "[2001:db8::33:a4] * [2001:db8:3]/64", "pto.test.succeeded"]
+	["e1337", "2017-10-01T10:06:09Z", "2017-10-01T10:06:14Z", "[2001:db8::33:a4] * [2001:db8:3]/64", "pto.test.succeeded"]`)
 
-// 	if len(observations_up) != len(observations_down) {
-// 		t.Fatalf("observation count mismatch: sent %d got %d", len(observations_up), len(observations_down))
-// 	}
+	observations_up, err := readObservations(bytes.NewBuffer(observations_up_bytes))
+	if err != nil {
+		t.Fatal(err)
+	}
 
-// 	// compate paths on observations
-// 	// FIXME check timing too
-// 	for i := range observations_up {
-// 		if observations_up[i].Path.String != observations_down[i].Path.String {
-// 			t.Errorf("path mismatch on observation %d sent %s got %s", i, observations_up[i].Path.String, observations_down[i].Path.String)
-// 		}
-// 		if observations_up[i].Condition.Name != observations_down[i].Condition.Name {
-// 			t.Errorf("condition mismatch on observation %d sent %s got %s", i, observations_up[i].Condition.Name, observations_down[i].Condition.Name)
-// 		}
-// 	}
-// }
+	res = executeRequest(TestRouter, t, "PUT", datalink, bytes.NewBuffer(observations_up_bytes),
+		"application/vnd.mami.ndjson", GoodAPIKey, http.StatusCreated)
+
+	// check count in resulting metadata
+	setDown = ClientObservationSet{}
+	if err := json.Unmarshal(res.Body.Bytes(), &setDown); err != nil {
+		t.Fatal(err)
+	}
+
+	if setDown.Count != len(observations_up) {
+		t.Fatalf("bad observation set __obs_count after data PUT: expected %d got %d", len(observations_up), setDown.Count)
+	}
+
+	// and try downloading it again
+	res = executeRequest(TestRouter, t, "GET", datalink, nil, "", GoodAPIKey, http.StatusOK)
+
+	observations_down, err := readObservations(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(observations_up) != len(observations_down) {
+		t.Fatalf("observation count mismatch: sent %d got %d", len(observations_up), len(observations_down))
+	}
+
+	if err := compareObservationSlices(observations_up, observations_down); err != nil {
+		t.Fatal(err)
+	}
+
+}
