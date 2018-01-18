@@ -22,10 +22,10 @@ type testQueryMetadata struct {
 }
 
 type testResultSet struct {
-	Prev         string          `json:"prev"`
-	Next         string          `json:"next"`
-	Observations [][]string      `json:"obs"`
-	Groups       [][]interface{} `json:"groups"`
+	Prev   string          `json:"prev"`
+	Next   string          `json:"next"`
+	Obs    [][]string      `json:"obs"`
+	Groups [][]interface{} `json:"groups"`
 }
 
 func TestQueryLifecycle(t *testing.T) {
@@ -54,6 +54,37 @@ func TestQueryLifecycle(t *testing.T) {
 		}
 	}
 
+	// grab results, iterating over pagination, and parse them
+	resultLink := q.Result
+	rowCount := 0
+	const expectedRowCount = 600
+
+	for resultLink != "" {
+
+		res := executeRequest(TestRouter, t, "GET", q.Result, nil, "", GoodAPIKey, http.StatusOK)
+
+		if (res.Header().Get("Content-Type")) != "application/json" {
+			t.Fatalf("unexpected result content type %s", res.Header().Get("Content-Type"))
+		}
+
+		qr := new(testResultSet)
+
+		if err := json.Unmarshal(res.Body.Bytes(), &qr); err != nil {
+			t.Fatal(err)
+		}
+
+		if qr.Obs == nil {
+			t.Fatal("Result retrieval missing observations")
+		}
+
+		rowCount += len(qr.Obs)
+		resultLink = qr.Next
+	}
+
+	if rowCount != expectedRowCount {
+		t.Fatalf("expected %d rows, got %d", expectedRowCount, rowCount)
+	}
+
 	// update the query metadata and verify we can retrieve it
 	q.Description = "this is a test query, yay!"
 
@@ -75,18 +106,25 @@ func TestQueryLifecycle(t *testing.T) {
 		t.Fatalf("got unexpected description after update %s", q.Description)
 	}
 
-	// grab results and parse them
-	res = executeRequest(TestRouter, t, "GET", q.Result, nil, "", GoodAPIKey, http.StatusOK)
+	// now make the query permanent by writing to its external reference
 
-	if (res.Header().Get("Content-Type")) != "application/json" {
-		t.Fatalf("unexpected result content type %s", res.Header().Get("Content-Type"))
-	}
+	q.ExtRef = "https://example.com/this-is-a-test-external-reference"
 
-	qr := new(testResultSet)
+	res = executeWithJSON(TestRouter, t, "PUT", q.Link, q, GoodAPIKey, http.StatusAccepted)
 
-	if err := json.Unmarshal(res.Body.Bytes(), &qr); err != nil {
+	if err := json.Unmarshal(res.Body.Bytes(), &q); err != nil {
 		t.Fatal(err)
 	}
 
-	// WORK POINTER
+	// check reflected state
+	q = new(testQueryMetadata)
+
+	if err := json.Unmarshal(res.Body.Bytes(), &q); err != nil {
+		t.Fatal(err)
+	}
+
+	if q.State != "permanent" {
+		t.Fatal("adding external reference did not make query permanent")
+	}
+
 }
