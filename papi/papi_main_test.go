@@ -19,27 +19,33 @@ import (
 
 // set to true to allow inspection of tables after testing
 const SuppressDropTables = false
+const SuppressDeleteRawStore = false
+const SuppressDeleteQueryCache = false
 
 func setupRaw(config *pto3.PTOConfiguration, azr papi.Authorizer, r *mux.Router) *papi.RawAPI {
 	// create temporary RDS directory
 	var err error
-	config.RawRoot, err = ioutil.TempDir("", "papi-test-raw")
+	config.RawRoot, err = ioutil.TempDir("", "papi-test-rawapi")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// create an RDS
-	obsapi, err := papi.NewRawAPI(config, azr, r)
+	// create an RDS and an API around it
+	rawapi, err := papi.NewRawAPI(config, azr, r)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return obsapi
+	return rawapi
 }
 
 func teardownRaw(config *pto3.PTOConfiguration) {
-	if err := os.RemoveAll(config.RawRoot); err != nil {
-		log.Fatal(err)
+	if SuppressDeleteRawStore {
+		log.Printf("Leaving temporary raw data store at %s", config.RawRoot)
+	} else {
+		if err := os.RemoveAll(config.RawRoot); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
@@ -60,8 +66,36 @@ func setupObs(config *pto3.PTOConfiguration, azr papi.Authorizer, r *mux.Router)
 
 func teardownObs(obsapi *papi.ObsAPI) {
 	// (don't) delete tables
-	if !SuppressDropTables && TestRC == 0 {
+	if !SuppressDropTables {
 		if err := obsapi.DropTables(); err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func setupQuery(config *pto3.PTOConfiguration, azr papi.Authorizer, r *mux.Router) *papi.QueryAPI {
+	// create temporary query cache directory
+	var err error
+	config.QueryCacheRoot, err = ioutil.TempDir("", "pto3-test-qc")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// create a query cache and an API around it
+	qapi, err := papi.NewQueryAPI(config, azr, r)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return qapi
+}
+
+func teardownQuery(config *pto3.PTOConfiguration) {
+	// (don't) delete query cache
+	if SuppressDeleteRawStore {
+		log.Printf("Leaving temporary query cache at %s", config.QueryCacheRoot)
+	} else {
+		if err := os.RemoveAll(config.QueryCacheRoot); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -189,6 +223,10 @@ func TestMain(m *testing.M) {
 		// build an observation store (and prepare to clean up after it)
 		obsapi := setupObs(TestConfig, azr, TestRouter)
 		defer teardownObs(obsapi)
+
+		// build an observation store (and prepare to clean up after it)
+		setupQuery(TestConfig, azr, TestRouter)
+		defer teardownQuery(TestConfig)
 
 		TestRC = m.Run()
 		return TestRC

@@ -224,3 +224,24 @@ func (qa *QueryAPI) addRoutes(r *mux.Router, l *log.Logger) {
 	r.HandleFunc("/query/{query}", LogAccess(l, qa.handlePutMetadata)).Methods("PUT")
 	r.HandleFunc("/query/{query}/data", LogAccess(l, qa.handleGetResults)).Methods("GET")
 }
+
+func NewQueryAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router) (*QueryAPI, error) {
+
+	if config.QueryCacheRoot == "" {
+		return nil, nil
+	}
+
+	qa := new(QueryAPI)
+	qa.config = config
+	qa.azr = azr
+
+	var err error
+	qa.qc, err = pto3.NewQueryCache(config)
+	if err != nil {
+		return nil, err
+	}
+
+	qa.addRoutes(r, config.AccessLogger())
+
+	return qa, nil
+}
