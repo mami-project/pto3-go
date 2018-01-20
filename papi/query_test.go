@@ -2,6 +2,7 @@ package papi_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
@@ -31,9 +32,8 @@ type testResultSet struct {
 func TestQueryLifecycle(t *testing.T) {
 
 	// here's a simple selection query to play with
-	queryParams := "time_start=" + url.QueryEscape("2017-12-05T14:00:00Z") +
-		"time_end=" + url.QueryEscape("2017-12-05T14:00:00Z") +
-		"condition=pto.test.color.blue"
+	queryParams := fmt.Sprintf("set=%d&time_start=%s&time_end=%s&condition=pto.test.color.blue",
+		TestQueryCacheSetID, url.QueryEscape("2017-12-05T14:00:00Z"), url.QueryEscape("2017-12-05T14:00:00Z"))
 
 	q := new(testQueryMetadata)
 

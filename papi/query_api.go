@@ -222,7 +222,11 @@ func (qa *QueryAPI) addRoutes(r *mux.Router, l *log.Logger) {
 	r.HandleFunc("/query/submit", LogAccess(l, qa.handleSubmit)).Methods("GET", "POST")
 	r.HandleFunc("/query/{query}", LogAccess(l, qa.handleGetMetadata)).Methods("GET")
 	r.HandleFunc("/query/{query}", LogAccess(l, qa.handlePutMetadata)).Methods("PUT")
-	r.HandleFunc("/query/{query}/data", LogAccess(l, qa.handleGetResults)).Methods("GET")
+	r.HandleFunc("/query/{query}/result", LogAccess(l, qa.handleGetResults)).Methods("GET")
+}
+
+func (qa *QueryAPI) LoadTestData(obsFilename string) (int, error) {
+	return qa.qc.LoadTestData(obsFilename)
 }
 
 func NewQueryAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router) (*QueryAPI, error) {

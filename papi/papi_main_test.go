@@ -22,6 +22,15 @@ const SuppressDropTables = false
 const SuppressDeleteRawStore = false
 const SuppressDeleteQueryCache = false
 
+const TestBaseURL = "https://ptotest.mami-project.eu"
+
+var TestConfig *pto3.PTOConfiguration
+var TestRouter *mux.Router
+
+var TestRC int
+
+var TestQueryCacheSetID int
+
 func setupRaw(config *pto3.PTOConfiguration, azr papi.Authorizer, r *mux.Router) *papi.RawAPI {
 	// create temporary RDS directory
 	var err error
@@ -87,6 +96,12 @@ func setupQuery(config *pto3.PTOConfiguration, azr papi.Authorizer, r *mux.Route
 		log.Fatal(err)
 	}
 
+	// ensure the query test data is loaded and stash its set ID
+	TestQueryCacheSetID, err = qapi.LoadTestData("../testdata/test_query.ndjson")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return qapi
 }
 
@@ -112,9 +127,9 @@ func setupAZR() papi.Authorizer {
 				"write_raw:test": true,
 				"read_obs":       true,
 				"write_obs":      true,
-				// "submit_query":   true,
-				// "read_query":     true,
-				// "update_query":   true,
+				"submit_query":   true,
+				"read_query":     true,
+				"update_query":   true,
 			},
 		},
 	}
@@ -175,13 +190,6 @@ func executeWithFile(r *mux.Router, t *testing.T,
 
 	return executeRequest(r, t, method, url, f, bodytype, apikey, http.StatusCreated)
 }
-
-const TestBaseURL = "https://ptotest.mami-project.eu"
-
-var TestConfig *pto3.PTOConfiguration
-var TestRouter *mux.Router
-
-var TestRC int
 
 func TestMain(m *testing.M) {
 	// define a configuration
