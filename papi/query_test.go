@@ -32,7 +32,7 @@ type testResultSet struct {
 func TestQueryLifecycle(t *testing.T) {
 
 	// here's a simple selection query to play with
-	queryParams := fmt.Sprintf("set=%d&time_start=%s&time_end=%s&condition=pto.test.color.blue",
+	queryParams := fmt.Sprintf("set=%x&time_start=%s&time_end=%s&condition=pto.test.color.blue",
 		TestQueryCacheSetID, url.QueryEscape("2017-12-05T14:00:00Z"), url.QueryEscape("2017-12-05T15:00:00Z"))
 
 	q := new(testQueryMetadata)
@@ -88,7 +88,7 @@ func TestQueryLifecycle(t *testing.T) {
 	// update the query metadata and verify we can retrieve it
 	q.Description = "this is a test query, yay!"
 
-	res := executeWithJSON(TestRouter, t, "PUT", q.Link, q, GoodAPIKey, http.StatusAccepted)
+	res := executeWithJSON(TestRouter, t, "PUT", q.Link, q, GoodAPIKey, http.StatusOK)
 
 	if err := json.Unmarshal(res.Body.Bytes(), &q); err != nil {
 		t.Fatal(err)
@@ -110,7 +110,7 @@ func TestQueryLifecycle(t *testing.T) {
 
 	q.ExtRef = "https://example.com/this-is-a-test-external-reference"
 
-	res = executeWithJSON(TestRouter, t, "PUT", q.Link, q, GoodAPIKey, http.StatusAccepted)
+	res = executeWithJSON(TestRouter, t, "PUT", q.Link, q, GoodAPIKey, http.StatusOK)
 
 	if err := json.Unmarshal(res.Body.Bytes(), &q); err != nil {
 		t.Fatal(err)

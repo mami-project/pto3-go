@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -804,7 +805,7 @@ func (q *Query) PaginateResultObject(offset int, count int) (map[string]interfac
 		if offset >= lineno {
 			continue
 		}
-		if offset+count > lineno {
+		if offset+lineno > count {
 			break
 		}
 
@@ -896,9 +897,13 @@ func (q *Query) selectAndStoreObservations() error {
 	}
 	defer outfile.Close()
 
+	log.Printf("writing %d observations to result file %s", len(obsdat), outfile.Name())
+
 	if err := WriteObservations(obsdat, outfile); err != nil {
 		return err
 	}
+
+	log.Printf("flushing result file %s", outfile.Name())
 
 	return outfile.Sync()
 }

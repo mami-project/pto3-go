@@ -18,9 +18,9 @@ import (
 )
 
 // set to true to allow inspection of tables after testing
-const SuppressDropTables = true
+const SuppressDropTables = false
 const SuppressDeleteRawStore = false
-const SuppressDeleteQueryCache = true
+const SuppressDeleteQueryCache = false
 
 const TestBaseURL = "https://ptotest.mami-project.eu"
 
