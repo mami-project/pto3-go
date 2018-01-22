@@ -870,7 +870,7 @@ func (q *Query) selectAndStoreObservations() error {
 		return err
 	}
 
-	return nil
+	return outfile.Sync()
 }
 
 // selectObservationSetIDs selects observation set IDs responding to
@@ -907,7 +907,7 @@ func (q *Query) selectAndStoreObservationSetLinks() error {
 		}
 	}
 
-	return nil
+	return outfile.Sync()
 }
 
 func joinGroupExtTable(q *orm.Query, extTable string) *orm.Query {
@@ -964,7 +964,7 @@ func (q *Query) selectAndStoreOneGroup() error {
 		}
 	}
 
-	return nil
+	return outfile.Sync()
 }
 
 func (q *Query) selectAndStoreTwoGroups() error {
@@ -1021,7 +1021,7 @@ func (q *Query) selectAndStoreTwoGroups() error {
 		}
 	}
 
-	return nil
+	return outfile.Sync()
 }
 
 // selectAndStoreGroups selects groups responding to this query and dumps them
