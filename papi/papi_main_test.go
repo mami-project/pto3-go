@@ -18,9 +18,9 @@ import (
 )
 
 // set to true to allow inspection of tables after testing
-const SuppressDropTables = false
+const SuppressDropTables = true
 const SuppressDeleteRawStore = false
-const SuppressDeleteQueryCache = false
+const SuppressDeleteQueryCache = true
 
 const TestBaseURL = "https://ptotest.mami-project.eu"
 
@@ -96,18 +96,23 @@ func setupQuery(config *pto3.PTOConfiguration, azr papi.Authorizer, r *mux.Route
 		log.Fatal(err)
 	}
 
+	// log everything
+	qapi.EnableQueryLogging()
+
 	// ensure the query test data is loaded and stash its set ID
 	TestQueryCacheSetID, err = qapi.LoadTestData("../testdata/test_query.ndjson")
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	log.Printf("query cache test set ID is %d", TestQueryCacheSetID)
+
 	return qapi
 }
 
 func teardownQuery(config *pto3.PTOConfiguration) {
 	// (don't) delete query cache
-	if SuppressDeleteRawStore {
+	if SuppressDeleteQueryCache {
 		log.Printf("Leaving temporary query cache at %s", config.QueryCacheRoot)
 	} else {
 		if err := os.RemoveAll(config.QueryCacheRoot); err != nil {

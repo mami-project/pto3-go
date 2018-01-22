@@ -84,6 +84,10 @@ func (qc *QueryCache) LoadTestData(obsFilename string) (int, error) {
 	}
 }
 
+func (qc *QueryCache) EnableQueryLogging() {
+	EnableQueryLogging(qc.db)
+}
+
 func (qc *QueryCache) writeMetadataFile(identifier string) (*os.File, error) {
 	return os.Create(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.json", identifier)))
 }

@@ -33,7 +33,7 @@ func TestQueryLifecycle(t *testing.T) {
 
 	// here's a simple selection query to play with
 	queryParams := fmt.Sprintf("set=%d&time_start=%s&time_end=%s&condition=pto.test.color.blue",
-		TestQueryCacheSetID, url.QueryEscape("2017-12-05T14:00:00Z"), url.QueryEscape("2017-12-05T14:00:00Z"))
+		TestQueryCacheSetID, url.QueryEscape("2017-12-05T14:00:00Z"), url.QueryEscape("2017-12-05T15:00:00Z"))
 
 	q := new(testQueryMetadata)
 
@@ -57,7 +57,7 @@ func TestQueryLifecycle(t *testing.T) {
 	// grab results, iterating over pagination, and parse them
 	resultLink := q.Result
 	rowCount := 0
-	const expectedRowCount = 600
+	const expectedRowCount = 396
 
 	for resultLink != "" {
 

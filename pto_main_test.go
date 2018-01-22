@@ -17,7 +17,7 @@ import (
 
 const SuppressDropTables = false
 const SuppressDeleteRawStore = true
-const SuppressDeleteQueryCache = false
+const SuppressDeleteQueryCache = true
 
 var TestConfig *pto3.PTOConfiguration
 var TestRDS *pto3.RawDataStore

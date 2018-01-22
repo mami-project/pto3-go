@@ -229,6 +229,10 @@ func (qa *QueryAPI) LoadTestData(obsFilename string) (int, error) {
 	return qa.qc.LoadTestData(obsFilename)
 }
 
+func (qa *QueryAPI) EnableQueryLogging() {
+	qa.qc.EnableQueryLogging()
+}
+
 func NewQueryAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router) (*QueryAPI, error) {
 
 	if config.QueryCacheRoot == "" {
