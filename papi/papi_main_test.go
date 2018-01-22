@@ -210,7 +210,8 @@ func TestMain(m *testing.M) {
 		"User":     "ptotest",
 		"Database": "ptotest",
 		"Password": "helpful guide sheep train"
-	}
+	},
+	"PageLength": 50
 }`)
 
 	var err error

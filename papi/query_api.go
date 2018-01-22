@@ -170,6 +170,10 @@ func (qa *QueryAPI) handleGetResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "error parsing form", http.StatusBadRequest)
+	}
+
 	// fail if not authorized
 	if !qa.azr.IsAuthorized(w, r, "read_query") {
 		return

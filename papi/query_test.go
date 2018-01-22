@@ -61,7 +61,7 @@ func TestQueryLifecycle(t *testing.T) {
 
 	for resultLink != "" {
 
-		res := executeRequest(TestRouter, t, "GET", q.Result, nil, "", GoodAPIKey, http.StatusOK)
+		res := executeRequest(TestRouter, t, "GET", resultLink, nil, "", GoodAPIKey, http.StatusOK)
 
 		if (res.Header().Get("Content-Type")) != "application/json" {
 			t.Fatalf("unexpected result content type %s", res.Header().Get("Content-Type"))
