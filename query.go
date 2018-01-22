@@ -35,11 +35,8 @@ type QueryCache struct {
 	// Path to result cache directory
 	path string
 
-	// Submitted queries not yet running
-	submitted map[string]*Query
-
-	// Queries executing and cached in memory (recently executed)
-	cached map[string]*Query
+	// Cached queries we know about
+	query map[string]*Query
 
 	// channel for execution tokens
 	exectokens chan struct{}
@@ -57,8 +54,7 @@ func NewQueryCache(config *PTOConfiguration) (*QueryCache, error) {
 		config:     config,
 		db:         pg.Connect(&config.ObsDatabase),
 		path:       config.QueryCacheRoot,
-		submitted:  make(map[string]*Query),
-		cached:     make(map[string]*Query),
+		query:      make(map[string]*Query),
 		exectokens: make(chan struct{}, config.ConcurrentQueries),
 	}
 
@@ -126,11 +122,8 @@ func (qc *QueryCache) fetchQuery(identifier string) (*Query, error) {
 		return nil, PTOErrorf("Identifier mismatch on query fetch: fetched %s got %s", identifier, q.Identifier)
 	}
 
-	if q.Completed == nil {
-		qc.submitted[identifier] = &q
-	} else {
-		qc.cached[identifier] = &q
-	}
+	// Stick query in the cache
+	qc.query[identifier] = &q
 
 	// FIXME any query we fetch in executing state necessarily crashed. need a way to revive these.
 
@@ -143,14 +136,8 @@ func (qc *QueryCache) QueryByIdentifier(identifier string) (*Query, error) {
 		qc.lock.RLock()
 		defer qc.lock.RUnlock()
 
-		// in in-memory submitted queue?
-		q := qc.submitted[identifier]
-		if q != nil {
-			return q
-		}
-
 		// in in-memory cache?
-		q = qc.cached[identifier]
+		q := qc.query[identifier]
 		if q != nil {
 			return q
 		}
@@ -277,6 +264,9 @@ type Query struct {
 
 	// Query options
 	optionSetsOnly bool
+
+	// Execution state management
+
 }
 
 func (q *Query) populateFromForm(form url.Values) error {
@@ -445,8 +435,8 @@ func (qc *QueryCache) SubmitQueryFromForm(form url.Values) (*Query, bool, error)
 		return nil, false, err
 	}
 
-	// add to submitted queue
-	qc.submitted[q.Identifier] = q
+	// add to cache
+	qc.query[q.Identifier] = q
 
 	return q, true, nil
 }
@@ -752,6 +742,46 @@ func (q *Query) writeResultFile() (*os.File, error) {
 func (q *Query) ReadResultFile() (*os.File, error) {
 	return os.Open(filepath.Join(q.qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", q.Identifier)))
 }
+
+// func (q *Query) lockResultFile() error {
+// 	lockname := filepath.Join(q.qc.config.QueryCacheRoot, fmt.Sprintf("%s.lock", q.Identifier))
+
+// 	_, err := os.Stat(lockname)
+// 	if err == nil {
+// 		return PTOErrorf("query result %s already locked", q.Identifier)
+// 	} else if !os.IsNotExist(err) {
+// 		return PTOWrapError(err)
+// 	}
+
+// 	lockfile, err := os.Create(lockname)
+// 	if err != nil {
+// 		return PTOWrapError(err)
+// 	}
+
+// 	lockfile.Close()
+// 	return nil
+// }
+
+// func (q *Query) unlockResultFile() error {
+// 	lockname := filepath.Join(q.qc.config.QueryCacheRoot, fmt.Sprintf("%s.lock", q.Identifier))
+
+// 	_, err := os.Stat(lockname)
+// 	if os.IsNotExist(err) {
+// 		return PTOErrorf("query result %s not locked", q.Identifier)
+// 	} else if err != nil {
+// 		return PTOWrapError(err)
+// 	}
+
+// 	err = os.Remove(lockname)
+// 	if err != nil {
+// 		return PTOWrapError(err)
+// 	}
+
+// 	lockfile, err := os.Create(lockname)
+
+// 	lockfile.Close()
+// 	return nil
+// }
 
 func (q *Query) PaginateResultObject(offset int, count int) (map[string]interface{}, bool, error) {
 
