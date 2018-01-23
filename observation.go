@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -748,4 +749,20 @@ func (set *ObservationSet) CopyDataToStream(db orm.DB, out io.Writer) error {
 
 	// and wait for the copy goroutine to finish
 	return <-converr
+}
+
+// AllObservationSetIDs lists all observation set IDs in the database.
+func AllObservationSetIDs(db orm.DB) ([]int, error) {
+	var setIds []int
+
+	err := db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&setIds))
+	if err == pg.ErrNoRows {
+		return make([]int, 0), nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	sort.Slice(setIds, func(i, j int) bool { return setIds[i] < setIds[j] })
+
+	return setIds, nil
 }

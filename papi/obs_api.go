@@ -36,28 +36,68 @@ func (oa *ObsAPI) writeMetadataResponse(w http.ResponseWriter, set *pto3.Observa
 
 type setList struct {
 	Sets []string `json:"sets"`
+	Next string   `json:"next"`
+	Prev string   `json:"prev"`
 }
 
 // handleListSets handles GET /obs.
 // It returns a JSON object with links to current observation sets in the sets key.
 func (oa *ObsAPI) handleListSets(w http.ResponseWriter, r *http.Request) {
-	var setIds []int
+
+	// fail if not authorized
+	if !oa.azr.IsAuthorized(w, r, "read_obs") {
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "error parsing form", http.StatusBadRequest)
+	}
 
 	// select set IDs into an array
-	// FIXME this should go into observation.go
-	if err := oa.db.Model(&pto3.ObservationSet{}).ColumnExpr("array_agg(id)").Select(pg.Array(&setIds)); err != nil && err != pg.ErrNoRows {
+	setIds, err := pto3.AllObservationSetIDs(oa.db)
+	if err != nil {
 		pto3.HandleErrorHTTP(w, "listing set IDs", err)
 		return
 	}
 
-	// linkify them
-	sets := setList{make([]string, len(setIds))}
-	for i, id := range setIds {
-		sets.Sets[i] = pto3.LinkForSetID(oa.config, id)
+	// slice the array based on page
+	page64, _ := strconv.ParseInt(r.Form.Get("page"), 10, 64)
+	page := int(page64)
+	offset := page * oa.config.PageLength
+
+	var out setList
+
+	// paginate if we need to
+	if page > 0 || len(setIds) > (page+1)*oa.config.PageLength {
+
+		if len(setIds) > (page+1)*oa.config.PageLength {
+			out.Next, _ = oa.config.LinkTo(fmt.Sprintf("/obs?page=%d", page+1))
+		}
+
+		if page > 0 {
+			out.Prev, _ = oa.config.LinkTo(fmt.Sprintf("/obs?page=%d", page-1))
+		}
+
+		endOffset := offset + oa.config.PageLength
+		if endOffset > len(setIds) {
+			endOffset = len(setIds)
+		}
+
+		log.Printf("paginating listing sets: page %d, offset %d, endoffset %d, fulllength %d",
+			page, offset, endOffset, len(setIds))
+
+		setIds = setIds[offset:endOffset]
+	} else {
+		log.Printf("not paginating listing sets: fulllength %d", len(setIds))
 	}
 
-	// FIXME pagination goes here
-	outb, err := json.Marshal(sets)
+	// linkify set IDs
+	out.Sets = make([]string, len(setIds))
+	for i, id := range setIds {
+		out.Sets[i] = pto3.LinkForSetID(oa.config, id)
+	}
+
+	outb, err := json.Marshal(out)
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "marshaling set list", err)
 		return
