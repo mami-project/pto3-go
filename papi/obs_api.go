@@ -83,12 +83,7 @@ func (oa *ObsAPI) handleListSets(w http.ResponseWriter, r *http.Request) {
 			endOffset = len(setIds)
 		}
 
-		log.Printf("paginating listing sets: page %d, offset %d, endoffset %d, fulllength %d",
-			page, offset, endOffset, len(setIds))
-
 		setIds = setIds[offset:endOffset]
-	} else {
-		log.Printf("not paginating listing sets: fulllength %d", len(setIds))
 	}
 
 	// linkify set IDs
