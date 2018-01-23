@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/mami-project/pto3-go"
 
@@ -86,6 +87,8 @@ func (ra *RawAPI) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 type campaignFileList struct {
 	Metadata *pto3.RawMetadata `json:"metadata"`
 	Files    []string          `json:"files"`
+	Next     string            `json:"next"`
+	Prev     string            `json:"prev"`
 }
 
 // handleGetCampaignMetadata handles GET /raw/<campaign>, returning metadata for
@@ -106,6 +109,11 @@ func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// parse headers
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "error parsing form", http.StatusBadRequest)
+	}
+
 	// look up campaign
 	cam, err := ra.rds.CampaignForName(camname)
 	if err != nil {
@@ -120,12 +128,44 @@ func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	out.Files, err = cam.FileLinks()
+	// Get list of all files to determine whether we need to paginate
+	filenames, err := cam.FileNames()
+
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "listing campaign files", err)
 		return
 	}
 
+	// slice the array based on page
+	page64, _ := strconv.ParseInt(r.Form.Get("page"), 10, 64)
+	page := int(page64)
+	offset := page * ra.config.PageLength
+
+	if page > 0 || len(filenames) > (page+1)*ra.config.PageLength {
+
+		if len(filenames) > (page+1)*ra.config.PageLength {
+			out.Next, _ = ra.config.LinkTo(fmt.Sprintf("/raw/%s?page=%d", camname, page+1))
+		}
+
+		if page > 0 {
+			out.Prev, _ = ra.config.LinkTo(fmt.Sprintf("/raw/%s?page=%d", camname, page-1))
+		}
+
+		endOffset := offset + ra.config.PageLength
+		if endOffset > len(filenames) {
+			endOffset = len(filenames)
+		}
+
+		filenames = filenames[offset:endOffset]
+	}
+
+	// convert filenames to links
+	out.Files = make([]string, len(filenames))
+	for i := range filenames {
+		out.Files[i], _ = ra.config.LinkTo(fmt.Sprintf("/raw/%s/%s", camname, filenames[i]))
+	}
+
+	// and write
 	outb, err := json.Marshal(out)
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "marshaling campaign metadata", err)

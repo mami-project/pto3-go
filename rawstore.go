@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -440,7 +441,7 @@ func (cam *Campaign) PutCampaignMetadata(md *RawMetadata) error {
 	return nil
 }
 
-// FileNames returns a list of filenames currently in the campaign.
+// FileNames returns a sorted  list of filenames currently in the campaign.
 func (cam *Campaign) FileNames() ([]string, error) {
 	// reload if stale
 	err := cam.reloadMetadata(false)
@@ -457,28 +458,30 @@ func (cam *Campaign) FileNames() ([]string, error) {
 		i++
 	}
 
-	return out, nil
-}
-
-// FileLinks returns a list of links to files currently in the campaign.
-func (cam *Campaign) FileLinks() ([]string, error) {
-	// reload if stale
-	err := cam.reloadMetadata(false)
-	if err != nil {
-		return nil, err
-	}
-
-	cam.lock.RLock()
-	defer cam.lock.RUnlock()
-	out := make([]string, len(cam.fileMetadata))
-	i := 0
-	for filename := range cam.fileMetadata {
-		out[i], _ = cam.config.LinkTo("raw/" + filepath.Base(cam.path) + "/" + filename)
-		i++
-	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 
 	return out, nil
 }
+
+// // FileLinks returns a list of links to files currently in the campaign.
+// func (cam *Campaign) FileNames() ([]string, error) {
+// 	// reload if stale
+// 	err := cam.reloadMetadata(false)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	cam.lock.RLock()
+// 	defer cam.lock.RUnlock()
+// 	out := make([]string, len(cam.fileMetadata))
+// 	i := 0
+// 	for filename := range cam.fileMetadata {
+// 		out[i], _ = cam.config.LinkTo("raw/" + filepath.Base(cam.path) + "/" + filename)
+// 		i++
+// 	}
+
+// 	return out, nil
+// }
 
 // GetFileMetadata retrieves metadata for a file in this campaign given a file name.
 func (cam *Campaign) GetFileMetadata(filename string) (*RawMetadata, error) {
