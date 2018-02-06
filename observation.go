@@ -766,3 +766,47 @@ func AllObservationSetIDs(db orm.DB) ([]int, error) {
 
 	return setIds, nil
 }
+
+// AnalyzeObservationStream reads observation set metadata and data from a
+// file (as created by ptocat) and calls a provided analysis function once per
+// observation. It is a convenience function for writing PTO analyzers in Go.
+func AnalyzeObservationStream(in io.Reader, afn func(obs *Observation) error) error {
+	// stream in observation sets
+	scanner := bufio.NewScanner(in)
+
+	var lineno int
+	sets := make(map[int]*ObservationSet)
+	var obs *Observation
+
+	for scanner.Scan() {
+		lineno++
+		line := strings.TrimSpace(scanner.Text())
+		switch line[0] {
+		case '{':
+			// New observation set; cache metadata
+			set := new(ObservationSet)
+			if err := set.UnmarshalJSON(scanner.Bytes()); err != nil {
+				return fmt.Errorf("error parsing set on input line %d: %s", lineno, err.Error())
+			}
+			sets[set.ID] = set
+		case '[':
+			// New observation; call analysis function
+			obs = new(Observation)
+			if err := obs.UnmarshalJSON(scanner.Bytes()); err != nil {
+				return fmt.Errorf("error parsing observation on input line %d: %s", lineno, err.Error())
+			}
+
+			if _, ok := sets[obs.SetID]; !ok {
+				return fmt.Errorf("observation on input line %d refers to unknown set %x", lineno, obs.SetID)
+			}
+
+			obs.Set = sets[obs.SetID]
+
+			if err := afn(obs); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}

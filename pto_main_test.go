@@ -37,7 +37,6 @@ func setupRDS(config *pto3.PTOConfiguration) *pto3.RawDataStore {
 	// prepopulate it with a test campaign to ensure scanning on startup works
 	// FIXME this is UNIX only at the moment
 	cp := exec.Command("cp", "-a", "testdata/test_raw_init/test0", config.RawRoot)
-	log.Printf("will copy using %+v", cp)
 	if err := cp.Run(); err != nil {
 		log.Fatal(err)
 	}
