@@ -10,14 +10,14 @@ observation or an observation set metadata objects.
 JSON arrays in the file are treated as observations. An array has five or six
 elements, with the following semantics and format:
 
-| Position | Description                                               |
-| -------- | --------------------------------------------------------- |
-| 0        | Observation Set Identifier, a string                      |
-| 1        | Start time in RFC 3339 format                             |
-| 2        | End time in RFC 3339 format                               |
-| 3        | Path, as defined below                                    |
-| 4        | Condition, as a JSON string                               |
-| 5        | Value associated with condition, optional                 |
+| Position | Description                                                 |
+| -------- | ----------------------------------------------------------- |
+| 0        | Observation Set Identifier, a string                        |
+| 1        | Start time in RFC 3339 format                               |
+| 2        | End time in RFC 3339 format                                 |
+| 3        | Path, as defined below                                      |
+| 4        | Condition, as a JSON string                                 |
+| 5        | Value associated with condition, as a JSON string; optional |
 
 A *path* is a sequence of path elements. It can be represented either as a JSON
 array of strings, each one a path element; or as a JSON string containing a
@@ -34,9 +34,9 @@ are currently supported:
 | _NNN_`.`_NNN_`.`_NNN_`.`_NNN_ | IPv4 address                          |
 | _NNN_`.`_NNN_`.`_NNN_`.`_NNN_`/`_NN_ | IPv4 prefix                    |
 | `[`_IPv6 address_`]` | IPv6 address (see [RFC 5952](https://tools.ietf.org/html/5952))  |
-| `[`_IPv6 address_`]/`_NN_ | IPv6 prefix                               |
-| `AS`_NNNNNN_       | BGP Autonomous System Number                    |
-| _type_`|`_XXXXX_   | An arbitrary path element pseudonym of a specified type |
+| `[`_IPv6 address_`]/`_NN_ | IPv6 prefix                                        |
+| `AS`_NNNNNN_       | BGP Autonomous System Number                              |
+| _type_`|`_XXXXX_   | An arbitrary path element pseudonym of a specified _type_ |
 
 A *condition* is fundamentally a free-form string; however, the convention
 presently used in the PTO uses a hierarchical structure for condition names. A
