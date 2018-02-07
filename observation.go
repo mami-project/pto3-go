@@ -284,7 +284,7 @@ type Observation struct {
 	Path        *Path
 	ConditionID int
 	Condition   *Condition
-	Value       int
+	Value       string
 }
 
 // MarshalJSON turns this Observation into a JSON array suitable for use as a
@@ -298,8 +298,8 @@ func (obs *Observation) MarshalJSON() ([]byte, error) {
 		obs.Condition.Name,
 	}
 
-	if obs.Value != 0 {
-		jslice = append(jslice, fmt.Sprintf("%d", obs.Value))
+	if obs.Value != "" {
+		jslice = append(jslice, fmt.Sprintf("%s", obs.Value))
 	}
 
 	return json.Marshal(&jslice)
@@ -335,7 +335,7 @@ func (obs *Observation) unmarshalStringSlice(jslice []string, time_format string
 	obs.Condition = &Condition{Name: jslice[4]}
 
 	if len(jslice) >= 6 {
-		obs.Value, err = strconv.Atoi(jslice[5])
+		obs.Value = jslice[5]
 		if err != nil {
 			return err
 		}
