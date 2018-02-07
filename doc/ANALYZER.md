@@ -37,10 +37,12 @@ time it runs the `_invocation` command.
   new `GOPATH` for the `go` tool, `go get` the repository, check out the
   appropriate tag, scan subdirectories for executables (`*.go` files contiaing
   `package main`), and `go install` all such executables, before the first
-  time it runs the `_invocation` command. Subsequent runs will occur in the same `GOPATH`.
+  time it runs the `_invocation` command. Subsequent runs will occur in the
+  same `GOPATH`.
 - `python-3.x`: repository contains a Python module. The analyzer runtime will
   create an appropriate Python `virtualenv`, run `setup.py install`, before
-  the first time it runs the `_invocation` command. Subsequent runs will occur in the same `virtualenv`.
+  the first time it runs the `_invocation` command. Subsequent runs will occur
+  in the same `virtualenv`.
 - `bash`: repository contains a module in some other language. The analyzer
   runtime will source the `setup.sh` script using `bash` in the repository
   root before running the `_invocation` command.

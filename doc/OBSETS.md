@@ -36,6 +36,7 @@ are currently supported:
 | `[`_IPv6 address_`]` | IPv6 address (see [RFC 5952](https://tools.ietf.org/html/5952))  |
 | `[`_IPv6 address_`]/`_NN_ | IPv6 prefix                               |
 | `AS`_NNNNNN_       | BGP Autonomous System Number                    |
+| _type_`|`_XXXXX_   | An arbitrary path element pseudonym of a specified type |
 
 A *condition* is fundamentally a free-form string; however, the convention
 presently used in the PTO uses a hierarchical structure for condition names. A
