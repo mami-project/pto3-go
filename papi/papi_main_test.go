@@ -126,6 +126,9 @@ const GoodAPIKey = "07e57ab18e70"
 func setupAZR() papi.Authorizer {
 	return &papi.APIKeyAuthorizer{
 		APIKeys: map[string]map[string]bool{
+			"default": map[string]bool{
+				"list_raw": true,
+			},
 			GoodAPIKey: map[string]bool{
 				"list_raw":       true,
 				"read_raw:test":  true,

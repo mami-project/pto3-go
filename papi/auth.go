@@ -30,34 +30,42 @@ type APIKeyAuthorizer struct {
 }
 
 func (azr *APIKeyAuthorizer) IsAuthorized(w http.ResponseWriter, r *http.Request, permission string) bool {
-	authstr := strings.Fields(r.Header.Get("Authorization"))
+	var perms map[string]bool
 
-	if len(authstr) < 2 {
-		http.Error(w, "missing or malformed Authorization header", http.StatusBadRequest)
-		return false
-	}
+	authhdr := r.Header.Get("Authorization")
 
-	if authstr[0] == "APIKEY" {
-		perms := azr.APIKeys[authstr[1]]
+	if authhdr == "" {
+		perms = azr.APIKeys["default"]
 		if perms == nil {
-			http.Error(w, "presented API key not authorized", http.StatusForbidden)
+			http.Error(w, "no default authorization configured", http.StatusForbidden)
 			return false
 		}
-
-		if perms[permission] {
-			return true
-		} else {
-			http.Error(w, fmt.Sprintf("presented API key not authorized for %s", permission), http.StatusForbidden)
-			return false
-		}
-
-	} else if authstr[0] == "JWT" {
-		http.Error(w, "JWT not yet implemented", http.StatusNotImplemented)
-		return false
 	} else {
-		http.Error(w, fmt.Sprintf("unsupported authorization type %s", authstr[0]), http.StatusBadRequest)
+
+		authfield := strings.Fields(authhdr)
+
+		if len(authfield) < 2 {
+			http.Error(w, fmt.Sprintf("malformed Authorization header: %v", authhdr), http.StatusBadRequest)
+			return false
+		} else if authfield[0] == "APIKEY" {
+			perms = azr.APIKeys[authfield[1]]
+			if perms == nil {
+				http.Error(w, "presented API key not authorized", http.StatusForbidden)
+				return false
+			}
+		} else {
+			http.Error(w, fmt.Sprintf("unsupported authorization type %s", authfield[0]), http.StatusBadRequest)
+			return false
+		}
+	}
+
+	if perms[permission] {
+		return true
+	} else {
+		http.Error(w, fmt.Sprintf("not authorized for %s", permission), http.StatusForbidden)
 		return false
 	}
+
 }
 
 func LoadAPIKeys(filename string) (*APIKeyAuthorizer, error) {
