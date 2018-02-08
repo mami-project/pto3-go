@@ -68,5 +68,6 @@ func main() {
 		log.Printf("created observation set %x:", set.ID)
 		b, _ := json.MarshalIndent(set, "  ", "  ")
 		os.Stderr.Write(b)
+		log.Println("")
 	}
 }
