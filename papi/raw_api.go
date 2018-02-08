@@ -85,10 +85,10 @@ func (ra *RawAPI) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 }
 
 type campaignFileList struct {
-	Metadata *pto3.RawMetadata `json:"metadata"`
-	Files    []string          `json:"files"`
-	Next     string            `json:"next"`
-	Prev     string            `json:"prev"`
+	Metadata *pto3.RawMetadata
+	Files    []string
+	Next     string
+	Prev     string
 }
 
 func (cfl *campaignFileList) MarshalJSON() ([]byte, error) {
@@ -183,7 +183,7 @@ func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Reque
 	}
 
 	// and write
-	outb, err := json.Marshal(out)
+	outb, err := json.Marshal(&out)
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "marshaling campaign metadata", err)
 		return

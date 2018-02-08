@@ -35,9 +35,9 @@ func (oa *ObsAPI) writeMetadataResponse(w http.ResponseWriter, set *pto3.Observa
 }
 
 type setList struct {
-	Sets []string `json:"sets"`
-	Next string   `json:"next"`
-	Prev string   `json:"prev"`
+	Sets []string
+	Next string
+	Prev string
 }
 
 func (sl *setList) MarshalJSON() ([]byte, error) {
@@ -108,7 +108,7 @@ func (oa *ObsAPI) handleListSets(w http.ResponseWriter, r *http.Request) {
 		out.Sets[i] = pto3.LinkForSetID(oa.config, id)
 	}
 
-	outb, err := json.Marshal(out)
+	outb, err := json.Marshal(&out)
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "marshaling set list", err)
 		return
