@@ -146,11 +146,12 @@ The resources and methods available thereon are summarized in the table below.
 | Method   | Resource        | Permission | Description                                           |
 | -------- | --------------- | ---------- | ----------------------------------------------------- |
 | `GET`    | `/obs`          | `read_obs` | Retrieve URLs for observation sets as JSON            |
-| `POST`    | `/obs/create`  | `write_obs` | Create new observation set                         |
+| `GET`    | `/obs/by_metadata` | `read_obs` | Retrieve URLs for observation sets by metadata     |
+| `POST`    | `/obs/create`  | `write_obs` | Create new observation set                           |
 | `GET`    | `/obs/<o>`      | `read_obs` | Retrieve metadata and provenance for *o* as JSON      |
-| `PUT`    | `/obs/<o>`      | `write_obs` | Update metadata and provenance for *o* as JSON      |
+| `PUT`    | `/obs/<o>`      | `write_obs` | Update metadata and provenance for *o* as JSON       |
 | `GET`    | `/obs/<o>/data` | `read_obs` | Retrieve obset file for *o* as NDJSON (by convention) |
-| `PUT`    | `/obs/<o>/data` | `read_obs` | Upload obset file for *o* as NDJSON (by convention) |
+| `PUT`    | `/obs/<o>/data` | `read_obs` | Upload obset file for *o* as NDJSON (by convention)   |
 
 ## Metadata and Provenance
 
@@ -177,6 +178,15 @@ The following reserved and virtual metadata keys are presently supported:
 | `_conditions`   | Array of conditions declared in the observation set          |
 | `__obs_count`   | Count of observations in the observation set                 |
 | `__data`        | URL of the resource containing observation set data          |
+
+## Querying by Metadata
+
+The `/obs/by_metadata` resource lists links to Observation Sets based on the
+presence or value of metadata keys. The required `k` parameter specifies a
+(non-reserved, non-virtual) metadata key. If given alone, all observation sets
+for which that metadata key exists are returned. If given together with the
+optional `v` parameter, only observation sets for which the metadata key has
+the value in `v` are returned.
 
 ## Analyzer Metadata
 
@@ -418,16 +428,13 @@ using the following GET parameters:
 | Parameter     | Meaning                                                           |
 | ------------- | ----------------------------------------------------------------- |
 | `page`        | Page number, beginning with 0. Defaults to 0                      |
-| `pagination`  | Count of items per page. Default is resource-specific. If 0, disable pagination |
 
 Pagination is applied to the following elements on the following resources:
 
 | Resource            | Element paginated   | Pagination default |
 | ------------------- | ------------------- | ------------------ |
-| `/raw`              | `campaigns`         | tbd                |
 | `/raw/<c>`          | `files`             | tbd                |
 | `/obs`              | `sets`              | tbd                |
-| `/analysis`         | `analyzers`         | tbd                |
-| `/analysis/<a>`     | `analyses`          | tbd                |
+| `/obs/by_metadata`  | `sets`              | tbd                |
 | `/query`            | `queries`           | tbd                |
 | `/query/<q>/result` | `results`           | tbd                |
