@@ -772,7 +772,7 @@ func AllObservationSetIDs(db orm.DB) ([]int, error) {
 func ObservationSetIDsWithMetadata(db orm.DB, k string) ([]int, error) {
 	var setIds []int
 
-	err := db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Where("metadata->'%s' IS NOT NULL", k).Select(pg.Array(&setIds))
+	err := db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Where("metadata->? IS NOT NULL", k).Select(pg.Array(&setIds))
 	if err == pg.ErrNoRows {
 		return make([]int, 0), nil
 	} else if err != nil {
@@ -789,7 +789,10 @@ func ObservationSetIDsWithMetadata(db orm.DB, k string) ([]int, error) {
 func ObservationSetIDsWithMetadataValue(db orm.DB, k string, v string) ([]int, error) {
 	var setIds []int
 
-	err := db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Where("metadata->'%s' = '\"%s\"'", k, v).Select(pg.Array(&setIds))
+	err := db.Model(&ObservationSet{}).
+		ColumnExpr("array_agg(id)").
+		Where("metadata->? = ?", k, fmt.Sprintf("\"%s\"", v)).
+		Select(pg.Array(&setIds))
 	if err == pg.ErrNoRows {
 		return make([]int, 0), nil
 	} else if err != nil {

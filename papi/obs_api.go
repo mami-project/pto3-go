@@ -420,12 +420,12 @@ func (oa *ObsAPI) EnableQueryLogging() {
 
 func (oa *ObsAPI) addRoutes(r *mux.Router, l *log.Logger) {
 	r.HandleFunc("/obs", LogAccess(l, oa.handleListSets)).Methods("GET")
+	r.HandleFunc("/obs/by_metadata", LogAccess(l, oa.handleMetadataQuery)).Methods("GET", "POST")
 	r.HandleFunc("/obs/create", LogAccess(l, oa.handleCreateSet)).Methods("POST")
 	r.HandleFunc("/obs/{set}", LogAccess(l, oa.handleGetMetadata)).Methods("GET")
 	r.HandleFunc("/obs/{set}", LogAccess(l, oa.handlePutMetadata)).Methods("PUT")
 	r.HandleFunc("/obs/{set}/data", LogAccess(l, oa.handleDownload)).Methods("GET")
 	r.HandleFunc("/obs/{set}/data", LogAccess(l, oa.handleUpload)).Methods("PUT")
-	r.HandleFunc("/obs/by_metadata", LogAccess(l, oa.handleMetadataQuery)).Methods("GET", "POST")
 }
 
 func NewObsAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router) *ObsAPI {

@@ -29,6 +29,8 @@ type ClientObservationSet struct {
 
 type ClientSetList struct {
 	Sets []string `json:"sets"`
+	Prev string   `json:"prev"`
+	Next string   `json:"prev"`
 }
 
 // func WriteObservations(obsdat []pto3.Observation, out io.Writer) error {
@@ -243,5 +245,28 @@ func TestObsRoundtrip(t *testing.T) {
 	if err := compareObservationSlices(observations_up, observations_down); err != nil {
 		t.Fatal(err)
 	}
+}
 
+func TestObsQuery(t *testing.T) {
+
+	res := executeRequest(TestRouter, t, "GET", "https://ptotest.mami-project.eu/obs/by_metadata?k=this_is_the_query_test_obset", nil, "", GoodAPIKey, http.StatusOK)
+
+	var setlist ClientSetList
+	if err := json.Unmarshal(res.Body.Bytes(), &setlist); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(setlist.Sets) != 1 || setlist.Sets[0] != fmt.Sprintf("https://ptotest.mami-project.eu/obs/%x", TestQueryCacheSetID) {
+		t.Fatalf("unexpected result for ?k=this_is_the_query_test_obset: %v", setlist.Sets)
+	}
+
+	res = executeRequest(TestRouter, t, "GET", "https://ptotest.mami-project.eu/obs/by_metadata?k=test_obset_type&v=query", nil, "", GoodAPIKey, http.StatusOK)
+
+	if err := json.Unmarshal(res.Body.Bytes(), &setlist); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(setlist.Sets) != 1 || setlist.Sets[0] != fmt.Sprintf("https://ptotest.mami-project.eu/obs/%x", TestQueryCacheSetID) {
+		t.Fatalf("unexpected result for ?k=test_obset_type&v=query: %v", setlist.Sets)
+	}
 }
