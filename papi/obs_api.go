@@ -56,28 +56,9 @@ func (sl *setList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
-// handleListSets handles GET /obs.
-// It returns a JSON object with links to current observation sets in the sets key.
-func (oa *ObsAPI) handleListSets(w http.ResponseWriter, r *http.Request) {
-
-	// fail if not authorized
-	if !oa.azr.IsAuthorized(w, r, "read_obs") {
-		return
-	}
-
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "error parsing form", http.StatusBadRequest)
-	}
-
-	// select set IDs into an array
-	setIds, err := pto3.AllObservationSetIDs(oa.db)
-	if err != nil {
-		pto3.HandleErrorHTTP(w, "listing set IDs", err)
-		return
-	}
-
+func (oa *ObsAPI) writeSetListResponse(w http.ResponseWriter, setIds []int, pageVal string) {
 	// slice the array based on page
-	page64, _ := strconv.ParseInt(r.Form.Get("page"), 10, 64)
+	page64, _ := strconv.ParseInt(pageVal, 10, 64)
 	page := int(page64)
 	offset := page * oa.config.PageLength
 
@@ -117,6 +98,65 @@ func (oa *ObsAPI) handleListSets(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(outb)
+}
+
+// handleListSets handles GET /obs.
+// It returns a JSON object with links to current observation sets in the sets key.
+func (oa *ObsAPI) handleListSets(w http.ResponseWriter, r *http.Request) {
+
+	// fail if not authorized
+	if !oa.azr.IsAuthorized(w, r, "read_obs") {
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, fmt.Sprintf("error parsing form: %s", err.Error()), http.StatusBadRequest)
+	}
+
+	// select set IDs into an array
+	setIds, err := pto3.AllObservationSetIDs(oa.db)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "listing set IDs", err)
+		return
+	}
+
+	oa.writeSetListResponse(w, setIds, r.Form.Get("page"))
+}
+
+// handleMetadataQuery handles GET/POST /obs/by_metadata. It requires two
+// URL/form parameters: 'k', the key to search for, and 'v', the value to
+// search for.
+
+func (oa *ObsAPI) handleMetadataQuery(w http.ResponseWriter, r *http.Request) {
+	// fail if not authorized
+	if !oa.azr.IsAuthorized(w, r, "read_obs") {
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, fmt.Sprintf("error parsing form: %s", err.Error()), http.StatusBadRequest)
+	}
+
+	k := r.Form.Get("k")
+	if k == "" {
+		http.Error(w, "missing parameter k", http.StatusBadRequest)
+	}
+
+	v := r.Form.Get("v")
+
+	var setIds []int
+	var err error
+	if v == "" {
+		setIds, err = pto3.ObservationSetIDsWithMetadata(oa.db, k)
+	} else {
+		setIds, err = pto3.ObservationSetIDsWithMetadataValue(oa.db, k, v)
+	}
+
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "selecting set IDs", err)
+	}
+
+	oa.writeSetListResponse(w, setIds, r.Form.Get("page"))
 }
 
 // handleCreateSet handles POST /obs/create. It requires a JSON object with
@@ -248,10 +288,10 @@ func (oa *ObsAPI) handlePutMetadata(w http.ResponseWriter, r *http.Request) {
 	oa.writeMetadataResponse(w, &set, http.StatusCreated)
 }
 
-// handleDownload handles GET /obs/<set>/data. It requires  Set IDs in the input are ignored. It writes a response
-// containing the all the observations in the set as a newline-delimited
-// JSON stream (of content-type application/vnd.mami.ndjson) in observation set
-// file format.
+// handleDownload handles GET /obs/<set>/data. It requires  Set IDs in the
+// input are ignored. It writes a response containing the all the observations
+// in the set as a newline-delimited JSON stream (of content-type
+// application/vnd.mami.ndjson) in observation set file format.
 
 func (oa *ObsAPI) handleDownload(w http.ResponseWriter, r *http.Request) {
 	// fail if not authorized
@@ -380,6 +420,7 @@ func (oa *ObsAPI) EnableQueryLogging() {
 
 func (oa *ObsAPI) addRoutes(r *mux.Router, l *log.Logger) {
 	r.HandleFunc("/obs", LogAccess(l, oa.handleListSets)).Methods("GET")
+	r.HandleFunc("/obs/by_metadata", LogAccess(l, oa.handleMetadataQuery)).Methods("GET", "POST")
 	r.HandleFunc("/obs/create", LogAccess(l, oa.handleCreateSet)).Methods("POST")
 	r.HandleFunc("/obs/{set}", LogAccess(l, oa.handleGetMetadata)).Methods("GET")
 	r.HandleFunc("/obs/{set}", LogAccess(l, oa.handlePutMetadata)).Methods("PUT")
