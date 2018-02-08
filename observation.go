@@ -238,7 +238,7 @@ func (set *ObservationSet) Update(db orm.DB) error {
 // LinkForSetID generates a link from given PTO configuration and a set ID. Observation set
 // links are given by set ID as a hexadecimal string.
 func LinkForSetID(config *PTOConfiguration, setid int) string {
-	out, _ := config.LinkTo(fmt.Sprintf("obs/%016x", setid))
+	out, _ := config.LinkTo(fmt.Sprintf("obs/%x", setid))
 	return out
 }
 
