@@ -759,7 +759,41 @@ func AllObservationSetIDs(db orm.DB) ([]int, error) {
 	if err == pg.ErrNoRows {
 		return make([]int, 0), nil
 	} else if err != nil {
-		return nil, err
+		return nil, PTOWrapError(err)
+	}
+
+	sort.Slice(setIds, func(i, j int) bool { return setIds[i] < setIds[j] })
+
+	return setIds, nil
+}
+
+// ObservationSetIDsWithMetadata lists all observation set IDs in the database
+// where a given metadata key is present.
+func ObservationSetIDsWithMetadata(db orm.DB, k string) ([]int, error) {
+	var setIds []int
+
+	err := db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Where("metadata->'%s' IS NOT NULL", k).Select(pg.Array(&setIds))
+	if err == pg.ErrNoRows {
+		return make([]int, 0), nil
+	} else if err != nil {
+		return nil, PTOWrapError(err)
+	}
+
+	sort.Slice(setIds, func(i, j int) bool { return setIds[i] < setIds[j] })
+
+	return setIds, nil
+}
+
+// ObservationSetIDsWithMetadataValue lists all observation set IDs in the
+// database where a given metadata key has a given value.
+func ObservationSetIDsWithMetadataValue(db orm.DB, k string, v string) ([]int, error) {
+	var setIds []int
+
+	err := db.Model(&ObservationSet{}).ColumnExpr("array_agg(id)").Where("metadata->'%s' = '\"%s\"'", k, v).Select(pg.Array(&setIds))
+	if err == pg.ErrNoRows {
+		return make([]int, 0), nil
+	} else if err != nil {
+		return nil, PTOWrapError(err)
 	}
 
 	sort.Slice(setIds, func(i, j int) bool { return setIds[i] < setIds[j] })
