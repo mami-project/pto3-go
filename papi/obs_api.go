@@ -40,6 +40,22 @@ type setList struct {
 	Prev string   `json:"prev"`
 }
 
+func (sl *setList) MarshalJSON() ([]byte, error) {
+	out := make(map[string]interface{})
+
+	out["sets"] = sl.Sets
+
+	if sl.Next != "" {
+		out["next"] = sl.Next
+	}
+
+	if sl.Prev != "" {
+		out["prev"] = sl.Prev
+	}
+
+	return json.Marshal(out)
+}
+
 // handleListSets handles GET /obs.
 // It returns a JSON object with links to current observation sets in the sets key.
 func (oa *ObsAPI) handleListSets(w http.ResponseWriter, r *http.Request) {

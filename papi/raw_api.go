@@ -91,6 +91,23 @@ type campaignFileList struct {
 	Prev     string            `json:"prev"`
 }
 
+func (cfl *campaignFileList) MarshalJSON() ([]byte, error) {
+	out := make(map[string]interface{})
+
+	out["metadata"] = cfl.Metadata
+	out["files"] = cfl.Files
+
+	if cfl.Next != "" {
+		out["next"] = cfl.Next
+	}
+
+	if cfl.Prev != "" {
+		out["prev"] = cfl.Prev
+	}
+
+	return json.Marshal(out)
+}
+
 // handleGetCampaignMetadata handles GET /raw/<campaign>, returning metadata for
 // a campaign. It writes a JSON object to the response containing campaign
 // metadata.
