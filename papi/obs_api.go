@@ -132,7 +132,7 @@ func intersectSetIds(a []int, b []int, hasSets bool) []int {
 		}
 		for _, id := range b {
 			if _, ok := amap[id]; ok {
-				out := append(out, id)
+				out = append(out, id)
 			}
 		}
 		return out
@@ -157,12 +157,15 @@ func (oa *ObsAPI) handleMetadataQuery(w http.ResponseWriter, r *http.Request) {
 
 	setIds := make([]int, 0)
 	queryActive := false
-	var err error
 
 	source := r.Form.Get("source")
 	if source != "" {
 		// handle source query
 		sourceSetIds, err := pto3.ObservationSetIDsWithSource(oa.db, source)
+		if err != nil {
+			pto3.HandleErrorHTTP(w, "selecting set IDs by source", err)
+			return
+		}
 		setIds = intersectSetIds(setIds, sourceSetIds, queryActive)
 		queryActive = true
 	}
@@ -172,7 +175,7 @@ func (oa *ObsAPI) handleMetadataQuery(w http.ResponseWriter, r *http.Request) {
 		// handle analyzer query
 		analyzerSetIds, err := pto3.ObservationSetIDsWithAnalyzer(oa.db, analyzer)
 		if err != nil {
-			pto3.HandleErrorHTTP(w, "selecting set IDs", err)
+			pto3.HandleErrorHTTP(w, "selecting set IDs by analyzer", err)
 			return
 		}
 		setIds = intersectSetIds(setIds, analyzerSetIds, queryActive)
@@ -181,10 +184,17 @@ func (oa *ObsAPI) handleMetadataQuery(w http.ResponseWriter, r *http.Request) {
 
 	condition := r.Form.Get("condition")
 	if condition != "" {
-		// handle condition query
-		conditionSetIds, err := pto3.ObservationSetIDsWithCondition(oa.db, condition)
+		// create condition caches
+		cidCache, err := pto3.LoadConditionCache(oa.db)
 		if err != nil {
-			pto3.HandleErrorHTTP(w, "selecting set IDs", err)
+			pto3.HandleErrorHTTP(w, "loading condition cache", err)
+			return
+		}
+
+		// handle condition query
+		conditionSetIds, err := pto3.ObservationSetIDsWithCondition(oa.db, cidCache, condition)
+		if err != nil {
+			pto3.HandleErrorHTTP(w, "selecting set IDs by condition", err)
 			return
 		}
 		setIds = intersectSetIds(setIds, conditionSetIds, queryActive)
@@ -198,7 +208,7 @@ func (oa *ObsAPI) handleMetadataQuery(w http.ResponseWriter, r *http.Request) {
 			// handle metadata key equality query
 			equalitySetIds, err := pto3.ObservationSetIDsWithMetadataValue(oa.db, k, v)
 			if err != nil {
-				pto3.HandleErrorHTTP(w, "selecting set IDs", err)
+				pto3.HandleErrorHTTP(w, "selecting set IDs by key equality", err)
 				return
 			}
 			setIds = intersectSetIds(setIds, equalitySetIds, queryActive)
@@ -207,7 +217,7 @@ func (oa *ObsAPI) handleMetadataQuery(w http.ResponseWriter, r *http.Request) {
 			// handle metadata key presence query
 			presenceSetIds, err := pto3.ObservationSetIDsWithMetadata(oa.db, k)
 			if err != nil {
-				pto3.HandleErrorHTTP(w, "selecting set IDs", err)
+				pto3.HandleErrorHTTP(w, "selecting set IDs by key existance", err)
 				return
 			}
 			setIds = intersectSetIds(setIds, presenceSetIds, queryActive)
