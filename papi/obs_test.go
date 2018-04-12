@@ -1,9 +1,5 @@
 package papi_test
 
-// FIXME this test makes some assumptions that may not hold anymore
-// post-bulk-copy. come back and rewrite this test after the pto3 core tests
-// are done.
-
 import (
 	"bufio"
 	"bytes"
@@ -269,4 +265,25 @@ func TestObsQuery(t *testing.T) {
 	if len(setlist.Sets) != 1 || setlist.Sets[0] != fmt.Sprintf("https://ptotest.mami-project.eu/obs/%x", TestQueryCacheSetID) {
 		t.Fatalf("unexpected result for ?k=test_obset_type&v=query: %v", setlist.Sets)
 	}
+
+	res = executeRequest(TestRouter, t, "GET", "https://ptotest.mami-project.eu/obs/by_metadata?analyzer=https%3A//localhost%3A8383/query_test_analyzer.json", nil, "", GoodAPIKey, http.StatusOK)
+
+	if err := json.Unmarshal(res.Body.Bytes(), &setlist); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(setlist.Sets) != 1 || setlist.Sets[0] != fmt.Sprintf("https://ptotest.mami-project.eu/obs/%x", TestQueryCacheSetID) {
+		t.Fatalf("unexpected result for analyzer query: %v", setlist.Sets)
+	}
+
+	res = executeRequest(TestRouter, t, "GET", "https://ptotest.mami-project.eu/obs/by_metadata?k=this_is_the_query_test_obset&condition=pto.test.color.orange", nil, "", GoodAPIKey, http.StatusOK)
+
+	if err := json.Unmarshal(res.Body.Bytes(), &setlist); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(setlist.Sets) != 1 || setlist.Sets[0] != fmt.Sprintf("https://ptotest.mami-project.eu/obs/%x", TestQueryCacheSetID) {
+		t.Fatalf("unexpected result for ?k=this_is_the_query_test_obset&condition=pto.test.color.orange: %v", setlist.Sets)
+	}
+
 }
