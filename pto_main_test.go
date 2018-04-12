@@ -15,7 +15,7 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-const SuppressDropTables = true
+const SuppressDropTables = false
 const SuppressDeleteRawStore = false
 const SuppressDeleteQueryCache = false
 
