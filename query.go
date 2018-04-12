@@ -263,10 +263,8 @@ type Query struct {
 	groups           []GroupSpec
 
 	// Query options
-	optionSetsOnly bool
-
-	// Execution state management
-
+	optionSetsOnly             bool
+	optionCountDistinctTargets bool
 }
 
 func (q *Query) populateFromForm(form url.Values) error {
@@ -368,8 +366,11 @@ func (q *Query) populateFromForm(form url.Values) error {
 	optionStrs, ok := form["option"]
 	if ok {
 		for _, optionStr := range optionStrs {
-			if optionStr == "sets_only" {
+			switch optionStr {
+			case "sets_only":
 				q.optionSetsOnly = true
+			case "count_targets":
+				q.optionCountDistinctTargets = true
 			}
 		}
 	}
@@ -556,6 +557,9 @@ func (q *Query) URLEncoded() string {
 	// add options
 	if q.optionSetsOnly {
 		out += "&option=sets_only"
+	}
+	if q.optionCountDistinctTargets {
+		out += "&option=count_targets"
 	}
 
 	return out
@@ -919,12 +923,27 @@ func (q *Query) selectAndStoreOneGroup() error {
 		Count     int
 	}
 
-	pq := q.qc.db.Model(&results).ColumnExpr(q.groups[0].ColumnSpec() + " as group0, count(*)")
+	var countClause string
+	if q.optionCountDistinctTargets {
+		countClause = "count(distinct path.target)"
+	} else {
+		countClause = "count(*)"
+	}
+
+	pq := q.qc.db.Model(&results).ColumnExpr(q.groups[0].ColumnSpec() + " as group0, " + countClause)
 
 	// add join clause if necessary
+	joinedPaths := false
+	if q.optionCountDistinctTargets {
+		pq = joinGroupExtTable(pq, "paths")
+		joinedPaths = true
+	}
+
 	sgs, ok := q.groups[0].(*SimpleGroupSpec)
 	if ok && sgs.ExtTable != "" {
-		pq = joinGroupExtTable(pq, sgs.ExtTable)
+		if sgs.ExtTable != "paths" || !joinedPaths {
+			pq = joinGroupExtTable(pq, sgs.ExtTable)
+		}
 	}
 
 	// now group
@@ -966,12 +985,24 @@ func (q *Query) selectAndStoreTwoGroups() error {
 		Count     int
 	}
 
+	var countClause string
+	if q.optionCountDistinctTargets {
+		countClause = "count(distinct path.target)"
+	} else {
+		countClause = "count(*)"
+	}
+
 	pq := q.qc.db.Model(&results).ColumnExpr(
 		q.groups[0].ColumnSpec() + " as group0, " +
-			q.groups[1].ColumnSpec() + "as group1, count(*)")
+			q.groups[1].ColumnSpec() + "as group1, " + countClause)
 
 	// now join as necessary
 	extTableSet := make(map[string]struct{})
+
+	if q.optionCountDistinctTargets {
+		extTableSet["paths"] = struct{}{}
+	}
+
 	for i := 0; i < 2; i++ {
 		sgs, ok := q.groups[i].(*SimpleGroupSpec)
 		if ok && sgs.ExtTable != "" {
