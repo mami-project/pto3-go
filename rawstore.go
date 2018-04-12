@@ -185,7 +185,7 @@ func (md *RawMetadata) UnmarshalJSON(b []byte) error {
 	var jmap map[string]interface{}
 
 	if err := json.Unmarshal(b, &jmap); err != nil {
-		return err
+		return PTOWrapError(err)
 	}
 
 	var err error
@@ -197,13 +197,13 @@ func (md *RawMetadata) UnmarshalJSON(b []byte) error {
 		} else if k == "_time_start" {
 			var t time.Time
 			if t, err = AsTime(v); err != nil {
-				return err
+				return PTOWrapError(err)
 			}
 			md.timeStart = &t
 		} else if k == "_time_end" {
 			var t time.Time
 			if t, err = AsTime(v); err != nil {
-				return err
+				return PTOWrapError(err)
 			}
 			md.timeEnd = &t
 		} else if strings.HasPrefix(k, "__") {
@@ -260,11 +260,11 @@ func RawMetadataFromReader(r io.Reader, parent *RawMetadata) (*RawMetadata, erro
 
 	b, err := ioutil.ReadAll(r)
 	if err != nil {
-		return nil, err
+		return nil, PTOWrapError(err)
 	}
 
 	if err = json.Unmarshal(b, &md); err != nil {
-		return nil, err
+		return nil, PTOWrapError(err)
 	}
 
 	// link to campaign metadata for inheritance
@@ -277,7 +277,7 @@ func RawMetadataFromReader(r io.Reader, parent *RawMetadata) (*RawMetadata, erro
 func RawMetadataFromFile(pathname string, parent *RawMetadata) (*RawMetadata, error) {
 	f, err := os.Open(pathname)
 	if err != nil {
-		return nil, err
+		return nil, PTOWrapError(err)
 	}
 	defer f.Close()
 	return RawMetadataFromReader(f, parent)
@@ -344,7 +344,7 @@ func newCampaign(config *PTOConfiguration, name string, md *RawMetadata) (*Campa
 
 		// create directory
 		if err := os.Mkdir(cam.path, 0755); err != nil {
-			return nil, err
+			return nil, PTOWrapError(err)
 		}
 
 		// write metadata to campaign metadata file
@@ -462,26 +462,6 @@ func (cam *Campaign) FileNames() ([]string, error) {
 
 	return out, nil
 }
-
-// // FileLinks returns a list of links to files currently in the campaign.
-// func (cam *Campaign) FileNames() ([]string, error) {
-// 	// reload if stale
-// 	err := cam.reloadMetadata(false)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	cam.lock.RLock()
-// 	defer cam.lock.RUnlock()
-// 	out := make([]string, len(cam.fileMetadata))
-// 	i := 0
-// 	for filename := range cam.fileMetadata {
-// 		out[i], _ = cam.config.LinkTo("raw/" + filepath.Base(cam.path) + "/" + filename)
-// 		i++
-// 	}
-
-// 	return out, nil
-// }
 
 // GetFileMetadata retrieves metadata for a file in this campaign given a file name.
 func (cam *Campaign) GetFileMetadata(filename string) (*RawMetadata, error) {
@@ -644,7 +624,7 @@ func (cam *Campaign) WriteFileDataFromStream(filename string, force bool, in io.
 
 	// update virtual metadata, as the underlying file size will have changed
 	if err := out.Sync(); err != nil {
-		return err
+		return PTOWrapError(err)
 	}
 	cam.lock.Lock()
 	defer cam.lock.Unlock()
@@ -678,7 +658,7 @@ func (rds *RawDataStore) ScanCampaigns() error {
 	direntries, err := ioutil.ReadDir(rds.path)
 
 	if err != nil {
-		return err
+		return PTOWrapError(err)
 	}
 
 	for _, direntry := range direntries {
@@ -692,7 +672,7 @@ func (rds *RawDataStore) ScanCampaigns() error {
 					log.Printf("Missing campaign metadata file %s", mdpath)
 					continue // no metadata file means we don't care about this directory
 				} else {
-					return err // something else broke. die.
+					return PTOWrapError(err) // something else broke. die.
 				}
 			}
 
@@ -768,12 +748,12 @@ func StreamCopy(in io.Reader, out io.Writer) error {
 		n, err := in.Read(buf)
 		if err == nil {
 			if _, err = out.Write(buf[0:n]); err != nil {
-				return err
+				return PTOWrapError(err)
 			}
 		} else if err == io.EOF {
 			return nil
 		} else {
-			return err
+			return PTOWrapError(err)
 		}
 	}
 }

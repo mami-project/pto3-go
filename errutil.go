@@ -15,8 +15,12 @@ type PTOError struct {
 	at []byte
 }
 
-// PTOWrapError creates a new PTO error wrapping a lower level error,
+// PTOWrapError creates a new PTO error wrapping a lower level error.
 func PTOWrapError(err error) *PTOError {
+	if err == nil {
+		return nil
+	}
+
 	e := new(PTOError)
 	e.s = http.StatusInternalServerError
 	e.e = err.Error()
