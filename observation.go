@@ -862,7 +862,7 @@ func ObservationSetIDsWithCondition(db orm.DB, cc ConditionCache, condition stri
 
 	err = db.Model(&ObservationSetCondition{}).
 		ColumnExpr("array_agg(observation_set_id)").
-		Where("condition_id IN ?", pg.Array(conditionIds)).
+		Where("condition_id = ANY(?)", pg.Array(conditionIds)).
 		Select(pg.Array(&setIds))
 	if err == pg.ErrNoRows {
 		return make([]int, 0), nil

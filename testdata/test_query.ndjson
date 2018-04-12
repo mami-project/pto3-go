@@ -1,4 +1,4 @@
-{"_analyzer":"https://raw.githubusercontent.com/mami-project/pto3-go/master/obsgen/ptoanalyzer.json","_sources":[],"_conditions":["pto.test.color.red","pto.test.color.yellow","pto.test.color.none_more_black","pto.test.color.orange","pto.test.color.green","pto.test.color.blue","pto.test.color.indigo","pto.test.color.violet"],"test_obset_type":"query","this_is_the_query_test_obset":"eyup"}
+{"_analyzer":"https://localhost:8383/query_test_analyzer.json","_sources":["https://localhost:8383/raw/test1/test1-0-obs.ndjson"],"_conditions":["pto.test.color.red","pto.test.color.yellow","pto.test.color.none_more_black","pto.test.color.orange","pto.test.color.green","pto.test.color.blue","pto.test.color.indigo","pto.test.color.violet"],"test_obset_type":"query","this_is_the_query_test_obset":"eyup"}
 ["", "2017-12-05T14:31:26Z", "2017-12-05T14:31:26Z", "10.33.44.55 * 10.15.16.199", "pto.test.color.yellow"]
 ["", "2017-12-05T14:31:27Z", "2017-12-05T14:31:27Z", "10.33.44.55 * 10.11.12.72", "pto.test.color.green"]
 ["", "2017-12-05T14:31:27Z", "2017-12-05T14:31:28Z", "10.33.44.55 * 10.19.20.88", "pto.test.color.green"]
