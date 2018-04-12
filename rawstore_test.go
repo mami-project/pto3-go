@@ -35,11 +35,11 @@ func TestRawExisting(t *testing.T) {
 	}
 
 	if filemd.Owner(true) != "brian@trammell.ch" {
-		t.Fatalf("bad owner on existing file, found %d", filemd.Owner(true))
+		t.Fatalf("bad owner on existing file, found %s", filemd.Owner(true))
 	}
 
 	if filemd.Get("override_me_1", true) != "file" {
-		t.Fatalf("bad overriden metadata on existing file, found %d", filemd.Get("override_me_1", true))
+		t.Fatalf("bad overriden metadata on existing file, found %s", filemd.Get("override_me_1", true))
 	}
 }
 

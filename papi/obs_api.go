@@ -123,6 +123,24 @@ func (oa *ObsAPI) handleListSets(w http.ResponseWriter, r *http.Request) {
 	oa.writeSetListResponse(w, setIds, r.Form.Get("page"))
 }
 
+func intersectSetIds(a []int, b []int, hasSets bool) []int {
+	if hasSets {
+		out := make([]int, 0)
+		amap := make(map[int]struct{})
+		for _, id := range a {
+			amap[id] = struct{}{}
+		}
+		for _, id := range b {
+			if _, ok := amap[id]; ok {
+				out := append(out, id)
+			}
+		}
+		return out
+	} else {
+		return b
+	}
+}
+
 // handleMetadataQuery handles GET/POST /obs/by_metadata. It requires two
 // URL/form parameters: 'k', the key to search for, and 'v', the value to
 // search for.
@@ -137,23 +155,64 @@ func (oa *ObsAPI) handleMetadataQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("error parsing form: %s", err.Error()), http.StatusBadRequest)
 	}
 
-	k := r.Form.Get("k")
-	if k == "" {
-		http.Error(w, "missing parameter k", http.StatusBadRequest)
-	}
-
-	v := r.Form.Get("v")
-
-	var setIds []int
+	setIds := make([]int, 0)
+	queryActive := false
 	var err error
-	if v == "" {
-		setIds, err = pto3.ObservationSetIDsWithMetadata(oa.db, k)
-	} else {
-		setIds, err = pto3.ObservationSetIDsWithMetadataValue(oa.db, k, v)
+
+	source := r.Form.Get("source")
+	if source != "" {
+		// handle source query
+		sourceSetIds, err := pto3.ObservationSetIDsWithSource(oa.db, source)
+		setIds = intersectSetIds(setIds, sourceSetIds, queryActive)
+		queryActive = true
 	}
 
-	if err != nil {
-		pto3.HandleErrorHTTP(w, "selecting set IDs", err)
+	analyzer := r.Form.Get("analyzer")
+	if analyzer != "" {
+		// handle analyzer query
+		analyzerSetIds, err := pto3.ObservationSetIDsWithAnalyzer(oa.db, analyzer)
+		if err != nil {
+			pto3.HandleErrorHTTP(w, "selecting set IDs", err)
+			return
+		}
+		setIds = intersectSetIds(setIds, analyzerSetIds, queryActive)
+		queryActive = true
+	}
+
+	condition := r.Form.Get("condition")
+	if condition != "" {
+		// handle condition query
+		conditionSetIds, err := pto3.ObservationSetIDsWithCondition(oa.db, condition)
+		if err != nil {
+			pto3.HandleErrorHTTP(w, "selecting set IDs", err)
+			return
+		}
+		setIds = intersectSetIds(setIds, conditionSetIds, queryActive)
+		queryActive = true
+	}
+
+	k := r.Form.Get("k")
+	if k != "" {
+		v := r.Form.Get("v")
+		if v != "" {
+			// handle metadata key equality query
+			equalitySetIds, err := pto3.ObservationSetIDsWithMetadataValue(oa.db, k, v)
+			if err != nil {
+				pto3.HandleErrorHTTP(w, "selecting set IDs", err)
+				return
+			}
+			setIds = intersectSetIds(setIds, equalitySetIds, queryActive)
+			queryActive = true
+		} else {
+			// handle metadata key presence query
+			presenceSetIds, err := pto3.ObservationSetIDsWithMetadata(oa.db, k)
+			if err != nil {
+				pto3.HandleErrorHTTP(w, "selecting set IDs", err)
+				return
+			}
+			setIds = intersectSetIds(setIds, presenceSetIds, queryActive)
+			queryActive = true
+		}
 	}
 
 	oa.writeSetListResponse(w, setIds, r.Form.Get("page"))
