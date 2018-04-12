@@ -804,6 +804,77 @@ func ObservationSetIDsWithMetadataValue(db orm.DB, k string, v string) ([]int, e
 	return setIds, nil
 }
 
+// ObservationSetIDsWithSource lists all observation set IDs in the database
+// where the given source is present in the sources list. The source must be
+// given as a fully qualified analyzer URL.
+func ObservationSetIDsWithSource(db orm.DB, source string) ([]int, error) {
+	var setIds []int
+
+	err := db.Model(&ObservationSet{}).
+		ColumnExpr("array_agg(id)").
+		Where("? = ANY(sources)", source). // FIXME not sure this works
+		Select(pg.Array(&setIds))
+	if err == pg.ErrNoRows {
+		return make([]int, 0), nil
+	} else if err != nil {
+		return nil, PTOWrapError(err)
+	}
+
+	sort.Slice(setIds, func(i, j int) bool { return setIds[i] < setIds[j] })
+
+	return setIds, nil
+}
+
+// ObservationSetIDsWithAnalyzer lists all observation set IDs in the
+// database with a given analyzer. The analyzer must be given as a fully qualified analyzer URL.
+func ObservationSetIDsWithAnalyzer(db orm.DB, analyzer string) ([]int, error) {
+	var setIds []int
+
+	err := db.Model(&ObservationSet{}).
+		ColumnExpr("array_agg(id)").
+		Where("analyzer = ?", analyzer).
+		Select(pg.Array(&setIds))
+	if err == pg.ErrNoRows {
+		return make([]int, 0), nil
+	} else if err != nil {
+		return nil, PTOWrapError(err)
+	}
+
+	sort.Slice(setIds, func(i, j int) bool { return setIds[i] < setIds[j] })
+
+	return setIds, nil
+}
+
+// ObservationSetIDsWithCondition lists all observation set IDs in the
+// database with a given condition. The condition must be a fully qualified condition.
+func ObservationSetIDsWithCondition(db orm.DB, cc ConditionCache, condition string) ([]int, error) {
+	var setIds []int
+
+	conditions, err := cc.ConditionsByName(db, condition)
+	if err != nil {
+		return nil, err
+	}
+
+	conditionIds := make([]int, len(conditions))
+	for i, condition := range conditions {
+		conditionIds[i] = condition.ID
+	}
+
+	err = db.Model(&ObservationSetCondition{}).
+		ColumnExpr("array_agg(observation_set_id)").
+		Where("condition_id = ANY(?)", pg.Array(conditionIds)).
+		Select(pg.Array(&setIds))
+	if err == pg.ErrNoRows {
+		return make([]int, 0), nil
+	} else if err != nil {
+		return nil, PTOWrapError(err)
+	}
+
+	sort.Slice(setIds, func(i, j int) bool { return setIds[i] < setIds[j] })
+
+	return setIds, nil
+}
+
 // AnalyzeObservationStream reads observation set metadata and data from a
 // file (as created by ptocat) and calls a provided analysis function once per
 // observation. It is a convenience function for writing PTO analyzers in Go.
