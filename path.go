@@ -58,19 +58,19 @@ func (cache PathCache) CacheNewPaths(db orm.DB, pathSet map[string]struct{}) err
 	}
 
 	if _, err := db.QueryOne(&nv, "SELECT nextval('paths_id_seq')"); err != nil {
-		return err
+		return PTOWrapError(err)
 	}
 	pidseq := nv.Nextval
 
 	if _, err := db.Exec("SELECT setval('paths_id_seq', ?)", pidseq+len(pathSet)); err != nil {
-		return err
+		return PTOWrapError(err)
 	}
 
 	// now add entries to the path cache while streaming into the database
 	streamerr := make(chan error, 1)
 	dbpipe, pathpipe, err := os.Pipe()
 	if err != nil {
-		return err
+		return PTOWrapError(err)
 	}
 	defer dbpipe.Close()
 
@@ -83,7 +83,7 @@ func (cache PathCache) CacheNewPaths(db orm.DB, pathSet map[string]struct{}) err
 			cache[pathstring] = pidseq
 
 			if err := out.Write(p); err != nil {
-				streamerr <- err
+				streamerr <- PTOWrapError(err)
 			}
 
 			pidseq++
@@ -95,7 +95,7 @@ func (cache PathCache) CacheNewPaths(db orm.DB, pathSet map[string]struct{}) err
 
 	// copy from the goroutine to the database
 	if _, err = db.CopyFrom(dbpipe, "COPY paths (id, string, source, target) FROM STDIN WITH CSV"); err != nil {
-		return err
+		return PTOWrapError(err)
 	}
 
 	// wait for goroutine to complete and return its error
@@ -116,7 +116,7 @@ func (p *Path) InsertOnce(db orm.DB) error {
 			Returning("id").
 			SelectOrInsert()
 		if err != nil {
-			return err
+			return PTOWrapError(err)
 		}
 	}
 	return nil

@@ -743,46 +743,6 @@ func (q *Query) ReadResultFile() (*os.File, error) {
 	return os.Open(filepath.Join(q.qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", q.Identifier)))
 }
 
-// func (q *Query) lockResultFile() error {
-// 	lockname := filepath.Join(q.qc.config.QueryCacheRoot, fmt.Sprintf("%s.lock", q.Identifier))
-
-// 	_, err := os.Stat(lockname)
-// 	if err == nil {
-// 		return PTOErrorf("query result %s already locked", q.Identifier)
-// 	} else if !os.IsNotExist(err) {
-// 		return PTOWrapError(err)
-// 	}
-
-// 	lockfile, err := os.Create(lockname)
-// 	if err != nil {
-// 		return PTOWrapError(err)
-// 	}
-
-// 	lockfile.Close()
-// 	return nil
-// }
-
-// func (q *Query) unlockResultFile() error {
-// 	lockname := filepath.Join(q.qc.config.QueryCacheRoot, fmt.Sprintf("%s.lock", q.Identifier))
-
-// 	_, err := os.Stat(lockname)
-// 	if os.IsNotExist(err) {
-// 		return PTOErrorf("query result %s not locked", q.Identifier)
-// 	} else if err != nil {
-// 		return PTOWrapError(err)
-// 	}
-
-// 	err = os.Remove(lockname)
-// 	if err != nil {
-// 		return PTOWrapError(err)
-// 	}
-
-// 	lockfile, err := os.Create(lockname)
-
-// 	lockfile.Close()
-// 	return nil
-// }
-
 func (q *Query) PaginateResultObject(offset int, count int) (map[string]interface{}, bool, error) {
 
 	// create output object

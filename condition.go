@@ -21,7 +21,7 @@ func (c *Condition) InsertOnce(db orm.DB) error {
 			Returning("id").
 			SelectOrInsert()
 		if err != nil {
-			return err
+			return PTOWrapError(err)
 		}
 	}
 	return nil
@@ -75,7 +75,7 @@ func (cache ConditionCache) Reload(db orm.DB) error {
 	var conditions []Condition
 
 	if err := db.Model(&conditions).Select(); err != nil {
-		return err
+		return PTOWrapError(err)
 	}
 
 	for _, c := range conditions {
