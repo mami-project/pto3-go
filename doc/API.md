@@ -188,6 +188,8 @@ for which that metadata key exists are returned. If given together with the
 optional `v` parameter, only observation sets for which the metadata key has
 the value in `v` are returned.
 
+*[EDITOR'S NOTE: add analyzer, source, and condition queries]*
+
 ## Analyzer Metadata
 
 Observations refer to how they were created via the `_analyzer` metadata key.
@@ -301,6 +303,7 @@ The `option` parameter is used to modify the behavior of queries. Multiple Optio
 | Option Value | Behavior                                                      |
 | ------------ | ------------------------------------------------------------- |
 | `sets_only`  | Return links to observation sets containing observations answering the query, instead of observation data directly |
+| `count_targets` | Group queries should count distinct targets, not distinct observations |
 
 ## Metadata
 

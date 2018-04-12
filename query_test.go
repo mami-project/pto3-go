@@ -153,6 +153,7 @@ func TestOneGroupQueries(t *testing.T) {
 		{"time_start=2017-12-05&time_end=2017-12-06&group=source", "2001:db8:e55:5::33", 3273},
 		{"time_start=2017-12-05&time_end=2017-12-06&group=target", "10.15.16.17", 7},
 		{"time_start=2017-12-05&time_end=2017-12-06&group=day_hour", "14", 3412},
+		{"time_start=2017-12-05&time_end=2017-12-06&group=condition&option=count_targets", "pto.test.color.red", 1832},
 	}
 
 	for i, qspec := range testQueries {
@@ -216,6 +217,7 @@ func TestTwoGroupQueries(t *testing.T) {
 		count   int
 	}{
 		{"time_start=2017-12-05&time_end=2017-12-06&group=condition&group=day_hour", "pto.test.color.red", "14", 758},
+		{"time_start=2017-12-05&time_end=2017-12-06&group=condition&group=day_hour&option=count_targets", "pto.test.color.red", "14", 653},
 	}
 
 	for i, qspec := range testQueries {
