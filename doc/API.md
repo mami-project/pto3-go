@@ -101,24 +101,85 @@ are listed below:
 
 ## Raw data API usage
 
-We use [curl](https://curl.haxx.se) to illustrate the usage of the PTO raw API.
-We assume the API is rooted at `https://pto.example.com/`, and that the API
-key `12345` holds the permissions `list_raw`, `read_raw:test`, and
-`write_raw:test`.
+We use [curl](https://curl.haxx.se) to illustrate the usage of the PTO raw
+API. We assume the API is rooted at `https://pto.example.com/`, and that the
+API key `abadc0de` holds the permissions `list_raw`, `read_raw:test`, and
+`write_raw:test`. (In these examples, the output of curl is prettyprinted via
+`python3 -m json.tool`, not shown)
 
-## Creating and listing campaigns
+### Creating and listing campaigns
+
+To list the campaigns for which raw data is stored, simply fetch the `/raw` resource.
+
+```
+$ curl -H "Authorization: APIKEY abadc0de" https://pto.example.com/raw
+{
+    "campaigns": []
+}
+```
+
+This PTO instance is empty: no campaigns are stored here. To create the `test`
+campaign, which we are preauthorized to do, simply upload the campaign's
+metadata at the campaign's path:
+
+```
+$ cat test_campaign.json
+{
+    "_owner": "you@example.com",
+    "_file_type": "test"
+}	
+
+$ curl -H "Authorization: APIKEY abadc0de" \
+       -H "Content-Type: application/json" \
+       -X PUT https://pto.example.com/raw/test \
+       --data-binary @test_campaign.json
+{
+    "_file_type":"test",
+    "_owner":"you@example.com"
+}
+```
+The reply echoes back the metadata uploaded. A campaign's metadata can be changed by simply uploading new metadata.
+
+We can verify that our campaign has been created by listing campaigns again:
+
+```
+$ curl -H "Authorization: APIKEY abadc0de" https://pto.example.com/raw
+{
+    "campaigns": [
+        "http://pto.example.com/raw/test"
+    ]
+}
+```
+
+
+### Uploading Raw Data
+
+Once a campaign has been created, uploading raw data to it is a two-step process: creating a new file by uploading its metadata, then uploading the data associated with the file.
+
+For the purposes of this example, we'll upload a single test data file containing some JSON formatted data. First the metadata:
+
+```
+$ cat test_metadata.json
+{
+    "_time_start": "2018-04-25T10:15:35Z",
+    "_time_end":   "2018-04-25T10:20:48Z",
+    "purpose":     "demonstrate file upload"
+}
+
+$ curl -H "Authorization: APIKEY abadc0de" \
+       -H "Content-Type: application/json" \
+       -X PUT https://pto.example.com/raw/test/test001.json \
+       --data-binary @test_metadata.json
+```
+
+**WORK POINTER** this is broken for some reason: the test campaign is not getting properly loaded, has nil metadata (i.e., is stale). merge master back into this branch, test, file an issue, debug, then continue.
+
+
+### Downloading Raw Data
 
 write me
 
-## Uploading Raw Data
-
-write me
-
-## Downloading Raw Data
-
-write me
-
-## Deleting Files
+### Deleting Files
 
 write me
 
