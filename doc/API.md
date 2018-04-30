@@ -154,9 +154,12 @@ $ curl -H "Authorization: APIKEY abadc0de" https://pto.example.com/raw
 
 ### Uploading Raw Data
 
-Once a campaign has been created, uploading raw data to it is a two-step process: creating a new file by uploading its metadata, then uploading the data associated with the file.
+Once a campaign has been created, uploading raw data to it is a two-step
+process: creating a new file by uploading its metadata, then uploading the
+data associated with the file.
 
-For the purposes of this example, we'll upload a single test data file containing some JSON formatted data. First the metadata:
+For the purposes of this example, we'll upload a single test data file
+containing some JSON formatted data. First the metadata:
 
 ```
 $ cat test_metadata.json
@@ -170,9 +173,17 @@ $ curl -H "Authorization: APIKEY abadc0de" \
        -H "Content-Type: application/json" \
        -X PUT https://pto.example.com/raw/test/test001.json \
        --data-binary @test_metadata.json
+{
+    "__data": "http://localhost:8383/raw/test/test001.json/data",
+    "_file_type": "test",
+    "_owner": "you@example.com",
+    "_time_end": "2018-04-25T10:20:48Z",
+    "_time_start": "2018-04-25T10:15:35Z",
+    "purpose": "demonstrate file upload"
+}
 ```
 
-**WORK POINTER** this is broken for some reason: the test campaign is not getting properly loaded, has nil metadata (i.e., is stale). merge master back into this branch, test, file an issue, debug, then continue.
+
 
 
 ### Downloading Raw Data

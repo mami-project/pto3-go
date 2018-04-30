@@ -510,6 +510,12 @@ func (cam *Campaign) updateFileVirtualMetadata(filename string) error {
 
 // PutFileMetadata overwrites the metadata in this campaign with the given metadata.
 func (cam *Campaign) PutFileMetadata(filename string, md *RawMetadata) error {
+	// reload if stale
+	err := cam.reloadMetadata(false)
+	if err != nil {
+		return err
+	}
+
 	cam.lock.Lock()
 	defer cam.lock.Unlock()
 
