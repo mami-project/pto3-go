@@ -466,9 +466,8 @@ func (ra *RawAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqreader := r.Body
-
-	if err := cam.WriteFileDataFromStream(filename, false, reqreader); err != nil {
+	// copy the stream to the file
+	if err := cam.WriteFileDataFromStream(filename, false, r.Body); err != nil {
 		pto3.HandleErrorHTTP(w, "writing uploaded data", err)
 		return
 	}
