@@ -183,7 +183,9 @@ $ curl -H "Authorization: APIKEY abadc0de" \
 }
 ```
 
-
+Here the uploaded metadata, including keys inherited from the campaign, is
+echoed back from the server, along with a link to which data can be uploaded
+(in the `__data` key).
 
 
 ### Downloading Raw Data

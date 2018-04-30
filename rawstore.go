@@ -528,7 +528,7 @@ func (cam *Campaign) PutFileMetadata(filename string, md *RawMetadata) error {
 	}
 
 	// write to file metadata file
-	err := md.writeToFile(filepath.Join(cam.path, filename+FileMetadataSuffix))
+	err = md.writeToFile(filepath.Join(cam.path, filename+FileMetadataSuffix))
 	if err != nil {
 		return err
 	}
