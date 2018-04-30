@@ -392,6 +392,10 @@ func (cam *Campaign) reloadMetadata(force bool) error {
 			if err != nil {
 				return err
 			}
+			// update virtual metadata after load FIXME do better than this?
+			if err := cam.updateFileVirtualMetadata(linkname); err != nil {
+				return err
+			}
 		}
 	}
 
