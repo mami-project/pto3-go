@@ -632,10 +632,12 @@ func (cam *Campaign) WriteFileDataFromStream(filename string, force bool, in io.
 		return err
 	}
 
-	// update virtual metadata, as the underlying file size will have changed
+	// flush file to disk
 	if err := out.Sync(); err != nil {
 		return PTOWrapError(err)
 	}
+
+	// update virtual metadata, as the underlying file size will have changed
 	cam.lock.Lock()
 	defer cam.lock.Unlock()
 	return cam.updateFileVirtualMetadata(filename)
@@ -758,12 +760,13 @@ func StreamCopy(in io.Reader, out io.Writer) error {
 	for {
 		n, err := in.Read(buf)
 		if err == nil {
-			if _, err = out.Write(buf[0:n]); err != nil {
+			if _, err := out.Write(buf[0:n]); err != nil {
 				return PTOWrapError(err)
 			}
 			sz += n
+			log.Printf("StreamCopy(): copied %d, %d total", n, sz)
 		} else if err == io.EOF {
-			log.Printf("StreamCopy() copied %d bytes.", sz)
+			log.Printf("StreamCopy() at EOF after %d bytes", sz)
 			return nil
 		} else {
 			return PTOWrapError(err)
