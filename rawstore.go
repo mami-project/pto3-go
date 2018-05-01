@@ -588,7 +588,7 @@ func (cam *Campaign) ReadFileDataToStream(filename string, out io.Writer) error 
 	defer in.Close()
 
 	// now copy to the writer until EOF
-	if err := StreamCopy(in, out); err != nil {
+	if _, err := io.Copy(out, in); err != nil {
 		return err
 	}
 
@@ -628,7 +628,7 @@ func (cam *Campaign) WriteFileDataFromStream(filename string, force bool, in io.
 	defer out.Close()
 
 	// now copy from the reader until EOF
-	if err := StreamCopy(in, out); err != nil {
+	if _, err := io.Copy(out, in); err != nil {
 		return err
 	}
 
@@ -754,22 +754,22 @@ func NewRawDataStore(config *PTOConfiguration) (*RawDataStore, error) {
 }
 
 // StreamCopy copies bytes from in to out until EOF.
-func StreamCopy(in io.Reader, out io.Writer) error {
-	buf := make([]byte, 65536)
-	sz := 0
-	for {
-		n, err := in.Read(buf)
-		if err == nil {
-			if _, err := out.Write(buf[0:n]); err != nil {
-				return PTOWrapError(err)
-			}
-			sz += n
-			log.Printf("StreamCopy(): copied %d, %d total", n, sz)
-		} else if err == io.EOF {
-			log.Printf("StreamCopy() at EOF after %d bytes", sz)
-			return nil
-		} else {
-			return PTOWrapError(err)
-		}
-	}
-}
+// func StreamCopy(in io.Reader, out io.Writer) error {
+// 	buf := make([]byte, 65536)
+// 	sz := 0
+// 	for {
+// 		n, err := in.Read(buf)
+// 		if err == nil {
+// 			if _, err := out.Write(buf[0:n]); err != nil {
+// 				return PTOWrapError(err)
+// 			}
+// 			sz += n
+// 			log.Printf("StreamCopy(): copied %d, %d total", n, sz)
+// 		} else if err == io.EOF {
+// 			log.Printf("StreamCopy() at EOF after %d bytes", sz)
+// 			return nil
+// 		} else {
+// 			return PTOWrapError(err)
+// 		}
+// 	}
+// }

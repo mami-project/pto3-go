@@ -87,7 +87,9 @@ func TestNormalization(t *testing.T) {
 	}
 	defer mdf.Close()
 
-	pto3.StreamCopy(mdf, tf)
+	if _, err := io.Copy(tf, mdf); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := tf.Sync(); err != nil {
 		t.Fatal(err)

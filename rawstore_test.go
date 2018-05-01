@@ -2,6 +2,7 @@ package pto3_test
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -160,7 +161,7 @@ func TestRawRoundtrip(t *testing.T) {
 		}
 
 		// now upload the file
-		if err := pto3.StreamCopy(testfile, datafile); err != nil {
+		if _, err := io.Copy(datafile, testfile); err != nil {
 			t.Fatal(err)
 		}
 	}()
