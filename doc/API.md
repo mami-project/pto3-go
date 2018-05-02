@@ -104,7 +104,7 @@ are listed below:
 *FIXME: replace URL with an example URL*
 
 We use [curl](https://curl.haxx.se) to illustrate the usage of the PTO raw
-API. We assume the API is rooted at `http://localhost:8383/`, and that the
+API. We assume the API is rooted at `https://pto.example.com/`, and that the
 API key `abadc0de` holds the permissions `list_raw`, `read_raw:test`, and
 `write_raw:test`. (In these examples, the output of curl is prettyprinted via
 `python3 -m json.tool`, not shown)
@@ -114,7 +114,7 @@ API key `abadc0de` holds the permissions `list_raw`, `read_raw:test`, and
 To list the campaigns for which raw data is stored, simply fetch the `/raw` resource.
 
 ```bash
-$ curl -H "Authorization: APIKEY abadc0de" http://localhost:8383/raw
+$ curl -H "Authorization: APIKEY abadc0de" https://pto.example.com/raw
 {
     "campaigns": []
 }
@@ -133,7 +133,7 @@ $ cat test_campaign.json
 
 $ curl -H "Authorization: APIKEY abadc0de" \
        -H "Content-Type: application/json" \
-       -X PUT http://localhost:8383/raw/test \
+       -X PUT https://pto.example.com/raw/test \
        --data-binary @test_campaign.json
 {
     "_file_type":"test",
@@ -145,7 +145,7 @@ The reply echoes back the metadata uploaded. A campaign's metadata can be change
 We can verify that our campaign has been created by listing campaigns again:
 
 ```bash
-$ curl -H "Authorization: APIKEY abadc0de" http://localhost:8383/raw
+$ curl -H "Authorization: APIKEY abadc0de" https://pto.example.com/raw
 {
     "campaigns": [
         "http://pto.example.com/raw/test"
@@ -172,10 +172,10 @@ $ cat test_metadata.json
 
 $ curl -H "Authorization: APIKEY abadc0de" \
        -H "Content-Type: application/json" \
-       -X PUT http://localhost:8383/raw/test/test001.json \
+       -X PUT https://pto.example.com/raw/test/test001.json \
        --data-binary @test_metadata.json
 {
-    "__data": "http://localhost:8383/raw/test/test001.json/data",
+    "__data": "https://pto.example.com/raw/test/test001.json/data",
     "_file_type": "test",
     "_owner": "you@example.com",
     "_time_end": "2018-04-25T10:20:48Z",
@@ -193,10 +193,10 @@ Now that the metadata is created, we can upload the data file to the given URL:
 ```bash
 $ curl -H "Authorization: APIKEY abadc0de" \
        -H "Content-Type: application/json" \
-       -X PUT http://localhost:8383/raw/test/test001.json/data \
+       -X PUT https://pto.example.com/raw/test/test001.json/data \
        --data-binary @test_data.json
 {D
-    "__data": "http://localhost:8383/raw/test/test001.json/data",
+    "__data": "https://pto.example.com/raw/test/test001.json/data",
     "__data_size": 37,
     "_file_type": "test",
     "_owner": "you@example.com",
@@ -215,18 +215,19 @@ While the current PTO implementation by convention always generates data URLs fr
 
 ```bash
 $ DATAURL=`curl -s -H "Authorization: APIKEY abadc0de" \
-                http://localhost:8383/raw/test/test001.json | \
+                https://pto.example.com/raw/test/test001.json | \
            python3 -c 'import sys, json; print(json.load(sys.stdin)["__data"])'`
 $ curl -H "Authorization: APIKEY abadc0de" $DATAURL > downloaded_file.json
 ```
 
+### Changing Metadata and Data
 
+Once a file has been uploaded, its data can no longer be changed. Metadata can
+be changed by uploading a new metadata object.
 
-
-
-### Deleting Files
-
-write me
+Files can currently not be deleted via the API, though a file can be fully
+deleted by removing the file and metadata file from the filesystem backing the
+raw data store.
 
 # Observation Access
  
@@ -347,7 +348,7 @@ See [the analyzer interface description](ANALYZER.md) for more.
 
 As above, we use [curl](https://curl.haxx.se) to illustrate the usage of the
 PTO observation API. We assume the API is rooted at
-`http://localhost:8383/`, and that the API key `12345` holds the permissions
+`https://pto.example.com/`, and that the API key `12345` holds the permissions
 `read_obs` and `write_obs`.
 
 ## Submitting and uploading an observation set
