@@ -2,6 +2,10 @@
     "RawRoot": "./testdata/rawroot",
     "BindTo": ":8383",
     "BaseURL": "http://localhost:8383/",
+    "ContentTypes": {
+        "test": "application/json"
+    },
+    "APIKeyFile": "./testdata/testkeys.json",
     "ObsDatabase": {
         "Addr": ":5432",
         "Database": "ptotest",

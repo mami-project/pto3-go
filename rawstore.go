@@ -392,6 +392,10 @@ func (cam *Campaign) reloadMetadata(force bool) error {
 			if err != nil {
 				return err
 			}
+			// update virtual metadata after load FIXME do better than this?
+			if err := cam.updateFileVirtualMetadata(linkname); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -510,6 +514,12 @@ func (cam *Campaign) updateFileVirtualMetadata(filename string) error {
 
 // PutFileMetadata overwrites the metadata in this campaign with the given metadata.
 func (cam *Campaign) PutFileMetadata(filename string, md *RawMetadata) error {
+	// reload if stale
+	err := cam.reloadMetadata(false)
+	if err != nil {
+		return err
+	}
+
 	cam.lock.Lock()
 	defer cam.lock.Unlock()
 
@@ -522,7 +532,7 @@ func (cam *Campaign) PutFileMetadata(filename string, md *RawMetadata) error {
 	}
 
 	// write to file metadata file
-	err := md.writeToFile(filepath.Join(cam.path, filename+FileMetadataSuffix))
+	err = md.writeToFile(filepath.Join(cam.path, filename+FileMetadataSuffix))
 	if err != nil {
 		return err
 	}
@@ -578,7 +588,7 @@ func (cam *Campaign) ReadFileDataToStream(filename string, out io.Writer) error 
 	defer in.Close()
 
 	// now copy to the writer until EOF
-	if err := StreamCopy(in, out); err != nil {
+	if _, err := io.Copy(out, in); err != nil {
 		return err
 	}
 
@@ -618,14 +628,16 @@ func (cam *Campaign) WriteFileDataFromStream(filename string, force bool, in io.
 	defer out.Close()
 
 	// now copy from the reader until EOF
-	if err := StreamCopy(in, out); err != nil {
+	if _, err := io.Copy(out, in); err != nil {
 		return err
 	}
 
-	// update virtual metadata, as the underlying file size will have changed
+	// flush file to disk
 	if err := out.Sync(); err != nil {
 		return PTOWrapError(err)
 	}
+
+	// update virtual metadata, as the underlying file size will have changed
 	cam.lock.Lock()
 	defer cam.lock.Unlock()
 	return cam.updateFileVirtualMetadata(filename)
@@ -739,21 +751,4 @@ func NewRawDataStore(config *PTOConfiguration) (*RawDataStore, error) {
 	}
 
 	return &rds, nil
-}
-
-// StreamCopy copies bytes from in to out until EOF.
-func StreamCopy(in io.Reader, out io.Writer) error {
-	buf := make([]byte, 65536)
-	for {
-		n, err := in.Read(buf)
-		if err == nil {
-			if _, err = out.Write(buf[0:n]); err != nil {
-				return PTOWrapError(err)
-			}
-		} else if err == io.EOF {
-			return nil
-		} else {
-			return PTOWrapError(err)
-		}
-	}
 }

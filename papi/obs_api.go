@@ -3,6 +3,7 @@ package papi
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -448,7 +449,7 @@ func (oa *ObsAPI) handleUpload(w http.ResponseWriter, r *http.Request) {
 	defer os.Remove(tf.Name())
 
 	// copy observation data to the tempfile
-	if err := pto3.StreamCopy(r.Body, tf); err != nil {
+	if _, err := io.Copy(tf, r.Body); err != nil {
 		pto3.HandleErrorHTTP(w, "uploading to temporary observation file", err)
 		return
 	}
