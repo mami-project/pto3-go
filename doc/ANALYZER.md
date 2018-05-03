@@ -1,8 +1,3 @@
-
-# Using the Local Analyzer Command-Line Tools
-
-write me
-
 # Writing Local Analyzers
 
 Local analyzers are identified by the presence of an `_invocation` key in the
@@ -30,7 +25,7 @@ as multiple obset files concatenated together.
 ## Platforms
 
 A local analyzer may optionally specify a platform, which determines how a
-local analyzer runtime will set up the analyzer environment before the first
+local analyzer runtime should set up the analyzer environment before the first
 time it runs the `_invocation` command.
 
 - `golang-1.x`: repository is a Go repo. The analyzer runtime will create a
@@ -47,3 +42,23 @@ time it runs the `_invocation` command.
   runtime will source the `setup.sh` script using `bash` in the repository
   root before running the `_invocation` command.
 
+A local analyzer runtime is not yet available for the PTO; use the
+command-line tools described below to invoke local analyzers manually.
+
+# Using the Local Analyzer Command-Line Tools
+
+## Running Normalizers
+
+*[EDITOR'S NOTE: write me]*
+
+## Running Analyzers
+
+*[EDITOR'S NOTE: write me]*
+
+
+# Writing Client Normalizers and Analyzers
+
+Client analyzers are simply clients of the PTO. A normalizer interacts with
+raw data through `/raw` resources and creates new observation sets by posting
+to `/obs/create`. An analyzer retrieves observation sets from `/obs/` and
+likewise creates new observation sets by posting to `/obs/create`

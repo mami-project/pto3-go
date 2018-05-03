@@ -211,7 +211,11 @@ key, which gives the size of the data file in bytes.
 
 ### Downloading Raw Data
 
-While the current PTO implementation by convention always generates data URLs from metadata URLs by appending `/data` to the path, this is not guaranteed to always be the case, so it's important to check the `__data` key in the metadata for the file before downloading. Here we assign this to a shell variable, then download from that url:
+While the current PTO implementation by convention always generates data URLs
+from metadata URLs by appending `/data` to the path, this is not guaranteed to
+always be the case, so it's important to check the `__data` key in the
+metadata for the file before downloading. Here we assign this to a shell
+variable, then download from that url:
 
 ```bash
 $ DATAURL=`curl -s -H "Authorization: APIKEY abadc0de" \
@@ -241,6 +245,8 @@ The observation access API (resources under `/obs`) allows access to PTO
 - a _condition_ observed on this path; and 
 - an optional _value_ associated with the condition.
 
+More about the PTO's information model is given [here](INFOMODEL.md)
+
 Observations are grouped into *observation sets*. An observation set is a set of
 observations resulting from a single run of an analyser on some input data (see
 Data Analysis, below). All observations in an observation set share the same
@@ -254,7 +260,7 @@ The resources and methods available thereon are summarized in the table below.
 | -------- | --------------- | ---------- | ----------------------------------------------------- |
 | `GET`    | `/obs`          | `read_obs` | Retrieve URLs for observation sets as JSON            |
 | `GET`    | `/obs/by_metadata` | `read_obs` | Retrieve URLs for observation sets by metadata     |
-| `POST`    | `/obs/create`  | `write_obs` | Create new observation set                           |
+| `POST`   | `/obs/create`  | `write_obs` | Create new observation set                           |
 | `GET`    | `/obs/<o>`      | `read_obs` | Retrieve metadata and provenance for *o* as JSON      |
 | `PUT`    | `/obs/<o>`      | `write_obs` | Update metadata and provenance for *o* as JSON       |
 | `GET`    | `/obs/<o>/data` | `read_obs` | Retrieve obset file for *o* as NDJSON (by convention) |
@@ -286,16 +292,22 @@ The following reserved and virtual metadata keys are presently supported:
 | `__obs_count`   | Count of observations in the observation set                 |
 | `__data`        | URL of the resource containing observation set data          |
 
-## Querying by Metadata
+## Querying Observation Sets by Metadata
 
 The `/obs/by_metadata` resource lists links to Observation Sets based on the
-presence or value of metadata keys. The required `k` parameter specifies a
-(non-reserved, non-virtual) metadata key. If given alone, all observation sets
-for which that metadata key exists are returned. If given together with the
-optional `v` parameter, only observation sets for which the metadata key has
-the value in `v` are returned.
+presence or value of metadata keys, or on the values of particular metadata. 
+The following query parameters are supported:
 
-*[EDITOR'S NOTE: add analyzer, source, and condition queries]*
+| Key             | Description                                                  |
+| --------------- | ------------------------------------------------------------ |
+| `k`             | Obsets containing metadata key (with `v`, of a specific value) |
+| `v`             | Value to query (use with `k`)                                |
+| `source`        | Obsets derived from a given source (full-text match)         |
+| `analyzer`      | Obsets derived from an analyzer with a given metadata URL (full-text match) |
+| `condition`     | Obsets declaring a given condition                           |
+
+When multiple parameters are given, the intersection of observation sets
+fulfilling all parameters is returned.
 
 ## Analyzer Metadata
 
@@ -334,7 +346,8 @@ analyzer metadata must contain an `_invocation` key, which is a command to run
 in the repository root to invoke the analyzer. More on the interface for local
 analyzers is given [here](ANALYZER.md).
 
-A local analyzer runtime is not yet available in the PTO.
+A local analyzer runtime is not yet available in the PTO; local analyzers can
+be run manually with the command-line tools described [here](ANALYZER.md).
 
 A _client_ analyzer is designed to use the PTO API to retrieve raw data and
 observation sets and upload its results. As it cannot be automatically
@@ -353,15 +366,15 @@ PTO observation API. We assume the API is rooted at
 
 ## Submitting and uploading an observation set
 
-write me
+*[EDITOR'S NOTE: write me]*
 
 ## Listing observation sets
 
-write me
+*[EDITOR'S NOTE: write me]*
 
 ## Downloading an observation set
 
-write me
+*[EDITOR'S NOTE: write me]*
 
 # Observation Query
 
@@ -527,6 +540,8 @@ The result of an aggregation query is a JSON object, the fields of which are as 
 
 
 # Pagination
+
+*[EDITOR'S NOTE: review me]*
 
 API resources which return lists of URLs or results in arrays in JSON objects
 support *pagination*. By default, if more than 20 items will be returned in the
