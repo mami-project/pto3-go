@@ -20,8 +20,14 @@ type PTOConfiguration struct {
 	// ...this right here is effing annoying but i'm not writing a custom unmarshaler just for that...
 	baseURL *url.URL
 
-	// API key filename
+	// API key file path
 	APIKeyFile string
+
+	// Certificate file path
+	CertificateFile string
+
+	// Private key file path
+	PrivateKeyFile string
 
 	// base path for raw data store; empty for no RDS.
 	RawRoot string
@@ -49,7 +55,7 @@ type PTOConfiguration struct {
 	accessLogger  *log.Logger
 }
 
-// LinkFromBaseURL
+// LinkTo creates a link to a relative URL from the configuration's base URL
 func (config *PTOConfiguration) LinkTo(relative string) (string, error) {
 	u, err := url.Parse(relative)
 	if err != nil {

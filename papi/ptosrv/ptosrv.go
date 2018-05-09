@@ -62,7 +62,22 @@ func main() {
 		}
 	}
 
-	log.Printf("...listening on %s", config.BindTo)
+	bindto := config.BindTo
 
-	log.Fatal(http.ListenAndServe(config.BindTo, r))
+	// if certificate and key are present, listen and serve over TLS.
+	// otherwise, go insecure.
+
+	if config.CertificateFile != "" && config.PrivateKeyFile != "" {
+		if bindto == "" {
+			bindto = ":443"
+		}
+		log.Printf("...listening on %s", bindto)
+		log.Fatal(http.ListenAndServeTLS(bindto, config.CertificateFile, config.PrivateKeyFile, r))
+	} else {
+		if bindto == "" {
+			bindto = ":80"
+		}
+		log.Printf("...listening INSECURELY on %s", bindto)
+		log.Fatal(http.ListenAndServe(bindto, r))
+	}
 }
