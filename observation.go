@@ -74,7 +74,7 @@ func (set *ObservationSet) MarshalJSON() ([]byte, error) {
 	}
 
 	if set.Modified != nil {
-		jmap["__modified"] = set.Created.Format(time.RFC3339)
+		jmap["__modified"] = set.Modified.Format(time.RFC3339)
 	}
 
 	conditionNames := make([]string, len(set.Conditions))
