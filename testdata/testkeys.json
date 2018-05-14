@@ -2,6 +2,12 @@
     "abadc0de": {
         "list_raw": true,
         "write_raw:test": true,
-        "read_raw:test": true
+        "read_raw:test": true,
+        "read_obs": true,
+        "write_obs": true,
+        "submit_query": true,
+        "list_query": true,
+        "read_query": true,
+        "update_query": true
     }
 }

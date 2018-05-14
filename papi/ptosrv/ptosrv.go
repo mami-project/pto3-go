@@ -62,6 +62,14 @@ func main() {
 		}
 	}
 
+	qapi, err := papi.NewQueryAPI(config, azr, r)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if qapi != nil {
+		log.Printf("...will serve /query from cache at %s", config.QueryCacheRoot)
+	}
+
 	bindto := config.BindTo
 
 	// if certificate and key are present, listen and serve over TLS.
