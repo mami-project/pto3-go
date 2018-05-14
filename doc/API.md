@@ -264,7 +264,7 @@ The resources and methods available thereon are summarized in the table below.
 | `GET`    | `/obs/<o>`      | `read_obs` | Retrieve metadata and provenance for *o* as JSON      |
 | `PUT`    | `/obs/<o>`      | `write_obs` | Update metadata and provenance for *o* as JSON       |
 | `GET`    | `/obs/<o>/data` | `read_obs` | Retrieve obset file for *o* as NDJSON (by convention) |
-| `PUT`    | `/obs/<o>/data` | `read_obs` | Upload obset file for *o* as NDJSON (by convention)   |
+| `PUT`    | `/obs/<o>/data` | `write_obs` | Upload obset file for *o* as NDJSON (by convention)   |
 
 ## Metadata and Provenance
 

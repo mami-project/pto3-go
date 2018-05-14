@@ -1,8 +1,10 @@
 {
     "RawRoot": "./testdata/rawroot",
+    "QueryCacheRoot": "./testdata/querycache",
     "BindTo": ":8383",
     "BaseURL": "http://localhost:8383/",
     "ContentTypes": {
+        "obs": "application/vnd.mami.ndjson",
         "test": "application/json"
     },
     "APIKeyFile": "./testdata/testkeys.json",
