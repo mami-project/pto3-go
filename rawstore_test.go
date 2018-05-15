@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
 	pto3 "github.com/mami-project/pto3-go"
 	"golang.org/x/crypto/sha3"
@@ -57,9 +58,10 @@ func TestRawRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// retrieve campaign metadata and verify stored value
+	// grab a timestamp (to verify creation/modification time)
+	nowish := time.Now()
 
-	// create a file with some other metadata
+	// create file metadata
 	filemd_up, err := pto3.RawMetadataFromFile("testdata/test_raw_metadata.json", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +71,7 @@ func TestRawRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// retrieve file metadata and verify stored value
+	// retrieve campaign metadata and verify stored value
 	cammd_down, err := cam.GetCampaignMetadata()
 	if err != nil {
 		t.Fatal(err)
@@ -89,6 +91,48 @@ func TestRawRoundtrip(t *testing.T) {
 	}
 	if filemd_down.Get("override_me_1", true) != "file" {
 		t.Fatalf("metadata retrieval error; raw metadata is %v", filemd_down.Metadata)
+	}
+
+	// store some data
+	var testbytes []byte
+	testhash := make([]byte, 64)
+
+	func() {
+		datafile, err := cam.WriteFileData("test-1-0-obs.ndjson", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer datafile.Close()
+
+		testfile, err := os.Open("testdata/test_raw_data.ndjson")
+		defer testfile.Close()
+
+		// store the test file hash for later
+		testbytes, err = ioutil.ReadAll(testfile)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		sha3.ShakeSum256(testhash, testbytes)
+
+		if _, err := testfile.Seek(0, 0); err != nil {
+			t.Fatal(err)
+		}
+
+		// now upload the file
+		if _, err := io.Copy(datafile, testfile); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	// verify creation time is reasonable
+	creatime := filemd_down.CreationTime()
+	if creatime == nil {
+		t.Fatalf("nil creation time")
+	}
+	creationDelay := creatime.Sub(nowish)
+	if creationDelay < -1*time.Minute || creationDelay > 1*time.Minute {
+		t.Fatalf("nonsensical creation delay %v", creationDelay)
 	}
 
 	// verify metadata inheritance works across overwrite in file
@@ -133,43 +177,20 @@ func TestRawRoundtrip(t *testing.T) {
 		t.Fatalf("metadata retrieval error; raw metadata is %v", filemd_down.Metadata)
 	}
 
-	// now let's test data storage
-	var testbytes []byte
-	testhash := make([]byte, 64)
+	// verify modification time is reasonable
+	modtime := filemd_down.ModificationTime()
+	if modtime == nil {
+		t.Fatalf("nil modification time")
+	}
+	modificationDelay := modtime.Sub(*creatime)
+	if modificationDelay < -1*time.Minute || modificationDelay > 1*time.Minute {
+		t.Fatalf("nonsensical modification delay %v", creationDelay)
+	}
 
-	// stream a file into the store
-	func() {
-		datafile, err := cam.WriteFileData("test-1-0-obs.ndjson", false)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer datafile.Close()
-
-		testfile, err := os.Open("testdata/test_raw_data.ndjson")
-		defer testfile.Close()
-
-		// store the test file hash for later
-		testbytes, err = ioutil.ReadAll(testfile)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		sha3.ShakeSum256(testhash, testbytes)
-
-		if _, err := testfile.Seek(0, 0); err != nil {
-			t.Fatal(err)
-		}
-
-		// now upload the file
-		if _, err := io.Copy(datafile, testfile); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
+	// download the file and hash it to verify the contents match
 	var databytes []byte
 	datahash := make([]byte, 64)
 
-	// download the file and hash it to verify the contents match
 	func() {
 		datafile, err := cam.ReadFileData("test-1-0-obs.ndjson")
 		if err != nil {

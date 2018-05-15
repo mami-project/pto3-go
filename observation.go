@@ -32,6 +32,10 @@ type ObservationSet struct {
 	Conditions []Condition `pg:",many2many:observation_set_conditions"`
 	// Arbitrary metadata
 	Metadata map[string]string
+	// Metadata creation timestamp
+	Created *time.Time
+	// Metadata modification timestamp
+	Modified *time.Time
 	datalink string
 	link     string
 	count    int
@@ -63,6 +67,14 @@ func (set *ObservationSet) MarshalJSON() ([]byte, error) {
 
 	if set.count != 0 {
 		jmap["__obs_count"] = set.count
+	}
+
+	if set.Created != nil {
+		jmap["__created"] = set.Created.Format(time.RFC3339)
+	}
+
+	if set.Modified != nil {
+		jmap["__modified"] = set.Modified.Format(time.RFC3339)
 	}
 
 	conditionNames := make([]string, len(set.Conditions))
@@ -156,6 +168,11 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 	}
 
 	if set.ID == 0 {
+		// set creation and modification timestamps
+		ctime := time.Now().UTC()
+		set.Created = &ctime
+		set.Modified = &ctime
+
 		// ensure conditions have IDs
 		if err := set.ensureConditionsInDB(db); err != nil {
 			return err
@@ -210,6 +227,10 @@ func (set *ObservationSet) SelectByID(db orm.DB) error {
 // Update updates this ObservationSet in the database by overwriting the DB's
 // values with its own, by ID.
 func (set *ObservationSet) Update(db orm.DB) error {
+	// set modified timestamp
+	mtime := time.Now().UTC()
+	set.Modified = &mtime
+
 	// ensure new conditions are in the database
 	if err := set.ensureConditionsInDB(db); err != nil {
 		return err

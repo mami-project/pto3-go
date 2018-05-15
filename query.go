@@ -92,6 +92,10 @@ func (qc *QueryCache) readMetadataFile(identifier string) (*os.File, error) {
 	return os.Open(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.json", identifier)))
 }
 
+func (qc *QueryCache) statMetadataFile(identifier string) (os.FileInfo, error) {
+	return os.Stat(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.json", identifier)))
+}
+
 func (qc *QueryCache) fetchQuery(identifier string) (*Query, error) {
 	// we're modifying the cache
 	qc.lock.Lock()
@@ -600,6 +604,16 @@ func (q *Query) SourceLinks() []string {
 	return out
 }
 
+func (q *Query) modificationTime() *time.Time {
+	fi, err := q.qc.statMetadataFile(q.Identifier)
+	if err != nil {
+		return q.Submitted
+	} else {
+		mt := fi.ModTime()
+		return &mt
+	}
+}
+
 func (q *Query) MarshalJSON() ([]byte, error) {
 	jobj := make(map[string]string)
 
@@ -626,16 +640,18 @@ func (q *Query) MarshalJSON() ([]byte, error) {
 			jobj["__state"] = "complete"
 			jobj["__result"] = jobj["__link"] + "/result"
 		}
-		jobj["__time_completed"] = q.Completed.Format(time.RFC3339)
-		jobj["__time_executed"] = q.Executed.Format(time.RFC3339)
-		jobj["__time_submitted"] = q.Submitted.Format(time.RFC3339)
+		jobj["__completed"] = q.Completed.Format(time.RFC3339)
+		jobj["__executed"] = q.Executed.Format(time.RFC3339)
+		jobj["__created"] = q.Submitted.Format(time.RFC3339)
+		jobj["__modified"] = q.modificationTime().Format(time.RFC3339)
 	} else {
 		jobj["__state"] = "pending"
 		if q.Executed != nil {
-			jobj["__time_executed"] = q.Executed.Format(time.RFC3339)
+			jobj["__executed"] = q.Executed.Format(time.RFC3339)
 		}
 		if q.Submitted != nil {
-			jobj["__time_submitted"] = q.Submitted.Format(time.RFC3339)
+			jobj["__created"] = q.Submitted.Format(time.RFC3339)
+			jobj["__modified"] = q.modificationTime().Format(time.RFC3339)
 		}
 	}
 

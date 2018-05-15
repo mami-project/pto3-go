@@ -49,6 +49,10 @@ type RawMetadata struct {
 	datalink string
 	// Size of data object
 	datasize int
+	// File creation time
+	creatime *time.Time
+	// Metadata modification time
+	modtime *time.Time
 }
 
 func (md *RawMetadata) Keys(inherit bool) []string {
@@ -126,6 +130,14 @@ func (md *RawMetadata) Get(k string, inherit bool) string {
 	return out
 }
 
+func (md *RawMetadata) CreationTime() *time.Time {
+	return md.creatime
+}
+
+func (md *RawMetadata) ModificationTime() *time.Time {
+	return md.modtime
+}
+
 // DumpJSONObject serializes a RawMetadata object to JSON. If inherit is true,
 // this inherits data and metadata items from the parent; if false, it only
 // dumps information in this object itself.
@@ -160,6 +172,14 @@ func (md *RawMetadata) DumpJSONObject(inherit bool) ([]byte, error) {
 
 	if md.datasize != 0 {
 		jmap["__data_size"] = md.datasize
+	}
+
+	if md.creatime != nil {
+		jmap["__created"] = md.creatime.Format(time.RFC3339)
+	}
+
+	if md.modtime != nil {
+		jmap["__modified"] = md.modtime.Format(time.RFC3339)
 	}
 
 	// dump arbitrary keys
@@ -484,8 +504,8 @@ func (cam *Campaign) GetFileMetadata(filename string) (*RawMetadata, error) {
 	return filemd, nil
 }
 
-// updateFileVirtualMetadata fills in the __data and __data_size virtual metadata
-// for a file. Not concurrency safe: caller must hold the campaign lock.
+// updateFileVirtualMetadata fills in the system virtual metadata for a file.
+// Not concurrency safe: caller must hold the campaign lock.
 func (cam *Campaign) updateFileVirtualMetadata(filename string) error {
 	// get file metadata
 	md, ok := cam.fileMetadata[filename]
@@ -493,12 +513,34 @@ func (cam *Campaign) updateFileVirtualMetadata(filename string) error {
 		return PTONotFoundError("file", filename)
 	}
 
-	// get file size
+	// get file size and creation time
+	// file creation time is modification time of the datafile,
+	// since datafiles are immutable.
 	datafi, err := os.Stat(filepath.Join(cam.path, filename))
 	if err == nil {
 		md.datasize = int(datafi.Size())
+		modtime := datafi.ModTime()
+		md.creatime = &modtime
 	} else if os.IsNotExist(err) {
 		md.datasize = 0
+		md.creatime = nil
+	} else {
+		return err
+	}
+
+	// get modification time (from metadata file modification time)
+	metafi, err := os.Stat(filepath.Join(cam.path, filename+FileMetadataSuffix))
+	if err == nil {
+		modtime := metafi.ModTime()
+		md.modtime = &modtime
+
+		if md.creatime == nil {
+			// creation time is the same as modification time if there is no datafile yet
+			md.creatime = md.modtime
+		} else if md.creatime.Sub(*md.modtime) > 0 {
+			// modification time cannot be before creation time
+			md.modtime = md.creatime
+		}
 	} else {
 		return err
 	}
