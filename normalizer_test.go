@@ -114,7 +114,7 @@ func TestNormalization(t *testing.T) {
 	log.Printf("created observation set ID:%d", set.ID)
 
 	creationDelay := set.Created.Sub(nowish)
-	if creationDelay < 0 || creationDelay > 1*time.Minute {
+	if creationDelay < -1*time.Minute || creationDelay > 1*time.Minute {
 		t.Fatalf("nonsensical obset creation delay %v", creationDelay)
 	}
 

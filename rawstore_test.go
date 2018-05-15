@@ -131,7 +131,7 @@ func TestRawRoundtrip(t *testing.T) {
 		t.Fatalf("nil creation time")
 	}
 	creationDelay := creatime.Sub(nowish)
-	if creationDelay < 0 || creationDelay > 1*time.Minute {
+	if creationDelay < -1*time.Minute || creationDelay > 1*time.Minute {
 		t.Fatalf("nonsensical creation delay %v", creationDelay)
 	}
 
@@ -183,7 +183,7 @@ func TestRawRoundtrip(t *testing.T) {
 		t.Fatalf("nil modification time")
 	}
 	modificationDelay := modtime.Sub(*creatime)
-	if modificationDelay < 0 || modificationDelay > 1*time.Minute {
+	if modificationDelay < -1*time.Minute || modificationDelay > 1*time.Minute {
 		t.Fatalf("nonsensical modification delay %v", creationDelay)
 	}
 
