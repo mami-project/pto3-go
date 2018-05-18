@@ -905,8 +905,10 @@ func AnalyzeObservationStream(in io.Reader, afn func(obs *Observation) error) er
 	scanner := bufio.NewScanner(in)
 
 	var lineno int
-	sets := make(map[int]*ObservationSet)
+	var currentSet *ObservationSet
 	var obs *Observation
+
+	setCache := make(map[int]*ObservationSet)
 
 	for scanner.Scan() {
 		lineno++
@@ -914,11 +916,10 @@ func AnalyzeObservationStream(in io.Reader, afn func(obs *Observation) error) er
 		switch line[0] {
 		case '{':
 			// New observation set; cache metadata
-			set := new(ObservationSet)
-			if err := set.UnmarshalJSON(scanner.Bytes()); err != nil {
+			currentSet = new(ObservationSet)
+			if err := currentSet.UnmarshalJSON(scanner.Bytes()); err != nil {
 				return PTOErrorf("error parsing set on input line %d: %s", lineno, err.Error())
 			}
-			sets[set.ID] = set
 		case '[':
 			// New observation; call analysis function
 			obs = new(Observation)
@@ -926,11 +927,19 @@ func AnalyzeObservationStream(in io.Reader, afn func(obs *Observation) error) er
 				return PTOErrorf("error parsing observation on input line %d: %s", lineno, err.Error())
 			}
 
-			if _, ok := sets[obs.SetID]; !ok {
-				return PTOErrorf("observation on input line %d refers to unknown set %x", lineno, obs.SetID)
+			if currentSet == nil {
+				return PTOErrorf("observation on input line %d without current set", lineno)
+			} else if currentSet.ID == 0 {
+				// new current set, cache by ID
+				currentSet.ID = obs.SetID
+				setCache[obs.SetID] = currentSet
+			} else if currentSet.ID != obs.SetID {
+				var ok bool
+				currentSet, ok = setCache[obs.SetID]
+				if !ok {
+					return PTOErrorf("observation on input line %d refers to uncached set %x", lineno, obs.SetID)
+				}
 			}
-
-			obs.Set = sets[obs.SetID]
 
 			if err := afn(obs); err != nil {
 				return err

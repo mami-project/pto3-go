@@ -34,7 +34,7 @@ var configFlag = flag.String("config", "ptoconfig.json", "path to PTO configurat
 func main() {
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "%s: dump observations from a PTO database")
+		fmt.Fprintf(os.Stderr, "%s: dump observations from a PTO database", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Usage: %s <flags> (Set ID)+\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Note that set IDs are given in hexadecimal")
 		flag.PrintDefaults()
