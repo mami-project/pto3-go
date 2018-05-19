@@ -127,8 +127,12 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 			for i := range conditionNames {
 				set.Conditions[i].Name = conditionNames[i]
 			}
+		} else if k == "__link" {
+			set.link = AsString(v)
+		} else if k == "__data_link" {
+			set.datalink = AsString(v)
 		} else if strings.HasPrefix(k, "__") {
-			// Ignore all (incoming) __ keys instead of stuffing them in metadata
+			// Ignore all other incoming __ keys instead of stuffing them in metadata
 		} else {
 			// Everything else is metadata
 			set.Metadata[k] = AsString(v)
