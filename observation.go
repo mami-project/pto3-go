@@ -36,6 +36,7 @@ type ObservationSet struct {
 	Created *time.Time
 	// Metadata modification timestamp
 	Modified *time.Time
+	// system metadata
 	datalink string
 	link     string
 	count    int
@@ -268,6 +269,10 @@ func LinkForSetID(config *PTOConfiguration, setid int) string {
 func (set *ObservationSet) LinkVia(config *PTOConfiguration) {
 	set.link = LinkForSetID(config, set.ID)
 	set.datalink = set.link + "/data"
+}
+
+func (set *ObservationSet) Link() string {
+	return set.link
 }
 
 // CountObservations counts observations in the database for this ObservationSet
