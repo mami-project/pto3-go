@@ -941,6 +941,7 @@ func AnalyzeObservationStream(in io.Reader, afn func(obs *Observation) error) er
 				}
 			}
 
+			obs.Set = currentSet
 			if err := afn(obs); err != nil {
 				return err
 			}
