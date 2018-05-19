@@ -17,7 +17,9 @@ import (
 	pto3 "github.com/mami-project/pto3-go"
 )
 
-func CatMetadata(db orm.DB, set *pto3.ObservationSet, out io.Writer) error {
+func CatMetadata(config *pto3.PTOConfiguration, db orm.DB, set *pto3.ObservationSet, out io.Writer) error {
+	set.LinkVia(config)
+
 	b, err := json.Marshal(&set)
 	if err != nil {
 		return err
@@ -71,7 +73,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		if err := CatMetadata(db, &set, os.Stdout); err != nil {
+		if err := CatMetadata(config, db, &set, os.Stdout); err != nil {
 			log.Fatal(err)
 		}
 
