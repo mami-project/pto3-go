@@ -102,12 +102,16 @@ func (cache PathCache) CacheNewPaths(db orm.DB, pathSet map[string]struct{}) err
 	return <-streamerr
 }
 
+func (p *Path) Parse() {
+	p.Source = extractSource(p.String)
+	p.Target = extractTarget(p.String)
+}
+
 // InsertOnce retrieves a path's ID if it has already been inserted into the
 // database, inserting it into the database if it's not already there.
 func (p *Path) InsertOnce(db orm.DB) error {
 	// force source and target before insertion
-	p.Source = extractSource(p.String)
-	p.Target = extractTarget(p.String)
+	p.Parse()
 
 	if p.ID == 0 {
 		_, err := db.Model(p).
@@ -125,8 +129,7 @@ func (p *Path) InsertOnce(db orm.DB) error {
 func NewPath(pathstring string) *Path {
 	p := new(Path)
 	p.String = pathstring
-	p.Source = extractSource(pathstring)
-	p.Target = extractTarget(pathstring)
+	p.Parse()
 
 	return p
 }

@@ -354,6 +354,8 @@ func (obs *Observation) unmarshalStringSlice(jslice []string, time_format string
 	obs.TimeEnd = &endtime
 
 	obs.Path = &Path{String: jslice[3]}
+	obs.Path.Parse()
+
 	obs.Condition = &Condition{Name: jslice[4]}
 
 	if len(jslice) >= 6 {
