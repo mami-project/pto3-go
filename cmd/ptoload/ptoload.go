@@ -65,6 +65,8 @@ func main() {
 			log.Fatal(err)
 		}
 
+		set.LinkVia(config)
+
 		log.Printf("created observation set %x:", set.ID)
 		b, _ := json.MarshalIndent(set, "  ", "  ")
 		os.Stderr.Write(b)
