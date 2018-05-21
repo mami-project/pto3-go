@@ -487,10 +487,13 @@ by this query are those within the interval between the `time_start` and
 
 ### Condition Set Intersection Queries
 
+**NOTE: Condition set intersection queries are not yet supported by the PTO.**
+This section documents future functionality.
+
 A query created with one or more `intersect_condition` parameters is a set
 intersection query. First, observations matching the selection parameters are
-selected. Then, the observations are grouped by paths, and only paths within each set listed in
-`intersect_condition` parameters are selected. 
+selected. Then, the observations are grouped by paths, and only paths within
+each set listed in `intersect_condition` parameters are selected. 
 
 An `intersect_condition` parameter is either a full condition name (i.e.,
 without wildcards), or a full condition name prefixed with the character `!`
