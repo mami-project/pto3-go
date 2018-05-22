@@ -58,7 +58,7 @@ func main() {
 			if err := obsapi.CreateTables(); err != nil {
 				log.Fatal(err)
 			}
-			log.Printf("...created observation tables")
+			log.Printf("...initialized observation database")
 		}
 	}
 

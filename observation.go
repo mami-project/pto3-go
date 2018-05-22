@@ -404,6 +404,15 @@ func CreateTables(db *pg.DB) error {
 		FKConstraints: true,
 	}
 
+	// Create functions first.
+	// EWW EWW
+	// PostgreSQL doesn't have IF NOT EXISTS for these,
+	// so just run them and ignore the error, since any error other than
+	// "exists" will probably cause later failures in the subsequent
+	// EWW EWW
+	db.Exec("create function like_rev (text, text) returns boolean as $$ select $2 like $1 $$ language SQL")
+	db.Exec("create operator ~~~~ (procedure = like_rev,  leftarg=text, rightarg=text)")
+
 	return db.RunInTransaction(func(tx *pg.Tx) error {
 		if err := db.CreateTable(&Condition{}, &opts); err != nil {
 			return PTOWrapError(err)
@@ -845,7 +854,8 @@ func ObservationSetIDsWithSource(db orm.DB, source string) ([]int, error) {
 
 	err := db.Model(&ObservationSet{}).
 		ColumnExpr("array_agg(id)").
-		Where("? = ANY(sources)", source). // FIXME not sure this works
+		Where("? ~~~~ ANY(sources)", source+"%").
+		//		Where("? = ANY(sources)", source).
 		Select(pg.Array(&setIds))
 	if err == pg.ErrNoRows {
 		return make([]int, 0), nil
@@ -865,7 +875,7 @@ func ObservationSetIDsWithAnalyzer(db orm.DB, analyzer string) ([]int, error) {
 
 	err := db.Model(&ObservationSet{}).
 		ColumnExpr("array_agg(id)").
-		Where("analyzer = ?", analyzer).
+		Where("analyzer LIKE ?", analyzer+"%").
 		Select(pg.Array(&setIds))
 	if err == pg.ErrNoRows {
 		return make([]int, 0), nil

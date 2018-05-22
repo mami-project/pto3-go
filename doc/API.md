@@ -302,8 +302,8 @@ The following query parameters are supported:
 | --------------- | ------------------------------------------------------------ |
 | `k`             | Obsets containing metadata key (with `v`, of a specific value) |
 | `v`             | Value to query (use with `k`)                                |
-| `source`        | Obsets derived from a given source (full-text match)         |
-| `analyzer`      | Obsets derived from an analyzer with a given metadata URL (full-text match) |
+| `source`        | Obsets derived from a source URL starting with a given prefix |
+| `analyzer`      | Obsets derived from an analyzer whose metadata URL starts with a given prefix |
 | `condition`     | Obsets declaring a given condition                           |
 
 When multiple parameters are given, the intersection of observation sets
