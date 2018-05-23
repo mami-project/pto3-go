@@ -257,14 +257,12 @@ class PTOSet:
     def __init__(self, url=None, token=None, obsfile=None):
         super().__init__()
         
-        if url is not None:
-            self._url = url
-            self._token = token
-        elif obsfile is not None:
-            self._obsfile = obsfile
-        else:
+        if url is None and obsfile is None:
             raise ValueError("PTOSet requires either a url or an obsfile")
-            
+        
+        self._url = url
+        self._token = token
+        self._obsfile = obsfile
         self._metadata = None
         self._obsdata = None
 
@@ -366,6 +364,21 @@ class PTOClient:
                          headers = {"Authorization": "APIKEY "+self._token})
         
         if r.status_code == 200:
+            # FIXME pagination
+            return r.json()["sets"]
+        else:
+            raise PTOError(r.status_code, r.text)
+
+    def all_set_urls(self):
+        """
+        Retrieve the list of all observation sets in the observatory, suitable for use with retrieve_set
+        """
+
+        r = requests.get(self._baseurl+"obs",
+                         headers = {"Authorization": "APIKEY "+self._token})
+
+        if r.status_code == 200:
+            # FIXME pagination
             return r.json()["sets"]
         else:
             raise PTOError(r.status_code, r.text)
