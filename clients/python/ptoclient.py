@@ -2,9 +2,11 @@ import codecs
 import json
 import datetime
 import urllib.parse
+from collections import deque
 
 import requests
 import pandas as pd
+import networkx as nx
 import dateparser
 
 def _as_time_query_string(v):
@@ -189,7 +191,7 @@ class PTOQuery:
 
         # In the case of submit, URL starts as a base URL
         r = requests.post(self._url+"query/submit",
-                          headers = {"Authentication": "APIKEY "+self._token},
+                          headers = {"Authorization": "APIKEY "+self._token},
                           params=spec.params())
         
         if r.status_code == 200:
@@ -213,7 +215,7 @@ class PTOQuery:
 
     def metadata(self, reload=False):
         if (self._metadata is None) or reload:
-            r = requests.get(self._url, headers = {"Authentication": "APIKEY "+self._token})
+            r = requests.get(self._url, headers = {"Authorization": "APIKEY "+self._token})
 
             if r.status_code == 200:
                 self._metadata = r.json()  
@@ -242,7 +244,7 @@ class PTOQuery:
                 return None
             
             r = requests.get(m["__results"], stream=True,
-                            headers = {"Authentication": "APIKEY "+self._token})
+                            headers = {"Authorization": "APIKEY "+self._token})
 
             if r.status_code == 200:
                 self._results = pd.DataFrame(self._reload_http_gen(r))
@@ -294,7 +296,7 @@ class PTOSet:
                 
     def _reload_http_metadata(self):
         r = requests.get(self._url,
-                         headers = {"Authentication": "APIKEY "+self._token})   
+                         headers = {"Authorization": "APIKEY "+self._token})   
 
         if r.status_code == 200:
             self._metadata = r.json()
@@ -331,7 +333,7 @@ class PTOSet:
         
         if (self._obsdata is None) or ((self._obsfile is None) and reload):
             r = requests.get(data_url, stream=True,
-                 headers = {"Authentication": "APIKEY "+self._token})   
+                 headers = {"Authorization": "APIKEY "+self._token})   
             
             if r.status_code == 200:
                 self._obsdata = pd.DataFrame(self._reload_http_gen(r))
@@ -361,7 +363,7 @@ class PTOClient:
             params["analyzer"] = analyzer
         
         r = requests.get(self._baseurl+"obs/by_metadata", params=params,
-                         headers = {"Authentication": "APIKEY "+self._token})
+                         headers = {"Authorization": "APIKEY "+self._token})
         
         if r.status_code == 200:
             return r.json()["sets"]
@@ -412,10 +414,74 @@ class PTOClient:
         q.metadata()
 
         return q
-    
+
+def _retrieve_provenance(url, token):
+
+    p = []
+
+    r = requests.get(url, headers = {"Authorization": "APIKEY "+token}) 
+
+    if r.status_code != 200:
+        raise PTOError(r.status_code, r.text)
+
+    j = r.json()
+    if "_sources" in j:
+        p += j["_sources"]
+    if "_analyzer" in j:
+        p.append(j["_analyzer"])
+        
+    return p
 
 class Provenance():
-    
-    def __init__(self, url):
+    """
+    Provenance represents the full provenance of an object: its source and
+    analyzer antecedents, back to raw data and analyzers.
+    """
+
+    def __init__(self, url, token):
         super().__init__()
         self._url = url
+        self._netloc = urllib.parse.urlparse(url).netloc
+        self._token = token
+
+        self._edges = {}
+        self._errors = []
+
+        self._iterate()
+
+    def _iterate(self):
+
+        url = self._url
+        urlq = deque()
+
+        while True:
+
+
+            try:
+                p = _retrieve_provenance(url, self._token)
+                print("retrieved {}".format(url))
+            except Exception as e:
+                self._errors.append(url)
+                print("error retrieving {}: {}".format(url, str(e)[:40]))
+                continue 
+
+            if len(p) > 0:
+                self._edges[url] = p
+
+            for u in p:
+                if u not in self._edges:
+                    if urllib.parse.urlparse(u).netloc == self._netloc:
+                        urlq.append(u)
+
+            if len(urlq) == 0:
+                break
+
+            url = urlq.popleft()
+
+    def as_nxgraph(self):
+        g = nx.DiGraph()
+        for a in self._edges:
+            for b in self._edges[a]:
+                g.add_edge(a, b)
+        
+        return g
