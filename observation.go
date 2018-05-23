@@ -216,12 +216,15 @@ func (set *ObservationSet) SelectByID(db orm.DB) error {
 		return err
 	}
 
-	log.Printf("set ID %x has conditions %v", set.ID, conditionIDs)
+	//log.Printf("set ID %x has conditions %v", set.ID, conditionIDs)
 
 	set.Conditions = make([]Condition, len(conditionIDs))
 	for i := range conditionIDs {
 		set.Conditions[i].ID = conditionIDs[i]
 		if err := set.Conditions[i].SelectByID(db); err != nil {
+			// FIXME a miss here will throw a pg.ErrNoRows, which will look
+			// to client code like a 404. Figure out how to fix this.
+			// For now, rebuild conditions manually.
 			return err
 		}
 	}
