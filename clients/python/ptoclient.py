@@ -20,8 +20,24 @@ def _as_time_query_string(v):
 
     return dtv.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+def _parse_group_result(j):
+    if len(j) == 2:
+        return { 
+            'group': j[0],
+            'count': j[1],
+            }
+    elif len(j) == 3:
+        return {
+            'group0': j[0],
+            'group1': j[1],
+            'count': j[2]
+        }
+    else:
+        return {'raw_row': j.dumps()}
+
 def _parse_observation_result(j):
     return { 
+        'set_id': j[0],
         'time_start': j[1],
         'time_end': j[2],
         'path': j[3],
@@ -34,15 +50,15 @@ def _parse_set_result(j):
         'set': j
     }
 
-def _parse_group_result_fn(j, count_label, *groups):
-    if len(groups) == 0:
-        return lambda j: {}
-    if len(groups) == 1:
-        return lambda j: {groups[0]: j[0], count_label: j[1]}
-    elif len(groups) == 2:
-        return lambda j: {groups[0]: j[0], groups[1]: j[1], count_label: j[2]}
-    else:
-        raise RuntimeError("bad group count building aggregation result parse function")
+# def _parse_group_result_fn(j, count_label, *groups):
+#     if len(groups) == 0:
+#         return lambda j: {}
+#     if len(groups) == 1:
+#         return lambda j: {groups[0]: j[0], count_label: j[1]}
+#     elif len(groups) == 2:
+#         return lambda j: {groups[0]: j[0], groups[1]: j[1], count_label: j[2]}
+#     else:
+#         raise RuntimeError("bad group count building aggregation result parse function")
 
 
 class PTOError(Exception):
@@ -186,7 +202,7 @@ class PTOQuery:
         self._metadata = None
         self._results = None
 
-        self._parse_group_result = _parse_group_result_fn(0, '')
+        # self._parse_group_result = _parse_group_result_fn(0, '')
 
         if spec is not None:
             self._submit(spec)
@@ -204,14 +220,14 @@ class PTOQuery:
         else:
             raise PTOError(r.status_code, r.text)
 
-    def _extract_group_labels(self, qs):
-        qd = urllib.parse.parse_qs(qs)
-        if "group_by" in qd:
-            if "options" in qd and "count_targets" in qd["options"]:
-                count_label = "targets"
-            else:
-                count_label = "observations"
-            self._json_to_result_element = _parse_group_result_fn(count_label, *qd["group_by"])
+    # def _extract_group_labels(self, qs):
+    #     qd = urllib.parse.parse_qs(qs)
+    #     if "group" in qd:
+    #         if "options" in qd and "count_targets" in qd["options"]:
+    #             count_label = "targets"
+    #         else:
+    #             count_label = "observations"
+    #         self._json_to_result_element = _parse_group_result_fn(count_label, *qd["group"])
 
     def metadata(self, reload=False):
         if (self._metadata is None) or reload:
@@ -220,7 +236,7 @@ class PTOQuery:
             if r.status_code == 200:
                 self._metadata = r.json()  
 
-            self._extract_group_labels(self._metadata["__encoded"])
+            # self._extract_group_labels(self._metadata["__encoded"])
 
         return self._metadata
     
@@ -233,7 +249,7 @@ class PTOQuery:
                 yield _parse_set_result(s)
         elif 'groups' in j:
             for g in j['groups']:
-                yield self._parse_group_result(g)
+                yield _parse_group_result(g)
 
     def results(self, reload=False):
         """
@@ -242,12 +258,12 @@ class PTOQuery:
         """
         if self._results is None or reload:
         
-            m = self._metadata(reload)
+            m = self.metadata(reload)
 
-            if "__results" not in m:
+            if "__result" not in m:
                 return None
             
-            result_url = m["__results"]
+            result_url = m["__result"]
 
             while True:
                 r = requests.get(result_url, 
