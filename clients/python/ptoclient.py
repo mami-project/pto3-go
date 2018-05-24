@@ -66,7 +66,7 @@ class PTOQuerySpec:
         self._sources = []
         self._targets = []
         self._conditions = []
-        self._group_by = []
+        self._group = []
         self._options = []
 
     def time(self, time_start, time_end):
@@ -107,9 +107,9 @@ class PTOQuerySpec:
         return self
 
     def _append_group(self, gstr):
-        if len(self._group_by) >= 2:
+        if len(self._group) >= 2:
             raise ValueError("only one- and two-dimensional grouping is currently supported by the PTO")
-        self._group_by.append(gstr)
+        self._group.append(gstr)
         return self
 
     def time_series_year(self):
@@ -166,8 +166,8 @@ class PTOQuerySpec:
         if len(self._conditions):
             params['condition'] = self._conditions
 
-        if len(self._group_by):
-            params['group_by'] = self._group_by
+        if len(self._group):
+            params['group'] = self._group
 
         if len(self._options):
             params['option'] = self._options

@@ -404,7 +404,7 @@ below:
 | `source`        | select    | yes       | Select observations with the given element at the start of the path |
 | `target`        | select    | yes       | Select observations with the given element at the end of the path |
 | `condition`     | select    | yes       | Select observations with the given condition, with wildcards      |
-| `group_by`      | group     | yes       | Group observations and return counts by group  |
+| `group`         | group     | yes       | Group observations and return counts by group  |
 | `intersect_condition` | set | yes       | Group observations by path, select paths by set intersection on conditions |
 | `option`        | options   | yes       | Specify a query option |
 
