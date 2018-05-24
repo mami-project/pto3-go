@@ -30,9 +30,13 @@ def _parse_observation_result(j):
         }
 
 def _parse_set_result(j):
-    pass
+    return {
+        'set': j
+    }
 
-def _parse_aggregation_result_fn(j, count_label, *groups):
+def _parse_group_result_fn(j, count_label, *groups):
+    if len(groups) == 0:
+        return lambda j: {}
     if len(groups) == 1:
         return lambda j: {groups[0]: j[0], count_label: j[1]}
     elif len(groups) == 2:
@@ -182,7 +186,7 @@ class PTOQuery:
         self._metadata = None
         self._results = None
 
-        self._json_to_result_element = None
+        self._parse_group_result = _parse_group_result_fn(0, '')
 
         if spec is not None:
             self._submit(spec)
@@ -200,18 +204,14 @@ class PTOQuery:
         else:
             raise PTOError(r.status_code, r.text)
 
-    def _determine_query_type(self, qs):
+    def _extract_group_labels(self, qs):
         qd = urllib.parse.parse_qs(qs)
         if "group_by" in qd:
             if "options" in qd and "count_targets" in qd["options"]:
                 count_label = "targets"
             else:
                 count_label = "observations"
-            self._json_to_result_element = _parse_aggregation_result_fn(count_label, *qd["group_by"])
-        elif "options" in qd and "sets_only" in qd["options"]:
-            self._json_to_result_element = _parse_set_result
-        else:
-            self._json_to_result_element = _parse_observation_result
+            self._json_to_result_element = _parse_group_result_fn(count_label, *qd["group_by"])
 
     def metadata(self, reload=False):
         if (self._metadata is None) or reload:
@@ -220,16 +220,20 @@ class PTOQuery:
             if r.status_code == 200:
                 self._metadata = r.json()  
 
-            self._determine_query_type(self._metadata["__encoded"])
+            self._extract_group_labels(self._metadata["__encoded"])
 
         return self._metadata
     
-    def _reload_http_gen(self, res):
-        resin = codecs.getreader("utf8")(res.content)
-        
-        for line in resin:
-            jl = json.loads(line)
-            yield self._json_to_result_element(jl)
+    def _reload_http_gen(self, j):
+        if 'obs' in j:
+            for o in j['obs']:
+                yield _parse_observation_result(o)
+        elif 'sets' in j:
+            for s in j['sets']:
+                yield _parse_set_result(s)
+        elif 'groups' in j:
+            for g in j['groups']:
+                yield self._parse_group_result(g)
 
     def results(self, reload=False):
         """
@@ -243,13 +247,26 @@ class PTOQuery:
             if "__results" not in m:
                 return None
             
-            r = requests.get(m["__results"], stream=True,
-                            headers = {"Authorization": "APIKEY "+self._token})
+            result_url = m["__results"]
 
-            if r.status_code == 200:
-                self._results = pd.DataFrame(self._reload_http_gen(r))
-            else:
-                raise PTOError(r.status_code, r.text)
+            while True:
+                r = requests.get(result_url, 
+                                headers = {"Authorization": "APIKEY "+self._token})
+
+                j = r.json()
+
+                if r.status_code == 200:
+                    if self._results is None:
+                        self._results = pd.DataFrame(self._reload_http_gen(j))
+                    else:
+                        self._results = pd.concat(self._results, pd.DataFrame(self._reload_http_gen(j)))
+                else:
+                    raise PTOError(r.status_code, r.text)
+                
+                if 'next' in j:
+                    result_url = j['next']
+                else:
+                    break
         
         return self._results
     
