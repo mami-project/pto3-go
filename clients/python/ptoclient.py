@@ -196,7 +196,7 @@ class PTOQuery:
         # In the case of submit, URL starts as a base URL
         r = requests.post(self._url+"query/submit",
                           headers = {"Authorization": "APIKEY "+self._token},
-                          params=spec.params())
+                          params=spec._params())
         
         if r.status_code == 200:
             self._metadata = r.json()
