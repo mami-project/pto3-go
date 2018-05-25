@@ -6,6 +6,7 @@ from collections import deque
 
 import requests
 import pandas as pd
+import numpy as np
 import networkx as nx
 import dateparser
 
@@ -49,6 +50,12 @@ def _parse_set_result(j):
     return {
         'set': j
     }
+
+def _headers_for_token(token):
+    if token is None:
+        return dict()
+    else:
+        return {"Authorization": "APIKEY "+token}
 
 # def _parse_group_result_fn(j, count_label, *groups):
 #     if len(groups) == 0:
@@ -211,7 +218,7 @@ class PTOQuery:
 
         # In the case of submit, URL starts as a base URL
         r = requests.post(self._url+"query/submit",
-                          headers = {"Authorization": "APIKEY "+self._token},
+                          headers = _headers_for_token(self._token),
                           params=spec._params())
         
         if r.status_code == 200:
@@ -231,7 +238,7 @@ class PTOQuery:
 
     def metadata(self, reload=False):
         if (self._metadata is None) or reload:
-            r = requests.get(self._url, headers = {"Authorization": "APIKEY "+self._token})
+            r = requests.get(self._url, headers = _headers_for_token(self._token))
 
             if r.status_code == 200:
                 self._metadata = r.json()  
@@ -267,7 +274,7 @@ class PTOQuery:
 
             while True:
                 r = requests.get(result_url, 
-                                headers = {"Authorization": "APIKEY "+self._token})
+                                headers = _headers_for_token(self._token))
 
                 j = r.json()
 
@@ -275,7 +282,7 @@ class PTOQuery:
                     if self._results is None:
                         self._results = pd.DataFrame(self._reload_http_gen(j))
                     else:
-                        self._results = pd.concat(self._results, pd.DataFrame(self._reload_http_gen(j)))
+                        self._results = pd.concat([self._results, pd.DataFrame(self._reload_http_gen(j))])
                 else:
                     raise PTOError(r.status_code, r.text)
                 
@@ -284,6 +291,7 @@ class PTOQuery:
                 else:
                     break
         
+        self._results.index = np.arange(0,len(self._results))
         return self._results
     
 class PTOSet:
@@ -327,7 +335,7 @@ class PTOSet:
                 
     def _reload_http_metadata(self):
         r = requests.get(self._url,
-                         headers = {"Authorization": "APIKEY "+self._token})   
+                         headers = _headers_for_token(self._token))   
 
         if r.status_code == 200:
             self._metadata = r.json()
@@ -364,7 +372,7 @@ class PTOSet:
         
         if (self._obsdata is None) or ((self._obsfile is None) and reload):
             r = requests.get(data_url, stream=True,
-                 headers = {"Authorization": "APIKEY "+self._token})   
+                 headers =_headers_for_token(self._token))   
             
             if r.status_code == 200:
                 self._obsdata = pd.DataFrame(self._reload_http_gen(r))
@@ -378,6 +386,8 @@ class PTOClient:
     
     def __init__(self, baseurl, token):
         super().__init__()
+        if baseurl[-1] != "/":
+            baseurl += "/"
         self._baseurl = baseurl
         self._token = token
     
@@ -394,7 +404,7 @@ class PTOClient:
             params["analyzer"] = analyzer
         
         r = requests.get(self._baseurl+"obs/by_metadata", params=params,
-                         headers = {"Authorization": "APIKEY "+self._token})
+                         headers = _headers_for_token(self._token))
         
         if r.status_code == 200:
             # FIXME pagination
@@ -408,7 +418,7 @@ class PTOClient:
         """
 
         r = requests.get(self._baseurl+"obs",
-                         headers = {"Authorization": "APIKEY "+self._token})
+                         headers = _headers_for_token(self._token))
 
         if r.status_code == 200:
             # FIXME pagination
@@ -465,7 +475,7 @@ def _retrieve_provenance(url, token):
 
     p = []
 
-    r = requests.get(url, headers = {"Authorization": "APIKEY "+token}) 
+    r = requests.get(url, headers = _headers_for_token(token)) 
 
     if r.status_code != 200:
         raise PTOError(r.status_code, r.text)
