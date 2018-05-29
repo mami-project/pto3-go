@@ -108,13 +108,10 @@ func PtoNorm(config *pto3.PTOConfiguration, outfile io.Writer,
 	// create subprocess and pipes
 	cmd := exec.Command(normCmd)
 
-	// data file on stdtin
-	datapipe, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
+	// direct access to datafile
+	cmd.Stdin = rawfile
 
-	// observations on stdout
+	// metadata-filtered observations on stdout
 	obspipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
@@ -154,7 +151,7 @@ func PtoNorm(config *pto3.PTOConfiguration, outfile io.Writer,
 	go copyData(bytes.NewReader(b), metapipe, metaerr)
 
 	// start a goroutine to fill the data pipe
-	go copyData(rawfile, datapipe, dataerr)
+	// go copyData(rawfile, datapipe, dataerr)
 
 	// start a goroutine to filter metadata in output
 	// and add a source URL
