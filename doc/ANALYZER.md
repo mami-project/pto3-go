@@ -47,14 +47,81 @@ command-line tools described below to invoke local analyzers manually.
 
 # Using the Local Analyzer Command-Line Tools
 
+The PTO comes with a set of command-line tools for running normalizers and
+analyzers locally (i.e., on the same machine running `ptosrv`, or on a machine
+with equivalent access to the raw filesystem and the PostgreSQL database). 
+
+Three tools are provided:
+
+- `ptonorm`: read data and metadata from raw data store, hadling campaign
+  metadata inheritance, run a normalizer, and pipe to stdin / fd 3.
+- `ptocat`: dump observation sets from the database with metadata (in
+  [Observation File Format](OBSETS.md)) to stdout
+- `ptoload`: read files with observation set data and metadata (in [Observation File
+  Format](OBSETS.md)) and insert resulting observation sets into database
+
+These tools can be used for normalization and analysis workflows as descibed
+below.
+
 ## Running Normalizers
 
-*[EDITOR'S NOTE: write me]*
+Local normalizers are run by `ptonorm`, which takes the following command-line
+arguments:
+
+```
+ptonorm -config <path/to/config.json> <normalizer> <campaign> <file>
+```
+
+If `-config` is not given, the file `ptoconfig.json` in the current working
+directory is used.
+
+`ptonorm` launches the normalizer as a subprocess, allowing access to the raw
+data file over stdin, and streaming metadata over a pipe on file descriptor 3.
+It then takes the standard output, coalescing all metadata into a single
+object, and writes it to standard output. When coalescing metadata, the last
+write on a given metadata key wins.
+
+The resulting observation file can be passed as input to `ptoload`, which
+takes the following command-line arguments:
+
+```
+ptoload -config <path/to/config.json> <obsfile>...
+```
+
+If `-config` is not given, the file `ptoconfig.json` in the current working
+directory is used. More than one observation file can be given on a single
+command line, but each file given will create a new observation set.
+
+For example, to normalize the file `quux.ndjson` with the `bar` normalizer in
+the `foo` campaign into an observation set, using a local configuration file,
+and load it directly into the database, deleting the cached observation file:
+
+```
+ptonorm bar foo quux.json > cached.obs && ptoload cached.obs && rm cached.obs
+```
 
 ## Running Analyzers
 
-*[EDITOR'S NOTE: write me]*
+Analyzers are simpler to run, as they take observation files on standard input
+and generate observation files on standard output. To get observation files,
+use `ptocat`, which takes the following command line arguments:
 
+```
+ptocat -config <path/to/config.json> <set-id>...
+```
+
+If `-config` is not given, the file `ptoconfig.json` in the current working
+directory is used. Set IDs are given in hexadecimal, as in the rest of the
+PTO. More than one set ID may appear; in this case, the metadata for the first
+set will be followed by the data for the first set followed by the metadata
+for the second set followed by the data for the second set and so on.
+
+For example, to analyze sets 3a70 through 3a75 using the analyer `fizz` and
+load it directly into the database, deleting the cached observation file:
+
+```
+ptocat 3a70 3a71 3a72 3a73 3a74 3a75 > cached.obs && ptoload cached.obs && rm cached.obs
+```
 
 # Writing Client Normalizers and Analyzers
 
