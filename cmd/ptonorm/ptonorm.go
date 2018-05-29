@@ -136,7 +136,7 @@ func PtoNorm(config *pto3.PTOConfiguration, outfile io.Writer,
 	}
 
 	metaerr := make(chan error, 1)
-	dataerr := make(chan error, 1)
+	// dataerr := make(chan error, 1)
 	obserr := make(chan error, 1)
 	cmderr := make(chan error, 1)
 	outdone := make(chan struct{})
@@ -166,10 +166,10 @@ func PtoNorm(config *pto3.PTOConfiguration, outfile io.Writer,
 	// now wait on the exit channels, return as soon as command completes
 	for {
 		select {
-		case err := <-dataerr:
-			if err != nil {
-				return err
-			}
+		// case err := <-dataerr:
+		// 	if err != nil {
+		// 		return err
+		// 	}
 		case err := <-metaerr:
 			if err != nil {
 				return err
