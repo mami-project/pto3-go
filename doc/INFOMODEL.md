@@ -2,7 +2,7 @@
 
 # Conditions
 
-## Presently Supported Conditions
+## Conditions Supported for PATHspider and tracebox
 
 ## Defining New Conditions
 

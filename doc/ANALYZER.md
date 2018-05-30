@@ -129,3 +129,9 @@ Client analyzers are simply clients of the PTO. A normalizer interacts with
 raw data through `/raw` resources and creates new observation sets by posting
 to `/obs/create`. An analyzer retrieves observation sets from `/obs/` and
 likewise creates new observation sets by posting to `/obs/create`
+
+# MAMI Project developed normalizers and analyzers
+
+Tools for normalizing and analyzing [PATHspider](https://pathspider.net) output (originally focused on ECN, with future support for other plugins) are in the [pto3-ecn](/mami-project/pto3-ecn) repository.
+
+Tools for dealing with Tracebox output (with future support for other traceroute-like tools and data sources) are in the [pto3-trace](/mami-project/pto3-trace) repository.
