@@ -119,3 +119,30 @@ func NewConfigFromFile(filename string) (*PTOConfiguration, error) {
 
 	return NewConfigFromJSON(b)
 }
+
+var DefaultConfigPaths = []string{"ptoconfig.json", "~/.ptoconfig.json", "/etc/pto/ptoconfig.json"}
+
+func NewConfigWithDefault(filename string) (*PTOConfiguration, error) {
+
+	var configPaths []string
+
+	if filename != "" {
+		configPaths = make([]string, len(DefaultConfigPaths)+1)
+		copy(configPaths[1:], DefaultConfigPaths)
+		configPaths[0] = filename
+	} else {
+		configPaths = DefaultConfigPaths
+	}
+
+	for _, configpath := range configPaths {
+		_, err := os.Stat(configpath)
+		if err == nil {
+			return NewConfigFromFile(configpath)
+		} else if !os.IsNotExist(err) {
+			return nil, PTOWrapError(err)
+		}
+	}
+
+	return nil, PTOErrorf("no configuration file found in %v", configPaths)
+
+}

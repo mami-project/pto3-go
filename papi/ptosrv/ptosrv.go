@@ -12,7 +12,7 @@ import (
 	"github.com/mami-project/pto3-go/papi"
 )
 
-var configPath = flag.String("config", "ptoconfig.json", "Path to PTO `config file`")
+var configPath = flag.String("config", "", "Path to PTO `config file`")
 var initdb = flag.Bool("initdb", false, "Create database tables on startup")
 var help = flag.Bool("help", false, "show usage message")
 
@@ -25,7 +25,7 @@ func main() {
 	}
 
 	// load configuration file
-	config, err := pto3.NewConfigFromFile(*configPath)
+	config, err := pto3.NewConfigWithDefault(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}

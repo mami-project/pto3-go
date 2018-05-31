@@ -14,7 +14,7 @@ import (
 )
 
 var helpFlag = flag.Bool("h", false, "display a help message")
-var configFlag = flag.String("config", "ptoconfig.json", "path to PTO configuration `file` with DB connection information")
+var configFlag = flag.String("config", "", "path to PTO configuration `file` with DB connection information")
 var initdbFlag = flag.Bool("initdb", false, "Create database tables on startup")
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	config, err := pto3.NewConfigFromFile(*configFlag)
+	config, err := pto3.NewConfigWithDefault(*configFlag)
 	if err != nil {
 		log.Fatal(err)
 	}
