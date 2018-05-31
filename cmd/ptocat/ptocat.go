@@ -31,7 +31,7 @@ func CatMetadata(config *pto3.PTOConfiguration, db orm.DB, set *pto3.Observation
 }
 
 var helpFlag = flag.Bool("h", false, "display a help message")
-var configFlag = flag.String("config", "ptoconfig.json", "path to PTO configuration file with DB connection information")
+var configFlag = flag.String("config", "", "path to PTO configuration file with DB connection information")
 
 func main() {
 
@@ -60,7 +60,7 @@ func main() {
 		setIDs = append(setIDs, int(idarg))
 	}
 
-	config, err := pto3.NewConfigFromFile(*configFlag)
+	config, err := pto3.NewConfigWithDefault(*configFlag)
 	if err != nil {
 		log.Fatal(err)
 	}

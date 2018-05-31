@@ -191,7 +191,7 @@ func PtoNorm(config *pto3.PTOConfiguration, outfile io.Writer,
 }
 
 var helpFlag = flag.Bool("h", false, "display a help message")
-var configFlag = flag.String("config", "ptoconfig.json", "path to PTO configuration `file`")
+var configFlag = flag.String("config", "", "path to PTO configuration `file`")
 var outFlag = flag.String("out", "", "path to output `file` [stdout if omitted]")
 
 func main() {
@@ -208,7 +208,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	config, err := pto3.NewConfigFromFile(*configFlag)
+	config, err := pto3.NewConfigWithDefault(*configFlag)
 	if err != nil {
 		log.Fatal(err)
 	}
