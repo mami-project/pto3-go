@@ -16,3 +16,7 @@
 # Testing stuff
 testdata/rawroot/**
 testdata/querycache/**
+clients/python/*.ipynb
+clients/python/.ipynb_checkpoints/**
+clients/python/*.obs
+*.pyc
