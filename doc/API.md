@@ -256,14 +256,15 @@ stored in the PTO) and the analysis that was performed.
 
 The resources and methods available thereon are summarized in the table below.
 
-| Method   | Resource        | Permission | Description                                           |
-| -------- | --------------- | ---------- | ----------------------------------------------------- |
-| `GET`    | `/obs`          | `read_obs` | Retrieve URLs for observation sets as JSON            |
-| `GET`    | `/obs/by_metadata` | `read_obs` | Retrieve URLs for observation sets by metadata     |
-| `POST`   | `/obs/create`  | `write_obs` | Create new observation set                           |
-| `GET`    | `/obs/<o>`      | `read_obs` | Retrieve metadata and provenance for *o* as JSON      |
-| `PUT`    | `/obs/<o>`      | `write_obs` | Update metadata and provenance for *o* as JSON       |
-| `GET`    | `/obs/<o>/data` | `read_obs` | Retrieve obset file for *o* as NDJSON (by convention) |
+| Method   | Resource        | Permission | Description                                            |
+| -------- | --------------- | ---------- | ------------------------------------------------------ |
+| `GET`    | `/obs`          | `read_obs` | Retrieve URLs for observation sets as JSON             |
+| `GET`    | `/obs/by_metadata` | `read_obs` | Retrieve URLs for observation sets by metadata      |
+| `GET`    | `/obs/conditions`  | `read_obs` | List conditions in observation database             |
+| `POST`   | `/obs/create`   | `write_obs` | Create new observation set                            |
+| `GET`    | `/obs/<o>`      | `read_obs`  | Retrieve metadata and provenance for *o* as JSON      |
+| `PUT`    | `/obs/<o>`      | `write_obs` | Update metadata and provenance for *o* as JSON        |
+| `GET`    | `/obs/<o>/data` | `read_obs`  | Retrieve obset file for *o* as NDJSON (by convention) |
 | `PUT`    | `/obs/<o>/data` | `write_obs` | Upload obset file for *o* as NDJSON (by convention)   |
 
 ## Metadata and Provenance

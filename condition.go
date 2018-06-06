@@ -116,6 +116,18 @@ func (cache ConditionCache) ConditionsByName(db orm.DB, conditionName string) ([
 	return out, nil
 }
 
+func (cache ConditionCache) Names() []string {
+	names := make([]string, len(cache))
+
+	i := 0
+	for k := range cache {
+		names[i] = k
+		i++
+	}
+
+	return names
+}
+
 // LoadConditionCache creates a new condition cache with all the conditions in a given database.
 func LoadConditionCache(db orm.DB) (ConditionCache, error) {
 
