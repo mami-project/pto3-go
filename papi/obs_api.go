@@ -300,6 +300,9 @@ func (oa *ObsAPI) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// force observation count
+	set.CountObservations(oa.db)
+
 	oa.writeMetadataResponse(w, &set, http.StatusOK)
 }
 
