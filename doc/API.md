@@ -195,7 +195,7 @@ $ curl -H "Authorization: APIKEY abadc0de" \
        -H "Content-Type: application/json" \
        -X PUT https://pto.example.com/raw/test/test001.json/data \
        --data-binary @test_data.json
-{D
+{
     "__data": "https://pto.example.com/raw/test/test001.json/data",
     "__data_size": 37,
     "_file_type": "test",
@@ -361,20 +361,61 @@ See [the analyzer interface description](ANALYZER.md) for more.
 
 As above, we use [curl](https://curl.haxx.se) to illustrate the usage of the
 PTO observation API. We assume the API is rooted at
-`https://pto.example.com/`, and that the API key `12345` holds the permissions
-`read_obs` and `write_obs`.
+`https://pto.example.com/`, and that the API key `abadc0de` holds the
+permissions `read_obs` and `write_obs`.
 
-## Submitting and uploading an observation set
+## Uploading an observation set
 
-*[EDITOR'S NOTE: write me]*
+First, create observation set metadata, and upload it to get a new observation
+set ID. The observation set metadata must contain the full list of conditions
+contained in the observation set, a link to analyzer metadata (see [the
+analyzer interface](ANALYZERS.md)), and a list of links to raw data sources
+from which the observations were derived
 
-## Listing observation sets
+```bash
+$ cat obs_metadata.json
+{
+  "_conditions": ["pto.test.ok","pto.test.not_ok"],
+  "_analyzer":   "https://gitlab.example.com/analyzers/test_analyzer/raw/master/analyzer_meta.json"
+  "_sources":    ["https://pto.example.com/raw/test"]
+}
 
-*[EDITOR'S NOTE: write me]*
+$ curl -H "Authorization: APIKEY abadc0de" \
+       -H "Content-Type: application/json" \
+       -X POST https://pto.example.com/obs/create \
+       --data-binary @obs_metadata.json
+{
+  "__data": "http://localhost:8383/obs/1/data",
+  "__link": "http://localhost:8383/obs/1",
+  "__modified": "2018-06-07T08:29:26Z",
+  "__created": "2018-06-07T08:29:26Z",
+  "_conditions": ["pto.test.ok","pto.test.not_ok"],
+  "_analyzer":   "https://gitlab.example.com/analyzers/test_analyzer/raw/master/analyzer_meta.json"
+  "_sources":    ["https://pto.example.com/raw/test"]
+}
+```
 
-## Downloading an observation set
+This returns the metadata, including new system metadata. The `__link` key here is a permanent link to the created observation set, including its ID, and the `__data` key is a path to which observation set data can be uploaded. Let's do that.
 
-*[EDITOR'S NOTE: write me]*
+```bash
+$ curl -H "Authorization: APIKEY abadc0de" \
+       -H "Content-Type: application/vnd.mami.ndjson" \
+       -X PUT https://pto.example.com/obs/1/data \
+       --data-binary @obs_data.ndjson
+{
+  "__data": "http://localhost:8383/obs/1/data",
+  "__link": "http://localhost:8383/obs/1",
+  "__modified": "2018-06-07T08:31:14Z",
+  "__created": "2018-06-07T08:31:14Z",
+  "__obs_count": 2,
+  "_conditions": ["pto.test.ok","pto.test.not_ok"],
+  "_analyzer":   "https://gitlab.example.com/analyzers/test_analyzer/raw/master/analyzer_meta.json"
+  "_sources":    ["https://pto.example.com/raw/test"]
+}
+```
+
+Similar to uploading a raw data file, the new `__obs_count` metadata key shows
+the number of observations that have been stored.
 
 # Observation Query
 
