@@ -1,6 +1,6 @@
 # Path Transparency Observatory API Server (ptosrv)
 
-ptosrv is a stand-alone Web server implementing the Path Transparency Observatory 
+ptosrv is a stand-alone Web server implementing the Path Transparency Observatory API detailed in [the API documentation](API.md).
 
 ## Installation
 
@@ -8,7 +8,7 @@ ptosrv is a stand-alone Web server implementing the Path Transparency Observator
 
 `ptosrv` uses PostgreSQL for observation storage and query execution, so a
 PostgreSQL database must be available for the PTO's use, with a user
-configured to create tables, whose credentials will appear in the
+configured to be able to create tables, whose credentials will appear in the
 `ptoconfig.json` file below.
 
 ### Install the Server
@@ -35,7 +35,7 @@ The following keys should appear the config file:
 | `QueryCacheRoot`  | Filesystem root for query cache; disable `/query` if missing or empty             |
 | `PageLength`      | Number of items to show on a single page (see [API](API.md) for more on pagination) |
 | `ImmediateQueryDelay` | Time to wait (in milliseconds) for fast queries before returning a `pending` state |
-| `ConcurrentQueries` | Maximum number of queries to execute concurrently |
+| `ConcurrentQueries` | Maximum number of queries to execute concurrently                               |
 
 The ObsDatabase object should have the following keys:
 
@@ -48,7 +48,21 @@ The ObsDatabase object should have the following keys:
 
 The APIKeyFile is a JSON file mapping API key strings to an object mapping
 permission strings to a boolean, true if the key has that permission, false
-otherwise. 
+otherwise. The following permissions are used by ptosrv:
+
+| Permission      | Description                                           |
+| --------------- | ----------------------------------------------------- |
+| `list_raw`      | List campaign URLs                                    |
+| `read_raw:<c>`  | Read raw data and metadata for campaign *c*           |
+| `write_raw:<c>` | Write raw data and metadata for campaign *c*          |
+| `read_obs`      | List observations, read observation data and metadata |
+| `write_obs`     | Write observation data and metadata                   |
+| `submit_query`  | Submit queries                                        |
+| `read_query`    | Read query data and metadata                          |
+| `update_query`  | Update query metadata                                 |
+
+The special API key `default` allows the assignment of permissions for
+requests without an `Authorization: APIKEY` header.
 
 ## Invocation
 
