@@ -21,6 +21,7 @@ import (
 const SuppressDropTables = false
 const SuppressDeleteRawStore = false
 const SuppressDeleteQueryCache = false
+const LogDatabase = false
 
 const TestBaseURL = "https://ptotest.mami-project.eu"
 
@@ -63,7 +64,9 @@ func setupObs(config *pto3.PTOConfiguration, azr papi.Authorizer, r *mux.Router)
 	obsapi := papi.NewObsAPI(config, azr, r)
 
 	// log everything
-	obsapi.EnableQueryLogging()
+	if LogDatabase {
+		obsapi.EnableQueryLogging()
+	}
 
 	// create tables
 	if err := obsapi.CreateTables(); err != nil {
@@ -97,7 +100,9 @@ func setupQuery(config *pto3.PTOConfiguration, azr papi.Authorizer, r *mux.Route
 	}
 
 	// log everything
-	qapi.EnableQueryLogging()
+	if LogDatabase {
+		qapi.EnableQueryLogging()
+	}
 
 	// ensure the query test data is loaded and stash its set ID
 	TestQueryCacheSetID, err = qapi.LoadTestData("../testdata/test_query.ndjson")
@@ -130,7 +135,6 @@ func setupAZR() papi.Authorizer {
 				"list_raw": true,
 			},
 			GoodAPIKey: map[string]bool{
-				"list_raw":       true,
 				"read_raw:test":  true,
 				"write_raw:test": true,
 				"read_obs":       true,
@@ -265,4 +269,8 @@ func TestListRoot(t *testing.T) {
 	if rawlink != TestBaseURL+"/raw" {
 		t.Fatalf("raw link is %s", rawlink)
 	}
+}
+
+func TestBadAuth(t *testing.T) {
+	executeRequest(TestRouter, t, "GET", TestBaseURL+"/obs", nil, "", "abadc0de", http.StatusForbidden)
 }

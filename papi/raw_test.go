@@ -90,10 +90,6 @@ func TestScanCampaigns(t *testing.T) {
 	}
 }
 
-func TestBadAuth(t *testing.T) {
-	executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw", nil, "", "abadc0de", http.StatusForbidden)
-}
-
 func TestDefaultAuth(t *testing.T) {
 	executeRequest(TestRouter, t, "GET", TestBaseURL+"/raw", nil, "", "", http.StatusOK)
 }
