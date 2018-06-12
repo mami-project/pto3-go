@@ -17,12 +17,18 @@ func (ra *RootAPI) handleRoot(w http.ResponseWriter, r *http.Request) {
 
 	links := make(map[string]string)
 
+	links["banner"] = "This is an instance of the MAMI Path Transparency Observatory. See https://github.com/mami-project/pto3-go for more information."
+
 	if ra.config.RawRoot != "" {
 		links["raw"], _ = ra.config.LinkTo("raw")
 	}
 
 	if ra.config.ObsDatabase.Database != "" {
 		links["obs"], _ = ra.config.LinkTo("obs")
+	}
+
+	if ra.config.QueryCacheRoot != "" {
+		links["query"], _ = ra.config.LinkTo("query")
 	}
 
 	linksj, err := json.Marshal(links)
