@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -30,17 +31,22 @@ type APIKeyAuthorizer struct {
 }
 
 func (azr *APIKeyAuthorizer) IsAuthorized(w http.ResponseWriter, r *http.Request, permission string) bool {
-	var perms map[string]bool
 
+	// load defaults from apikeys if present
+	perms := map[string]bool{}
+
+	defperms := azr.APIKeys["default"]
+	if defperms != nil {
+		for k, v := range defperms {
+			perms[k] = v
+		}
+	}
+	log.Printf("default authorization is %+v", perms)
+
+	// look for an authorization header
 	authhdr := r.Header.Get("Authorization")
 
-	if authhdr == "" {
-		perms = azr.APIKeys["default"]
-		if perms == nil {
-			http.Error(w, "no default authorization configured", http.StatusForbidden)
-			return false
-		}
-	} else {
+	if authhdr != "" {
 
 		authfield := strings.Fields(authhdr)
 
@@ -48,10 +54,14 @@ func (azr *APIKeyAuthorizer) IsAuthorized(w http.ResponseWriter, r *http.Request
 			http.Error(w, fmt.Sprintf("malformed Authorization header: %v", authhdr), http.StatusBadRequest)
 			return false
 		} else if authfield[0] == "APIKEY" {
-			perms = azr.APIKeys[authfield[1]]
-			if perms == nil {
-				http.Error(w, "presented API key not authorized", http.StatusForbidden)
-				return false
+			keyperms := azr.APIKeys[authfield[1]]
+			if keyperms != nil {
+				// update permissions with those for the presented key
+				for k, v := range keyperms {
+					perms[k] = v
+				}
+				log.Printf("inherited authorization for %s is %+v", authfield[1], perms)
+
 			}
 		} else {
 			http.Error(w, fmt.Sprintf("unsupported authorization type %s", authfield[0]), http.StatusBadRequest)
