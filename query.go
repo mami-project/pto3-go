@@ -267,6 +267,7 @@ type Query struct {
 	selectSources    []string
 	selectTargets    []string
 	selectConditions []Condition
+	selectValues     []string
 	groups           []GroupSpec
 
 	// Query options
@@ -315,10 +316,11 @@ func (q *Query) populateFromForm(form url.Values) error {
 		}
 	}
 
-	// Can't really validate paths, so just store these slices directly from the form.
+	// Can't really validate paths or values so just store these slices directly from the form.
 	q.selectOnPath = form["on_path"]
 	q.selectSources = form["source"]
 	q.selectTargets = form["target"]
+	q.selectValues = form["value"]
 
 	// Validate and expand conditions
 	conditionStrs, ok := form["condition"]
@@ -363,6 +365,8 @@ func (q *Query) populateFromForm(form url.Values) error {
 				q.groups[i] = &SimpleGroupSpec{Name: "source", Column: "path.source", ExtTable: "paths"}
 			case "target":
 				q.groups[i] = &SimpleGroupSpec{Name: "target", Column: "path.target", ExtTable: "paths"}
+			case "value":
+				q.groups[i] = &SimpleGroupSpec{Name: "value", Column: "value", ExtTable: ""}
 			default:
 				return PTOErrorf("unsupported group name %s", groupStr).StatusIs(http.StatusBadRequest)
 			}
@@ -551,6 +555,14 @@ func (q *Query) URLEncoded() string {
 	})
 	for i := range q.selectConditions {
 		out += fmt.Sprintf("&condition=%s", q.selectConditions[i].Name)
+	}
+
+	// add sorted values
+	sort.SliceStable(q.selectValues, func(i, j int) bool {
+		return q.selectValues[i] < q.selectValues[j]
+	})
+	for i := range q.selectValues {
+		out += fmt.Sprintf("&value=%s", q.selectValues[i])
 	}
 
 	// add sorted groups
@@ -856,6 +868,16 @@ func (q *Query) whereClauses(pq *orm.Query) *orm.Query {
 		})
 	}
 
+	// values
+	if len(q.selectValues) > 0 {
+		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
+			for _, val := range q.selectValues {
+				qq = qq.WhereOr("value = ?", val)
+			}
+			return qq, nil
+		})
+	}
+
 	// source
 	if len(q.selectSources) > 0 {
 		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
@@ -956,6 +978,8 @@ func joinGroupExtTable(q *orm.Query, extTable string) *orm.Query {
 		return q.Join("JOIN conditions AS condition ON condition.id = observation.condition_id")
 	case "paths":
 		return q.Join("JOIN paths AS path ON path.id = observation.path_id")
+	case "":
+		return q
 	default:
 		panic("internal error: attempt to join unjoinable external table while grouping")
 	}
