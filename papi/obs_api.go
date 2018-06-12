@@ -231,6 +231,7 @@ func (oa *ObsAPI) handleMetadataQuery(w http.ResponseWriter, r *http.Request) {
 
 	if queryActive == false {
 		http.Error(w, "no query parameters given", http.StatusBadRequest)
+		return
 	}
 
 	oa.writeSetListResponse(w, setIds, r.Form.Get("page"))
