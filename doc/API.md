@@ -71,6 +71,7 @@ The following reserved and virtual metadata keys are presently supported:
 | `_owner`        | Identity (via email) of user or organization owning the file/campaign   |
 | `_time_start`   | Timestamp of first observation in the raw data file, in ISO8601 format  |
 | `_time_end`     | Time of last observation in the raw data file, in ISO8601 format        |
+| `_deprecated`   | If present, timestamp at which an observation set was marked deprecated |
 | `__data`        | URL of the resource containing file data.                               |
 | `__data_size`   | Size of the file in bytes. 0 if the data file has not been uploaded.    |
 
@@ -100,8 +101,6 @@ are listed below:
 | `obs`               | `application/vnd.mami.ndjson` | Uncompressed observations in [OSF](OBSETS.md) |
 
 ## Raw data API usage
-
-*FIXME: replace URL with an example URL*
 
 We use [curl](https://curl.haxx.se) to illustrate the usage of the PTO raw
 API. We assume the API is rooted at `https://pto.example.com/`, and that the
@@ -226,12 +225,14 @@ $ curl -H "Authorization: APIKEY abadc0de" $DATAURL > downloaded_file.json
 
 ### Changing Metadata and Data
 
-Once a file has been uploaded, its data can no longer be changed. Metadata can
-be changed by uploading a new metadata object.
+Metadata can be changed by uploading a new metadata object.
+
+Once a file has been uploaded, its data can no longer be changed. 
 
 Files can currently not be deleted via the API, though a file can be fully
 deleted by removing the file and metadata file from the filesystem backing the
-raw data store.
+raw data store. To mark a file (or a campaign) as no longer valid, use the
+`_deprecated` system metadata tag.
 
 # Observation Access
  
@@ -290,6 +291,7 @@ The following reserved and virtual metadata keys are presently supported:
 | `_sources`      | Array of PTO URLs of raw data sources and observation sets   |
 | `_analyzer`     | URL of analyzer metadata                                     |
 | `_conditions`   | Array of conditions declared in the observation set          |
+| `_deprecated`   | If present, timestamp at which an observation set was marked deprecated |
 | `__obs_count`   | Count of observations in the observation set                 |
 | `__data`        | URL of the resource containing observation set data          |
 
