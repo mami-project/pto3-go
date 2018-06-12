@@ -26,7 +26,11 @@ type ClientObservationSet struct {
 type ClientSetList struct {
 	Sets []string `json:"sets"`
 	Prev string   `json:"prev"`
-	Next string   `json:"prev"`
+	Next string   `json:"next"`
+}
+
+type ClientConditionList struct {
+	Conditions []string `json:"conditions"`
 }
 
 // func WriteObservations(obsdat []pto3.Observation, out io.Writer) error {
@@ -274,6 +278,24 @@ func TestObsQuery(t *testing.T) {
 
 	if len(setlist.Sets) != 1 || setlist.Sets[0] != fmt.Sprintf("https://ptotest.mami-project.eu/obs/%x", TestQueryCacheSetID) {
 		t.Fatalf("unexpected result for analyzer query: %v", setlist.Sets)
+	}
+
+	res = executeRequest(TestRouter, t, "GET", "https://ptotest.mami-project.eu/obs/conditions", nil, "", GoodAPIKey, http.StatusOK)
+
+	var condlist ClientConditionList
+	if err := json.Unmarshal(res.Body.Bytes(), &condlist); err != nil {
+		t.Fatal(err)
+	}
+
+	conditionListOk := false
+	for _, c := range condlist.Conditions {
+		if c == "pto.test.color.none_more_black" {
+			conditionListOk = true
+			break
+		}
+	}
+	if !conditionListOk {
+		t.Fatal("missing test condition in /obs/conditions")
 	}
 
 	res = executeRequest(TestRouter, t, "GET", "https://ptotest.mami-project.eu/obs/by_metadata?k=this_is_the_query_test_obset&condition=pto.test.color.orange", nil, "", GoodAPIKey, http.StatusOK)

@@ -229,6 +229,39 @@ func (oa *ObsAPI) handleMetadataQuery(w http.ResponseWriter, r *http.Request) {
 	oa.writeSetListResponse(w, setIds, r.Form.Get("page"))
 }
 
+// handleConditionQuery handles GET /obs/conditions. It requires two
+// URL/form parameters: 'k', the key to search for, and 'v', the value to
+// search for.
+
+func (oa *ObsAPI) handleConditionQuery(w http.ResponseWriter, r *http.Request) {
+	// fail if not authorized
+	if !oa.azr.IsAuthorized(w, r, "read_obs") {
+		return
+	}
+
+	// load condition cache
+	condCache, err := pto3.LoadConditionCache(oa.db)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "retrieving conditions", err)
+		return
+	}
+
+	// dump it to JSON
+	out := struct {
+		C []string `json:"conditions"`
+	}{C: condCache.Names()}
+
+	outb, err := json.Marshal(&out)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "marshaling condition list", err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(outb)
+}
+
 // handleCreateSet handles POST /obs/create. It requires a JSON object with
 // observation set metadata in the request. It echoes back the metadata as a
 // JSON object in the response, with a link to the created object in the __link
@@ -494,6 +527,7 @@ func (oa *ObsAPI) EnableQueryLogging() {
 func (oa *ObsAPI) addRoutes(r *mux.Router, l *log.Logger) {
 	r.HandleFunc("/obs", LogAccess(l, oa.handleListSets)).Methods("GET")
 	r.HandleFunc("/obs/by_metadata", LogAccess(l, oa.handleMetadataQuery)).Methods("GET", "POST")
+	r.HandleFunc("/obs/conditions", LogAccess(l, oa.handleConditionQuery)).Methods("GET")
 	r.HandleFunc("/obs/create", LogAccess(l, oa.handleCreateSet)).Methods("POST")
 	r.HandleFunc("/obs/{set}", LogAccess(l, oa.handleGetMetadata)).Methods("GET")
 	r.HandleFunc("/obs/{set}", LogAccess(l, oa.handlePutMetadata)).Methods("PUT")
