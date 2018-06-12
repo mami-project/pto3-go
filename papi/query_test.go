@@ -23,10 +23,11 @@ type testQueryMetadata struct {
 }
 
 type testResultSet struct {
-	Prev   string          `json:"prev"`
-	Next   string          `json:"next"`
-	Obs    [][]string      `json:"obs"`
-	Groups [][]interface{} `json:"groups"`
+	Prev       string          `json:"prev"`
+	Next       string          `json:"next"`
+	Obs        [][]string      `json:"obs"`
+	Groups     [][]interface{} `json:"groups"`
+	TotalCount int             `json:"total_count"`
 }
 
 func TestQueryLifecycle(t *testing.T) {
@@ -75,6 +76,10 @@ func TestQueryLifecycle(t *testing.T) {
 
 		if qr.Obs == nil {
 			t.Fatal("Result retrieval missing observations")
+		}
+
+		if qr.TotalCount != 0 && qr.TotalCount != expectedRowCount {
+			t.Fatalf("Got pagination total count %d, expected %d", qr.TotalCount, expectedRowCount)
 		}
 
 		rowCount += len(qr.Obs)

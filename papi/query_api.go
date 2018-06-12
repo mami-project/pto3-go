@@ -204,11 +204,13 @@ func (qa *QueryAPI) handleGetResults(w http.ResponseWriter, r *http.Request) {
 	if more {
 		nextLink, _ := qa.config.LinkTo(fmt.Sprintf("/query/%s/result?page=%d", q.Identifier, page+1))
 		robj["next"] = nextLink
+		robj["total_count"] = q.ResultRowCount()
 	}
 
 	if page > 1 {
 		prevLink, _ := qa.config.LinkTo(fmt.Sprintf("/query/%s/result?page=%d", q.Identifier, page-1))
 		robj["prev"] = prevLink
+		robj["total_count"] = q.ResultRowCount()
 	}
 
 	outb, err := json.Marshal(robj)
