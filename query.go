@@ -248,6 +248,9 @@ type Query struct {
 	Executed  *time.Time
 	Completed *time.Time
 
+	// Result Row Count (cached)
+	resultRowCount int
+
 	// Errors, references, and sources
 	ExecutionError error
 	ExtRef         string
@@ -589,6 +592,31 @@ func (q *Query) generateSources() error {
 	return nil
 }
 
+func (q *Query) ResultRowCount() int {
+	if q.resultRowCount > 0 {
+		return q.resultRowCount
+	}
+
+	if q.Completed == nil {
+		return 0
+	}
+
+	// okay, we have to scan the file
+	resultFile, err := q.ReadResultFile()
+	if err != nil {
+		return 0
+	}
+	defer resultFile.Close()
+
+	q.resultRowCount = 0
+	resultScanner := bufio.NewScanner(resultFile)
+	for resultScanner.Scan() {
+		q.resultRowCount++
+	}
+
+	return q.resultRowCount
+}
+
 // ResultLink generates a link to the file containing query results.
 func (q *Query) ResultLink() string {
 	link, _ := q.qc.config.LinkTo(fmt.Sprintf("query/%s/result", q.Identifier))
@@ -615,7 +643,7 @@ func (q *Query) modificationTime() *time.Time {
 }
 
 func (q *Query) MarshalJSON() ([]byte, error) {
-	jobj := make(map[string]string)
+	jobj := make(map[string]interface{})
 
 	// Store the query itself in its urlencoded form
 	jobj["__encoded"] = q.URLEncoded()
@@ -635,10 +663,12 @@ func (q *Query) MarshalJSON() ([]byte, error) {
 		} else if q.ExtRef != "" {
 			jobj["__state"] = "permanent"
 			jobj["_ext_ref"] = q.ExtRef
-			jobj["__result"] = jobj["__link"] + "/result"
+			jobj["__result"] = jobj["__link"].(string) + "/result"
+			jobj["__row_count"] = q.ResultRowCount()
 		} else {
 			jobj["__state"] = "complete"
-			jobj["__result"] = jobj["__link"] + "/result"
+			jobj["__result"] = jobj["__link"].(string) + "/result"
+			jobj["__row_count"] = q.ResultRowCount()
 		}
 		jobj["__completed"] = q.Completed.Format(time.RFC3339)
 		jobj["__executed"] = q.Executed.Format(time.RFC3339)

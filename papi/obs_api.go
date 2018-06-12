@@ -36,9 +36,10 @@ func (oa *ObsAPI) writeMetadataResponse(w http.ResponseWriter, set *pto3.Observa
 }
 
 type setList struct {
-	Sets []string
-	Next string
-	Prev string
+	Sets       []string `json:"sets"`
+	Next       string   `json:"next"`
+	Prev       string   `json:"prev"`
+	TotalCount int      `json:"total_count"`
 }
 
 func (sl *setList) MarshalJSON() ([]byte, error) {
@@ -70,10 +71,12 @@ func (oa *ObsAPI) writeSetListResponse(w http.ResponseWriter, setIds []int, page
 
 		if len(setIds) > (page+1)*oa.config.PageLength {
 			out.Next, _ = oa.config.LinkTo(fmt.Sprintf("/obs?page=%d", page+1))
+			out.TotalCount = len(setIds)
 		}
 
 		if page > 0 {
 			out.Prev, _ = oa.config.LinkTo(fmt.Sprintf("/obs?page=%d", page-1))
+			out.TotalCount = len(setIds)
 		}
 
 		endOffset := offset + oa.config.PageLength
