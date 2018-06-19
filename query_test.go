@@ -157,6 +157,7 @@ func TestOneGroupQueries(t *testing.T) {
 		{"time_start=2017-12-05&time_end=2017-12-06&group=day_hour", "14", 3412},
 		{"time_start=2017-12-05&time_end=2017-12-06&group=condition&option=count_targets", "pto.test.color.red", 1832},
 		{"time_start=2017-12-05&time_end=2017-12-06&group=value", "0", 14400},
+		{"time_start=2017-12-05&time_end=2017-12-06&group=feature", "pto", 14400},
 	}
 
 	for i, qspec := range testQueries {
