@@ -361,6 +361,8 @@ func (q *Query) populateFromForm(form url.Values) error {
 				q.groups[i] = &DatePartGroupSpec{Part: "hour", Column: "time_start"}
 			case "condition":
 				q.groups[i] = &SimpleGroupSpec{Name: "condition", Column: "condition.name", ExtTable: "conditions"}
+			case "feature":
+				q.groups[i] = &SimpleGroupSpec{Name: "feature", Column: "substring(condition.name from '^[^\\\\.]+')", ExtTable: "conditions"}
 			case "source":
 				q.groups[i] = &SimpleGroupSpec{Name: "source", Column: "path.source", ExtTable: "paths"}
 			case "target":

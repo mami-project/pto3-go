@@ -574,6 +574,7 @@ available:
 | `week_day`    | Count by day of week of time_start (7 groups)      |
 | `day_hour`    | Count by hour of day of time_start (24 groups)     | 
 | `condition`   | Count by condition                                 |
+| `feature`     | Count by feature (first component of condition)    |
 | `value`       | Count by condition value                           |
 | `source`      | Count by first element in path                     |
 | `target`      | Count by last element in path                      |
@@ -584,7 +585,7 @@ The result of an aggregation query is a JSON object, the fields of which are as 
 | -------------- | ----------------------------------------------------|
 | `prev`         | Link to previous page (see Pagination)              |
 | `next`         | Link to next page (see Pagination)                  |
-| `groups`       | *[EDITOR'S NOTE: determine best way to represent this]* |
+| `groups`       | List of JSON arrays containing count in final position, by group(s) |
 
 
 # Pagination
