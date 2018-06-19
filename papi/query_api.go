@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/gorilla/mux"
@@ -65,18 +66,37 @@ func (qa *QueryAPI) handleList(w http.ResponseWriter, r *http.Request) {
 	w.Write(outb)
 }
 
+func (qa *QueryAPI) authorizedToSubmit(w http.ResponseWriter, r *http.Request, form url.Values) bool {
+
+	// first check for all query types
+	if qa.azr.IsAuthorized(w, r, "submit_query") {
+		return true
+	}
+
+	// now check by query type
+	perm := "submit_query_obs"
+
+	if _, ok := form["group"]; ok {
+		perm = "submit_query_group"
+	}
+
+	return qa.azr.IsAuthorized(w, r, perm)
+}
+
 func (qa *QueryAPI) handleSubmit(w http.ResponseWriter, r *http.Request) {
+
+	// Parse the form (we need this to check authorization)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "error parsing form", http.StatusBadRequest)
+	}
+
 	// fail if not authorized
-	if !qa.azr.IsAuthorized(w, r, "submit_query") {
+	if !qa.authorizedToSubmit(w, r, r.Form) {
 		return
 	}
 
 	// execute query, but don't wait for it beyond the immediate wait.
 	// This will give us an existing query if it's already in the cache.
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "error parsing form", http.StatusBadRequest)
-	}
-
 	q, _, err := qa.qc.ExecuteQueryFromForm(r.Form, make(chan struct{}))
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "parsing query", err)
