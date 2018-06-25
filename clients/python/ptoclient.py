@@ -295,6 +295,9 @@ class PTOQuery:
         return self._results
     
 class PTOSet:
+    """
+    Represents a specific observation set in an instance of the PTO.
+    """
     def __init__(self, url=None, token=None, obsfile=None):
         super().__init__()
         
@@ -383,6 +386,9 @@ class PTOSet:
         return self._obsdata
       
 class PTOClient:
+    """
+    Client for accessing observation sets and queries in specific instance of the PTO
+    """
     
     def __init__(self, baseurl, token):
         super().__init__()
