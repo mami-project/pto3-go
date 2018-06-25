@@ -681,7 +681,6 @@ func (q *Query) DumpJSONObject(toDisk bool) ([]byte, error) {
 	}
 	if q.Submitted != nil {
 		jobj["__created"] = q.Submitted.Format(time.RFC3339)
-		jobj["__modified"] = q.modificationTime().Format(time.RFC3339)
 	}
 
 	// Store/emit error
@@ -709,6 +708,11 @@ func (q *Query) DumpJSONObject(toDisk bool) ([]byte, error) {
 		jobj["__link"], err = q.qc.config.LinkTo("query/" + q.Identifier)
 		if err != nil {
 			return nil, err
+		}
+
+		// modification time
+		if q.Submitted != nil {
+			jobj["__modified"] = q.modificationTime().Format(time.RFC3339)
 		}
 
 		// state, result, and row count
@@ -763,8 +767,8 @@ func (q *Query) UnmarshalJSON(b []byte) error {
 	}
 
 	// parse timestamps
-	if jmap["__submitted"] != "" {
-		ts, err := time.Parse(time.RFC3339, jmap["__submitted"])
+	if jmap["__created"] != "" {
+		ts, err := time.Parse(time.RFC3339, jmap["__created"])
 		if err != nil {
 			return PTOWrapError(err)
 		}
