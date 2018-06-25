@@ -325,6 +325,14 @@ func (q *Query) populateFromForm(form url.Values) error {
 	// Validate and expand conditions
 	conditionStrs, ok := form["condition"]
 	if ok {
+
+		// don't panic on nil qc/cidcache (DEBUG)
+		if q.qc == nil {
+			return PTOErrorf("qc is nil expanding condition array %v", form["condition"])
+		} else if q.qc.cidCache == nil {
+			return PTOErrorf("cidCache is nil expanding condition array %v", form["condition"])
+		}
+
 		q.selectConditions = make([]Condition, 0)
 		for _, conditionStr := range conditionStrs {
 			conditions, err := q.qc.cidCache.ConditionsByName(q.qc.db, conditionStr)
