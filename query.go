@@ -117,7 +117,7 @@ func (qc *QueryCache) fetchQuery(identifier string) (*Query, error) {
 		return nil, PTOWrapError(err)
 	}
 
-	var q Query
+	q := Query{qc: qc}
 	if err := json.Unmarshal(b, &q); err != nil {
 		return nil, PTOWrapError(err)
 	}
@@ -129,7 +129,8 @@ func (qc *QueryCache) fetchQuery(identifier string) (*Query, error) {
 	// Stick query in the cache
 	qc.query[identifier] = &q
 
-	// FIXME any query we fetch in executing state necessarily crashed. need a way to revive these.
+	// FIXME any query we fetch in executing state necessarily crashed.
+	// we need to restart these. see #59.
 
 	return &q, nil
 }
