@@ -665,57 +665,75 @@ func (q *Query) modificationTime() *time.Time {
 	}
 }
 
-func (q *Query) MarshalJSON() ([]byte, error) {
+func (q *Query) DumpJSONObject(toDisk bool) ([]byte, error) {
+
 	jobj := make(map[string]interface{})
 
-	// Store the query itself in its urlencoded form
+	// Store/emit the query itself in its urlencoded form
 	jobj["__encoded"] = q.URLEncoded()
 
-	// Store a link to the query using the API
-	var err error
-	jobj["__link"], err = q.qc.config.LinkTo("query/" + q.Identifier)
-	if err != nil {
-		return nil, err
-	}
-
-	// Determine state and additional information
+	// Store/emit timestamps
 	if q.Completed != nil {
-		if q.ExecutionError != nil {
-			jobj["__state"] = "failed"
-			jobj["__error"] = q.ExecutionError.Error()
-		} else if q.ExtRef != "" {
-			jobj["__state"] = "permanent"
-			jobj["_ext_ref"] = q.ExtRef
-			jobj["__result"] = jobj["__link"].(string) + "/result"
-			jobj["__row_count"] = q.ResultRowCount()
-		} else {
-			jobj["__state"] = "complete"
-			jobj["__result"] = jobj["__link"].(string) + "/result"
-			jobj["__row_count"] = q.ResultRowCount()
-		}
 		jobj["__completed"] = q.Completed.Format(time.RFC3339)
+	}
+	if q.Executed != nil {
 		jobj["__executed"] = q.Executed.Format(time.RFC3339)
+	}
+	if q.Submitted != nil {
 		jobj["__created"] = q.Submitted.Format(time.RFC3339)
 		jobj["__modified"] = q.modificationTime().Format(time.RFC3339)
-	} else {
-		jobj["__state"] = "pending"
-		if q.Executed != nil {
-			jobj["__executed"] = q.Executed.Format(time.RFC3339)
-		}
-		if q.Submitted != nil {
-			jobj["__created"] = q.Submitted.Format(time.RFC3339)
-			jobj["__modified"] = q.modificationTime().Format(time.RFC3339)
-		}
 	}
 
-	// copy metadata
+	// Store/emit error
+	if q.ExecutionError != nil {
+		jobj["__error"] = q.ExecutionError.Error()
+	}
+
+	// Store/emit arbitrary metadata
 	for k := range q.Metadata {
 		if !strings.HasPrefix(k, "__") {
 			jobj[k] = q.Metadata[k]
 		}
 	}
 
+	// Store/emit external reference
+	if q.ExtRef != "" {
+		jobj["_ext_ref"] = q.ExtRef
+	}
+
+	// Now emit ancillary data if we're not storing to disk
+	if !toDisk {
+
+		// link to this query
+		var err error
+		jobj["__link"], err = q.qc.config.LinkTo("query/" + q.Identifier)
+		if err != nil {
+			return nil, err
+		}
+
+		// state, result, and row count
+		if q.Completed != nil {
+			if q.ExecutionError != nil {
+				jobj["__state"] = "failed"
+			} else if q.ExtRef != "" {
+				jobj["__state"] = "permanent"
+				jobj["__result"] = jobj["__link"].(string) + "/result"
+				jobj["__row_count"] = q.ResultRowCount()
+			} else {
+				jobj["__state"] = "complete"
+				jobj["__result"] = jobj["__link"].(string) + "/result"
+				jobj["__row_count"] = q.ResultRowCount()
+			}
+		} else {
+			jobj["__state"] = "pending"
+		}
+	}
+
 	return json.Marshal(jobj)
+}
+
+func (q *Query) MarshalJSON() ([]byte, error) {
+	return q.DumpJSONObject(false)
 }
 
 func (q *Query) setMetadata(jmap map[string]string) {
@@ -744,7 +762,7 @@ func (q *Query) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	// store timestamps
+	// parse timestamps
 	if jmap["__submitted"] != "" {
 		ts, err := time.Parse(time.RFC3339, jmap["__submitted"])
 		if err != nil {
@@ -796,7 +814,7 @@ func (q *Query) FlushMetadata() error {
 		return PTOWrapError(err)
 	}
 
-	b, err := q.MarshalJSON()
+	b, err := q.DumpJSONObject(true)
 	if err != nil {
 		return PTOWrapError(err)
 	}

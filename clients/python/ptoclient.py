@@ -159,6 +159,9 @@ class PTOQuerySpec:
     def group_by_condition(self):
         return self._append_group("condition")
 
+    def group_by_feature(self):
+        return self._append_group("feature")
+
     def group_by_source(self):
         return self._append_group("source")
 

@@ -11,6 +11,14 @@ PostgreSQL database must be available for the PTO's use, with a user
 configured to be able to create tables, whose credentials will appear in the
 `ptoconfig.json` file below.
 
+The PTO assumes that all observation information will be stored in UTC;
+however, PostgreSQL defaults to using the local time zone. To fix this, set
+the following option in `postgresql.conf`:
+
+```
+timezone = 'utc'
+```
+
 ### Install the Server
 
 ```
