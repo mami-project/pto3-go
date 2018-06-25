@@ -745,24 +745,24 @@ func (q *Query) UnmarshalJSON(b []byte) error {
 	}
 
 	// store timestamps
-	if jmap["__time_submitted"] != "" {
-		ts, err := time.Parse(time.RFC3339, jmap["__time_submitted"])
+	if jmap["__submitted"] != "" {
+		ts, err := time.Parse(time.RFC3339, jmap["__submitted"])
 		if err != nil {
 			return PTOWrapError(err)
 		}
 		q.Submitted = &ts
 	}
 
-	if jmap["__time_executed"] != "" {
-		ts, err := time.Parse(time.RFC3339, jmap["__time_executed"])
+	if jmap["__executed"] != "" {
+		ts, err := time.Parse(time.RFC3339, jmap["__executed"])
 		if err != nil {
 			return PTOWrapError(err)
 		}
 		q.Executed = &ts
 	}
 
-	if jmap["__time_completed"] != "" {
-		ts, err := time.Parse(time.RFC3339, jmap["__time_completed"])
+	if jmap["__completed"] != "" {
+		ts, err := time.Parse(time.RFC3339, jmap["__completed"])
 		if err != nil {
 			return PTOWrapError(err)
 		}
