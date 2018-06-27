@@ -31,6 +31,8 @@ func (oa *ObsAPI) writeMetadataResponse(w http.ResponseWriter, set *pto3.Observa
 		pto3.HandleErrorHTTP(w, "marshaling metadata", err)
 		return
 	}
+
+	oa.additionalHeaders(w)
 	w.WriteHeader(status)
 	w.Write(b)
 }
@@ -100,6 +102,7 @@ func (oa *ObsAPI) writeSetListResponse(w http.ResponseWriter, setIds []int, page
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	oa.additionalHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	w.Write(outb)
 }
@@ -266,6 +269,7 @@ func (oa *ObsAPI) handleConditionQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	oa.additionalHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	w.Write(outb)
 }
@@ -440,6 +444,7 @@ func (oa *ObsAPI) handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-type", "application/vnd.mami.ndjson")
+	oa.additionalHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	if err := set.CopyDataToStream(oa.db, w); err != nil {
 		pto3.HandleErrorHTTP(w, "downloading observation set", err)
@@ -530,6 +535,12 @@ func (oa *ObsAPI) DropTables() error {
 
 func (oa *ObsAPI) EnableQueryLogging() {
 	pto3.EnableQueryLogging(oa.db)
+}
+
+func (oa *ObsAPI) additionalHeaders(w http.ResponseWriter) {
+	if oa.config.AllowOrigin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", oa.config.AllowOrigin)
+	}
 }
 
 func (oa *ObsAPI) addRoutes(r *mux.Router, l *log.Logger) {

@@ -208,6 +208,7 @@ func TestMain(m *testing.M) {
 	testConfigJSON := []byte(`
 { 	
 	"BaseURL" : "https://ptotest.mami-project.eu",
+	"AllowOrigin": "*",
 	"ContentTypes" : {
 		"test" : "application/json",
 		"osf" :  "applicaton/vnd.mami.ndjson"
@@ -258,6 +259,12 @@ func TestListRoot(t *testing.T) {
 	res := executeRequest(TestRouter, t, "GET", TestBaseURL+"/", nil, "", "", http.StatusOK)
 
 	checkContentType(t, res)
+
+	// check AllowOrigin
+	acao := res.Header().Get("Access-Control-Allow-Origin")
+	if acao != "*" {
+		t.Fatalf("Access-Control-Allow-Origin on list root is %s", acao)
+	}
 
 	var links map[string]string
 

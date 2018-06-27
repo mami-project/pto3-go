@@ -20,6 +20,9 @@ type PTOConfiguration struct {
 	// ...this right here is effing annoying but i'm not writing a custom unmarshaler just for that...
 	baseURL *url.URL
 
+	// Access-Control-Allow-Origin header on responses
+	AllowOrigin string
+
 	// API key file path
 	APIKeyFile string
 

@@ -35,6 +35,7 @@ The following keys should appear the config file:
 | `CertificateFile` | Path to X.509 certificate: support HTTP only if not present                       |
 | `PrivateKeyFile`  | Path to X.509 private key: support HTTP only if not present                       |
 | `BaseURL`         | Base URL of PTO, used for link generation                                         |
+| `AllowOrigin`     | Origin allowed to use API; set to * to disable CORS                               |
 | `AccessLogPath`   | Filename for access logging; log to stderr if missing or empty                    |
 | `ContentTypes`    | Object mapping PTO `_file_type` values to MIME content types                      |
 | `APIKeyFile`      | Filename of API key file for access control; see below for details                |
