@@ -19,7 +19,7 @@ type RawAPI struct {
 	azr    Authorizer
 }
 
-func rawMetadataResponse(w http.ResponseWriter, status int, cam *pto3.Campaign, filename string) {
+func (ra *RawAPI) rawMetadataResponse(w http.ResponseWriter, status int, cam *pto3.Campaign, filename string) {
 	var md *pto3.RawMetadata
 	var err error
 	if filename == "" {
@@ -39,6 +39,7 @@ func rawMetadataResponse(w http.ResponseWriter, status int, cam *pto3.Campaign, 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	ra.additionalHeaders(w)
 	w.WriteHeader(status)
 	w.Write(b)
 }
@@ -80,6 +81,7 @@ func (ra *RawAPI) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	ra.additionalHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	w.Write(outb)
 }
@@ -190,6 +192,7 @@ func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	ra.additionalHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	w.Write(outb)
 }
@@ -268,7 +271,7 @@ func (ra *RawAPI) handlePutCampaignMetadata(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	rawMetadataResponse(w, http.StatusCreated, cam, "")
+	ra.rawMetadataResponse(w, http.StatusCreated, cam, "")
 }
 
 // handleGetFileMetadata handles GET /raw/<campaign>/<file>, returning
@@ -301,7 +304,7 @@ func (ra *RawAPI) handleGetFileMetadata(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	rawMetadataResponse(w, http.StatusOK, cam, filename)
+	ra.rawMetadataResponse(w, http.StatusOK, cam, filename)
 }
 
 // handlePutFileMetadata handles PUT /raw/<campaign>/<file>, overwriting metadata for
@@ -364,7 +367,7 @@ func (ra *RawAPI) handlePutFileMetadata(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	rawMetadataResponse(w, http.StatusCreated, cam, filename)
+	ra.rawMetadataResponse(w, http.StatusCreated, cam, filename)
 }
 
 // handleDeleteFile handles DELETE /raw/<campaign>/<file>, deleting a file's
@@ -415,13 +418,13 @@ func (ra *RawAPI) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 
 	// write MIME type to header
 	w.Header().Set("Content-Type", ft.ContentType)
+	ra.additionalHeaders(w)
 	w.WriteHeader(http.StatusOK)
 
 	// and copy the file
 	if err := cam.ReadFileDataToStream(filename, w); err != nil {
 		pto3.HandleErrorHTTP(w, "downloading data file", err)
 		w.Write([]byte("\n\"error during download\"\n"))
-
 	}
 }
 
@@ -473,7 +476,13 @@ func (ra *RawAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// and now a reply... return file metadata
-	rawMetadataResponse(w, http.StatusCreated, cam, filename)
+	ra.rawMetadataResponse(w, http.StatusCreated, cam, filename)
+}
+
+func (ra *RawAPI) additionalHeaders(w http.ResponseWriter) {
+	if ra.config.AllowOrigin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", ra.config.AllowOrigin)
+	}
 }
 
 func (ra *RawAPI) addRoutes(r *mux.Router, l *log.Logger) {

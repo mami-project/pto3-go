@@ -13,6 +13,12 @@ type RootAPI struct {
 	config *pto3.PTOConfiguration
 }
 
+func (ra *RootAPI) additionalHeaders(w http.ResponseWriter) {
+	if ra.config.AllowOrigin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", ra.config.AllowOrigin)
+	}
+}
+
 func (ra *RootAPI) handleRoot(w http.ResponseWriter, r *http.Request) {
 
 	links := make(map[string]string)
@@ -39,6 +45,7 @@ func (ra *RootAPI) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	ra.additionalHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	w.Write(linksj)
 }

@@ -19,7 +19,7 @@ type QueryAPI struct {
 	azr    Authorizer
 }
 
-func queryResponse(w http.ResponseWriter, status int, q *pto3.Query) {
+func (qa *QueryAPI) queryResponse(w http.ResponseWriter, status int, q *pto3.Query) {
 	b, err := json.Marshal(q)
 	if err != nil {
 		pto3.HandleErrorHTTP(w, "marshalling query", err)
@@ -27,6 +27,7 @@ func queryResponse(w http.ResponseWriter, status int, q *pto3.Query) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	qa.additionalHeaders(w)
 	w.WriteHeader(status)
 	w.Write(b)
 }
@@ -62,6 +63,7 @@ func (qa *QueryAPI) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	qa.additionalHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	w.Write(outb)
 }
@@ -103,7 +105,7 @@ func (qa *QueryAPI) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queryResponse(w, http.StatusOK, q)
+	qa.queryResponse(w, http.StatusOK, q)
 }
 
 func (qa *QueryAPI) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
@@ -127,7 +129,7 @@ func (qa *QueryAPI) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queryResponse(w, http.StatusOK, q)
+	qa.queryResponse(w, http.StatusOK, q)
 }
 
 func (qa *QueryAPI) handlePutMetadata(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +180,7 @@ func (qa *QueryAPI) handlePutMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queryResponse(w, http.StatusOK, q)
+	qa.queryResponse(w, http.StatusOK, q)
 }
 
 func (qa *QueryAPI) handleGetResults(w http.ResponseWriter, r *http.Request) {
@@ -239,8 +241,15 @@ func (qa *QueryAPI) handleGetResults(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	qa.additionalHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	w.Write(outb)
+}
+
+func (qa *QueryAPI) additionalHeaders(w http.ResponseWriter) {
+	if qa.config.AllowOrigin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", qa.config.AllowOrigin)
+	}
 }
 
 func (qa *QueryAPI) addRoutes(r *mux.Router, l *log.Logger) {
