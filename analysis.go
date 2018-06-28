@@ -184,6 +184,12 @@ type ParallelNormFunc func(rec []byte, rawmeta *RawMetadata, metachan chan<- map
 
 type ParallelMetadataMergeFunc func(in map[string]interface{}, accumulator map[string]interface{})
 
+func MergeByOverwrite(in map[string]interface{}, accumulator map[string]interface{}) {
+	for k, v := range in {
+		accumulator[k] = v
+	}
+}
+
 func NewParallelScanningNormalizer(metadataURL string, concurrency int) *ParallelScanningNormalizer {
 	norm := new(ParallelScanningNormalizer)
 	norm.filetypeMap = make(map[string]parallelFiletypeMapEntry)
