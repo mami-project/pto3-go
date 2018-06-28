@@ -345,8 +345,10 @@ func (oa *ObsAPI) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// force observation count
+	// force observation count (ignoring error)
 	set.CountObservations(oa.db)
+	// force interval update (ignoring error)
+	set.TimeInterval(oa.db)
 
 	oa.writeMetadataResponse(w, &set, http.StatusOK)
 }
@@ -438,7 +440,11 @@ func (oa *ObsAPI) handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// fail if no observations exist
-	if set.CountObservations(oa.db) == 0 {
+	obscount, err := set.CountObservations(oa.db)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "counting observations", err)
+		return
+	} else if obscount == 0 {
 		http.Error(w, fmt.Sprintf("Observation set %s has no observations", vars["set"]), http.StatusNotFound)
 		return
 	}
@@ -483,7 +489,11 @@ func (oa *ObsAPI) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// fail if observations exist
-	if set.CountObservations(oa.db) != 0 {
+	obscount, err := set.CountObservations(oa.db)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "counting observations", err)
+		return
+	} else if obscount != 0 {
 		http.Error(w, fmt.Sprintf("Observation set %s already uploaded", vars["set"]), http.StatusBadRequest)
 		return
 	}
@@ -519,7 +529,16 @@ func (oa *ObsAPI) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// now update observation count
-	set.CountObservations(oa.db)
+	if _, err = set.CountObservations(oa.db); err != nil {
+		pto3.HandleErrorHTTP(w, "updating observation count", err)
+		return
+	}
+
+	// update time interval
+	if _, _, err = set.TimeInterval(oa.db); err != nil {
+		pto3.HandleErrorHTTP(w, "updating time interval", err)
+		return
+	}
 
 	// and write
 	oa.writeMetadataResponse(w, &set, http.StatusCreated)

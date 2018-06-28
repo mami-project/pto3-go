@@ -293,6 +293,8 @@ The following reserved and virtual metadata keys are presently supported:
 | `_conditions`   | Array of conditions declared in the observation set          |
 | `_deprecated`   | If present, timestamp at which an observation set was marked deprecated |
 | `__obs_count`   | Count of observations in the observation set                 |
+| `__time_start`  | Timestamp of first observation start time in set             |
+| `__time_end`    | Timestamp of last observation end time in set                |
 | `__data`        | URL of the resource containing observation set data          |
 
 ## Querying Observation Sets by Metadata
@@ -448,6 +450,8 @@ below:
 | `source`        | select    | yes       | Select observations with the given element at the start of the path |
 | `target`        | select    | yes       | Select observations with the given element at the end of the path |
 | `condition`     | select    | yes       | Select observations with the given condition, with wildcards      |
+| `feature`     | select    | yes       | Select observations with the given condition feature       |
+| `aspect`     | select    | yes       | Select observations with the given condition aspect       |
 | `group`         | group     | yes       | Group observations and return counts by group  |
 | `intersect_condition` | set | yes       | Group observations by path, select paths by set intersection on conditions |
 | `option`        | options   | yes       | Specify a query option |
@@ -575,6 +579,7 @@ available:
 | `day_hour`    | Count by hour of day of time_start (24 groups)     | 
 | `condition`   | Count by condition                                 |
 | `feature`     | Count by feature (first component of condition)    |
+| `aspect`      | Count by aspect (all but last component of condition) |
 | `value`       | Count by condition value                           |
 | `source`      | Count by first element in path                     |
 | `target`      | Count by last element in path                      |

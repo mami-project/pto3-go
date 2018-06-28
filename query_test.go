@@ -99,6 +99,8 @@ func TestSelectQueries(t *testing.T) {
 	}{
 		{"time_start=2017-12-05T15%3A00%3A00Z&time_end=2017-12-05T15%3A05%3A00Z", 601},
 		{"time_start=2017-12-05T15%3A00%3A00Z&time_end=2017-12-05T15%3A05%3A00Z&condition=pto.test.color.green&condition=pto.test.color.indigo", 124},
+		{"time_start=2017-12-05T15%3A00%3A00Z&time_end=2017-12-05T15%3A05%3A00Z&feature=pto", 601},
+		{"time_start=2017-12-05T15%3A00%3A00Z&time_end=2017-12-05T15%3A05%3A00Z&aspect=pto.test.color", 601},
 		{"time_start=2017-12-05T15%3A00%3A00Z&time_end=2017-12-05T15%3A05%3A00Z&target=10.13.14.253", 0},
 		{"time_start=2017-12-05T15%3A00%3A00Z&time_end=2017-12-05T15%3A05%3A00Z&value=nonesuch", 0},
 	}
@@ -158,6 +160,7 @@ func TestOneGroupQueries(t *testing.T) {
 		{"time_start=2017-12-05&time_end=2017-12-06&group=condition&option=count_targets", "pto.test.color.red", 1832},
 		{"time_start=2017-12-05&time_end=2017-12-06&group=value", "0", 14400},
 		{"time_start=2017-12-05&time_end=2017-12-06&group=feature", "pto", 14400},
+		{"time_start=2017-12-05&time_end=2017-12-06&group=aspect", "pto.test.color", 14400},
 	}
 
 	for i, qspec := range testQueries {

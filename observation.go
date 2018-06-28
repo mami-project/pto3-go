@@ -36,10 +36,15 @@ type ObservationSet struct {
 	Created *time.Time
 	// Metadata modification timestamp
 	Modified *time.Time
+	// Cached row count
+	Count int
+	// Cached observation start time
+	TimeStart *time.Time
+	// Cached observation end time
+	TimeEnd *time.Time
 	// system metadata
 	datalink string
 	link     string
-	count    int
 }
 
 // ObservationSetCondition implements a linking table between observation sets
@@ -66,8 +71,16 @@ func (set *ObservationSet) MarshalJSON() ([]byte, error) {
 		jmap["__data"] = set.datalink
 	}
 
-	if set.count != 0 {
-		jmap["__obs_count"] = set.count
+	if set.Count != 0 {
+		jmap["__obs_count"] = set.Count
+	}
+
+	if set.TimeStart != nil {
+		jmap["__time_start"] = set.TimeStart
+	}
+
+	if set.TimeEnd != nil {
+		jmap["__time_end"] = set.TimeEnd
 	}
 
 	if set.Created != nil {
@@ -125,7 +138,7 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 			}
 			set.Conditions = make([]Condition, len(conditionNames))
 			for i := range conditionNames {
-				set.Conditions[i].Name = conditionNames[i]
+				set.Conditions[i] = *NewCondition(conditionNames[i])
 			}
 		} else if k == "__link" {
 			set.link = AsString(v)
@@ -282,12 +295,59 @@ func (set *ObservationSet) Link() string {
 	return set.link
 }
 
-// CountObservations counts observations in the database for this ObservationSet
-func (set *ObservationSet) CountObservations(db orm.DB) int {
-	if set.count == 0 {
-		set.count, _ = db.Model(&Observation{}).Where("set_id = ?", set.ID).Count()
+func (set *ObservationSet) TimeInterval(db orm.DB) (*time.Time, *time.Time, error) {
+	if set.TimeStart == nil || set.TimeEnd == nil {
+		// No start time or end time. Do we have any observations?
+		obscount, err := set.CountObservations(db)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if obscount == 0 {
+			// no, we don't
+			return nil, nil, nil
+		}
+
+		// No start time or end time. Try to select from database.
+		err = db.Model(&Observation{}).ColumnExpr("min(time_start)").Where("set_id = ?", set.ID).Select(&set.TimeStart)
+		if err != nil {
+			return nil, nil, PTOWrapError(err)
+		}
+
+		err = db.Model(&Observation{}).ColumnExpr("max(time_end)").Where("set_id = ?", set.ID).Select(&set.TimeEnd)
+		if err != nil {
+			return nil, nil, PTOWrapError(err)
+		}
+
+		// If we actually updated the time range, cache it by doing a simple update
+		if set.TimeStart != nil && set.TimeEnd != nil {
+			if err = db.Update(set); err != nil {
+				return nil, nil, PTOWrapError(err)
+			}
+		}
 	}
-	return set.count
+
+	return set.TimeStart, set.TimeEnd, nil
+}
+
+// CountObservations counts observations in the database for this ObservationSet,
+// caching the result and storing it in the database if appropriate
+func (set *ObservationSet) CountObservations(db orm.DB) (int, error) {
+	var err error
+	if set.Count == 0 {
+		set.Count, err = db.Model(&Observation{}).Where("set_id = ?", set.ID).Count()
+		if err != nil {
+			return 0, PTOWrapError(err)
+		}
+
+		// if we actually updated the count, cache it by doing a simple update
+		if set.Count != 0 {
+			if err = db.Update(set); err != nil {
+				return 0, PTOWrapError(err)
+			}
+		}
+	}
+	return set.Count, nil
 }
 
 func (set *ObservationSet) verifyConditionSet(conditionNames map[string]struct{}) error {
@@ -368,7 +428,7 @@ func (obs *Observation) unmarshalStringSlice(jslice []string, time_format string
 	obs.Path = &Path{String: jslice[3]}
 	obs.Path.Parse()
 
-	obs.Condition = &Condition{Name: jslice[4]}
+	obs.Condition = NewCondition(jslice[4])
 
 	if len(jslice) >= 6 {
 		obs.Value = jslice[5]
@@ -672,7 +732,17 @@ func CopySetFromObsFile(
 		}
 
 		// now insert the observations
-		return loadObservations(cidCache, pidCache, t, set, obsfile)
+		if err := loadObservations(cidCache, pidCache, t, set, obsfile); err != nil {
+			return err
+		}
+
+		// Force the observation set count and time interval to update
+		if _, err := set.CountObservations(t); err != nil {
+			return err
+		}
+
+		_, _, err := set.TimeInterval(t)
+		return err
 	})
 
 	if err != nil {
@@ -745,7 +815,10 @@ func (set *ObservationSet) CopyDataToStream(db orm.DB, out io.Writer) error {
 	in := csv.NewReader(obspipe)
 
 	// COPY TO STDOUT doesn't seem to close the pipe, so we need to know when to stop.
-	obscount := set.CountObservations(db)
+	obscount, err := set.CountObservations(db)
+	if err != nil {
+		return err
+	}
 
 	// set up goroutine to parse observations and dump them to the writer as JSON
 	go func() {

@@ -18,7 +18,7 @@ import (
 )
 
 // set to true to allow inspection of tables after testing
-const SuppressDropTables = false
+const SuppressDropTables = true
 const SuppressDeleteRawStore = false
 const SuppressDeleteQueryCache = false
 const LogDatabase = false

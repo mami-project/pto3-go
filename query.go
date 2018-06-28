@@ -268,6 +268,8 @@ type Query struct {
 	selectSources    []string
 	selectTargets    []string
 	selectConditions []Condition
+	selectFeatures   []string
+	selectAspects    []string
 	selectValues     []string
 	groups           []GroupSpec
 
@@ -317,11 +319,13 @@ func (q *Query) populateFromForm(form url.Values) error {
 		}
 	}
 
-	// Can't really validate paths or values so just store these slices directly from the form.
+	// Can't really validate path components, values, features, or aspects, so just store these slices directly from the form.
 	q.selectOnPath = form["on_path"]
 	q.selectSources = form["source"]
 	q.selectTargets = form["target"]
 	q.selectValues = form["value"]
+	q.selectFeatures = form["feature"]
+	q.selectAspects = form["aspect"]
 
 	// Validate and expand conditions
 	conditionStrs, ok := form["condition"]
@@ -371,7 +375,9 @@ func (q *Query) populateFromForm(form url.Values) error {
 			case "condition":
 				q.groups[i] = &SimpleGroupSpec{Name: "condition", Column: "condition.name", ExtTable: "conditions"}
 			case "feature":
-				q.groups[i] = &SimpleGroupSpec{Name: "feature", Column: "substring(condition.name from '^[^\\\\.]+')", ExtTable: "conditions"}
+				q.groups[i] = &SimpleGroupSpec{Name: "feature", Column: "condition.feature", ExtTable: "conditions"}
+			case "aspect":
+				q.groups[i] = &SimpleGroupSpec{Name: "aspect", Column: "condition.aspect", ExtTable: "conditions"}
 			case "source":
 				q.groups[i] = &SimpleGroupSpec{Name: "source", Column: "path.source", ExtTable: "paths"}
 			case "target":
@@ -552,7 +558,7 @@ func (q *Query) URLEncoded() string {
 		out += fmt.Sprintf("&source=%s", q.selectSources[i])
 	}
 
-	// add sorted target
+	// add sorted targets
 	sort.SliceStable(q.selectTargets, func(i, j int) bool {
 		return q.selectTargets[i] < q.selectTargets[j]
 	})
@@ -566,6 +572,22 @@ func (q *Query) URLEncoded() string {
 	})
 	for i := range q.selectConditions {
 		out += fmt.Sprintf("&condition=%s", q.selectConditions[i].Name)
+	}
+
+	// add sorted features
+	sort.SliceStable(q.selectFeatures, func(i, j int) bool {
+		return q.selectFeatures[i] < q.selectFeatures[j]
+	})
+	for i := range q.selectFeatures {
+		out += fmt.Sprintf("&feature=%s", q.selectFeatures[i])
+	}
+
+	// add sorted aspects
+	sort.SliceStable(q.selectAspects, func(i, j int) bool {
+		return q.selectAspects[i] < q.selectAspects[j]
+	})
+	for i := range q.selectAspects {
+		out += fmt.Sprintf("&aspect=%s", q.selectAspects[i])
 	}
 
 	// add sorted values
@@ -896,6 +918,26 @@ func (q *Query) whereClauses(pq *orm.Query) *orm.Query {
 		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
 			for _, c := range q.selectConditions {
 				qq = qq.WhereOr("condition_id = ?", c.ID)
+			}
+			return qq, nil
+		})
+	}
+
+	// feature
+	if len(q.selectFeatures) > 0 {
+		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
+			for _, f := range q.selectFeatures {
+				qq = qq.WhereOr("condition.feature = ?", f)
+			}
+			return qq, nil
+		})
+	}
+
+	// aspect
+	if len(q.selectAspects) > 0 {
+		pq = pq.WhereGroup(func(qq *orm.Query) (*orm.Query, error) {
+			for _, a := range q.selectAspects {
+				qq = qq.WhereOr("condition.aspect = ?", a)
 			}
 			return qq, nil
 		})
