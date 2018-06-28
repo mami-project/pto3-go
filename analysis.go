@@ -277,6 +277,7 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 		for mdNext := range mdChan {
 			fte.mergeFunc(mdNext, mdOut)
 		}
+		close(mergeComplete)
 	}()
 
 	// start writing records
@@ -297,21 +298,21 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 
 	// start normalizing records
 	for i := 0; i < norm.concurrency; i++ {
-		go func() {
+		go func(me int) {
 			// process all records
 			for rec := range recChan {
 				obsen, err := fte.normFunc(rec.bytes, rmd, mdChan)
 				if err != nil {
-					errChan <- err
+					errChan <- PTOErrorf("error parsing record %d: %v", rec.n, err)
+					close(recordComplete[me])
 					return
 				}
-
 				obsChan <- obsen
 			}
 
 			errChan <- nil
-			close(recordComplete[i])
-		}()
+			close(recordComplete[me])
+		}(i)
 	}
 
 	// now go. split and process.
@@ -366,7 +367,6 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 
 	// all done
 	return nil
-
 }
 
 ///////////////////////////////////////////////////////////////////////
