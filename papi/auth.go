@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -41,7 +40,6 @@ func (azr *APIKeyAuthorizer) IsAuthorized(w http.ResponseWriter, r *http.Request
 			perms[k] = v
 		}
 	}
-	log.Printf("default authorization is %+v", perms)
 
 	// look for an authorization header
 	authhdr := r.Header.Get("Authorization")
@@ -60,8 +58,6 @@ func (azr *APIKeyAuthorizer) IsAuthorized(w http.ResponseWriter, r *http.Request
 				for k, v := range keyperms {
 					perms[k] = v
 				}
-				log.Printf("inherited authorization for %s is %+v", authfield[1], perms)
-
 			}
 		} else {
 			http.Error(w, fmt.Sprintf("unsupported authorization type %s", authfield[0]), http.StatusBadRequest)

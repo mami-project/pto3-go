@@ -18,7 +18,7 @@ import (
 )
 
 // set to true to allow inspection of tables after testing
-const SuppressDropTables = true
+const SuppressDropTables = false
 const SuppressDeleteRawStore = false
 const SuppressDeleteQueryCache = false
 const LogDatabase = false
@@ -138,6 +138,7 @@ func setupAZR() papi.Authorizer {
 				"read_raw:test":  true,
 				"write_raw:test": true,
 				"read_obs":       true,
+				"read_obs_data":  true,
 				"write_obs":      true,
 				"submit_query":   true,
 				"read_query":     true,
