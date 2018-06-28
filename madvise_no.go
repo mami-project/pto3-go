@@ -1,4 +1,4 @@
-// +build darwin
+// +build darwin OR windows
 
 package pto3
 
