@@ -684,7 +684,13 @@ func CopySetFromObsFile(
 		}
 
 		// now insert the observations
-		return loadObservations(cidCache, pidCache, t, set, obsfile)
+		if err := loadObservations(cidCache, pidCache, t, set, obsfile); err != nil {
+			return err
+		}
+
+		// and force-update the observation set count
+		_, err := set.CountObservations(t)
+		return err
 	})
 
 	if err != nil {
