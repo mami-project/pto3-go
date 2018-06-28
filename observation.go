@@ -36,10 +36,11 @@ type ObservationSet struct {
 	Created *time.Time
 	// Metadata modification timestamp
 	Modified *time.Time
+	// Cached row count
+	Count int
 	// system metadata
 	datalink string
 	link     string
-	count    int
 }
 
 // ObservationSetCondition implements a linking table between observation sets
@@ -66,8 +67,8 @@ func (set *ObservationSet) MarshalJSON() ([]byte, error) {
 		jmap["__data"] = set.datalink
 	}
 
-	if set.count != 0 {
-		jmap["__obs_count"] = set.count
+	if set.Count != 0 {
+		jmap["__obs_count"] = set.Count
 	}
 
 	if set.Created != nil {
@@ -283,11 +284,22 @@ func (set *ObservationSet) Link() string {
 }
 
 // CountObservations counts observations in the database for this ObservationSet
-func (set *ObservationSet) CountObservations(db orm.DB) int {
-	if set.count == 0 {
-		set.count, _ = db.Model(&Observation{}).Where("set_id = ?", set.ID).Count()
+func (set *ObservationSet) CountObservations(db orm.DB) (int, error) {
+	var err error
+	if set.Count == 0 {
+		set.Count, err = db.Model(&Observation{}).Where("set_id = ?", set.ID).Count()
+		if err != nil {
+			return 0, PTOWrapError(err)
+		}
+
+		// if we actually updated the count, cache it by doing a simple update
+		if set.Count != 0 {
+			if err = db.Update(set); err != nil {
+				return 0, PTOWrapError(err)
+			}
+		}
 	}
-	return set.count
+	return set.Count, nil
 }
 
 func (set *ObservationSet) verifyConditionSet(conditionNames map[string]struct{}) error {
@@ -745,7 +757,10 @@ func (set *ObservationSet) CopyDataToStream(db orm.DB, out io.Writer) error {
 	in := csv.NewReader(obspipe)
 
 	// COPY TO STDOUT doesn't seem to close the pipe, so we need to know when to stop.
-	obscount := set.CountObservations(db)
+	obscount, err := set.CountObservations(db)
+	if err != nil {
+		return err
+	}
 
 	// set up goroutine to parse observations and dump them to the writer as JSON
 	go func() {
