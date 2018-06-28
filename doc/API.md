@@ -293,6 +293,8 @@ The following reserved and virtual metadata keys are presently supported:
 | `_conditions`   | Array of conditions declared in the observation set          |
 | `_deprecated`   | If present, timestamp at which an observation set was marked deprecated |
 | `__obs_count`   | Count of observations in the observation set                 |
+| `__time_start`  | Timestamp of first observation start time in set             |
+| `__time_end`    | Timestamp of last observation end time in set                |
 | `__data`        | URL of the resource containing observation set data          |
 
 ## Querying Observation Sets by Metadata

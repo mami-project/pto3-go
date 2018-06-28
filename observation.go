@@ -38,6 +38,10 @@ type ObservationSet struct {
 	Modified *time.Time
 	// Cached row count
 	Count int
+	// Cached observation start time
+	TimeStart *time.Time
+	// Cached observation end time
+	TimeEnd *time.Time
 	// system metadata
 	datalink string
 	link     string
@@ -69,6 +73,14 @@ func (set *ObservationSet) MarshalJSON() ([]byte, error) {
 
 	if set.Count != 0 {
 		jmap["__obs_count"] = set.Count
+	}
+
+	if set.TimeStart != nil {
+		jmap["__time_start"] = set.TimeStart
+	}
+
+	if set.TimeEnd != nil {
+		jmap["__time_end"] = set.TimeEnd
 	}
 
 	if set.Created != nil {
@@ -283,7 +295,43 @@ func (set *ObservationSet) Link() string {
 	return set.link
 }
 
-// CountObservations counts observations in the database for this ObservationSet
+func (set *ObservationSet) TimeInterval(db orm.DB) (*time.Time, *time.Time, error) {
+	if set.TimeStart == nil || set.TimeEnd == nil {
+		// No start time or end time. Do we have any observations?
+		obscount, err := set.CountObservations(db)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if obscount == 0 {
+			// no, we don't
+			return nil, nil, nil
+		}
+
+		// No start time or end time. Try to select from database.
+		err = db.Model(&Observation{}).ColumnExpr("min(time_start)").Where("set_id = ?", set.ID).Select(&set.TimeStart)
+		if err != nil {
+			return nil, nil, PTOWrapError(err)
+		}
+
+		err = db.Model(&Observation{}).ColumnExpr("max(time_end)").Where("set_id = ?", set.ID).Select(&set.TimeEnd)
+		if err != nil {
+			return nil, nil, PTOWrapError(err)
+		}
+
+		// If we actually updated the time range, cache it by doing a simple update
+		if set.TimeStart != nil && set.TimeEnd != nil {
+			if err = db.Update(set); err != nil {
+				return nil, nil, PTOWrapError(err)
+			}
+		}
+	}
+
+	return set.TimeStart, set.TimeEnd, nil
+}
+
+// CountObservations counts observations in the database for this ObservationSet,
+// caching the result and storing it in the database if appropriate
 func (set *ObservationSet) CountObservations(db orm.DB) (int, error) {
 	var err error
 	if set.Count == 0 {
@@ -688,8 +736,12 @@ func CopySetFromObsFile(
 			return err
 		}
 
-		// and force-update the observation set count
-		_, err := set.CountObservations(t)
+		// Force the observation set count and time interval to update
+		if _, err := set.CountObservations(t); err != nil {
+			return err
+		}
+
+		_, _, err := set.TimeInterval(t)
 		return err
 	})
 

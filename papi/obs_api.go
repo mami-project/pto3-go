@@ -347,6 +347,8 @@ func (oa *ObsAPI) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
 
 	// force observation count (ignoring error)
 	set.CountObservations(oa.db)
+	// force interval update (ignoring error)
+	set.TimeInterval(oa.db)
 
 	oa.writeMetadataResponse(w, &set, http.StatusOK)
 }
@@ -529,6 +531,12 @@ func (oa *ObsAPI) handleUpload(w http.ResponseWriter, r *http.Request) {
 	// now update observation count
 	if _, err = set.CountObservations(oa.db); err != nil {
 		pto3.HandleErrorHTTP(w, "updating observation count", err)
+		return
+	}
+
+	// update time interval
+	if _, _, err = set.TimeInterval(oa.db); err != nil {
+		pto3.HandleErrorHTTP(w, "updating time interval", err)
 		return
 	}
 
