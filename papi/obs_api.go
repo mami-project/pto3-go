@@ -415,7 +415,7 @@ func (oa *ObsAPI) handlePutMetadata(w http.ResponseWriter, r *http.Request) {
 
 func (oa *ObsAPI) handleDownload(w http.ResponseWriter, r *http.Request) {
 	// fail if not authorized
-	if !oa.azr.IsAuthorized(w, r, "write_obs") {
+	if !oa.azr.IsAuthorized(w, r, "read_obs_data") {
 		return
 	}
 
