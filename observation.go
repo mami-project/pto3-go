@@ -125,7 +125,7 @@ func (set *ObservationSet) UnmarshalJSON(b []byte) error {
 			}
 			set.Conditions = make([]Condition, len(conditionNames))
 			for i := range conditionNames {
-				set.Conditions[i].Name = conditionNames[i]
+				set.Conditions[i] = *NewCondition(conditionNames[i])
 			}
 		} else if k == "__link" {
 			set.link = AsString(v)
@@ -368,7 +368,7 @@ func (obs *Observation) unmarshalStringSlice(jslice []string, time_format string
 	obs.Path = &Path{String: jslice[3]}
 	obs.Path.Parse()
 
-	obs.Condition = &Condition{Name: jslice[4]}
+	obs.Condition = NewCondition(jslice[4])
 
 	if len(jslice) >= 6 {
 		obs.Value = jslice[5]

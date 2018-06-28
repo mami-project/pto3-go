@@ -8,8 +8,31 @@ import (
 )
 
 type Condition struct {
-	ID   int
-	Name string
+	ID      int
+	Name    string
+	Feature string
+	Aspect  string
+}
+
+func NewCondition(name string) *Condition {
+	out := new(Condition)
+	out.Name = name
+
+	if firstDot := strings.Index(name, "."); firstDot > -1 {
+		out.Feature = name[0:firstDot]
+	}
+
+	if lastDot := strings.LastIndex(name, "."); lastDot > -1 {
+		out.Aspect = name[0:lastDot]
+	}
+
+	return out
+}
+
+func NewConditionWithID(id int, name string) *Condition {
+	out := NewCondition(name)
+	out.ID = id
+	return out
 }
 
 // FIXME consider replacing this with a condition cache everywhere
@@ -96,7 +119,7 @@ func (cache ConditionCache) ConditionsByName(db orm.DB, conditionName string) ([
 		out = make([]Condition, 0)
 		for cachedName := range cache {
 			if strings.HasPrefix(cachedName, conditionName[:len(conditionName)-1]) {
-				out = append(out, Condition{Name: cachedName, ID: cache[cachedName]})
+				out = append(out, *NewConditionWithID(cache[cachedName], cachedName))
 			}
 		}
 	} else {
@@ -110,7 +133,7 @@ func (cache ConditionCache) ConditionsByName(db orm.DB, conditionName string) ([
 			return nil, PTOErrorf("unknown condition %s", conditionName).StatusIs(http.StatusBadRequest)
 		}
 		out = make([]Condition, 1)
-		out[0] = Condition{Name: conditionName, ID: cache[conditionName]}
+		out[0] = *NewConditionWithID(cache[conditionName], conditionName)
 	}
 
 	return out, nil

@@ -448,6 +448,8 @@ below:
 | `source`        | select    | yes       | Select observations with the given element at the start of the path |
 | `target`        | select    | yes       | Select observations with the given element at the end of the path |
 | `condition`     | select    | yes       | Select observations with the given condition, with wildcards      |
+| `feature`     | select    | yes       | Select observations with the given condition feature       |
+| `aspect`     | select    | yes       | Select observations with the given condition aspect       |
 | `group`         | group     | yes       | Group observations and return counts by group  |
 | `intersect_condition` | set | yes       | Group observations by path, select paths by set intersection on conditions |
 | `option`        | options   | yes       | Specify a query option |
@@ -575,6 +577,7 @@ available:
 | `day_hour`    | Count by hour of day of time_start (24 groups)     | 
 | `condition`   | Count by condition                                 |
 | `feature`     | Count by feature (first component of condition)    |
+| `aspect`      | Count by aspect (all but last component of condition) |
 | `value`       | Count by condition value                           |
 | `source`      | Count by first element in path                     |
 | `target`      | Count by last element in path                      |
