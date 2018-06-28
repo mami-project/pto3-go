@@ -3,8 +3,10 @@ package pto3
 import (
 	"bufio"
 	"compress/bzip2"
+	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 )
 
@@ -33,43 +35,55 @@ func (cd ConditionSet) Conditions() []string {
 }
 
 ///////////////////////////////////////////////////////////////////////
-// ScanningNormalizer
+// ScanningNormalizers
 ///////////////////////////////////////////////////////////////////////
 
-type filetypeMapEntry struct {
+type serialFiletypeMapEntry struct {
 	splitFunc bufio.SplitFunc
-	normFunc  NormFunc
-	finalFunc MetadataFinalizeFunc
+	normFunc  SerialNormFunc
+	finalFunc SerialMetadataFinalizeFunc
 }
 
-// ScanningNormalizer implements a normalizer whose raw data input can
-// be processed using a standard library Scanner.
-type ScanningNormalizer struct {
-	filetypeMap map[string]filetypeMapEntry
+// SerialScanningNormalizer implements a normalizer whose raw data input can
+// be processed using a standard library Scanner, and which must be processed
+// in order (i.e.,nonconcurrently), as the result of the normalization of a
+// record may depend (via data stored in the output metadata accumulator) on
+// the results of normalization of previous records.
+type SerialScanningNormalizer struct {
+	filetypeMap map[string]serialFiletypeMapEntry
 	metadataURL string
 }
 
-type NormFunc func(rec string, mdin *RawMetadata, mdout map[string]interface{}) ([]Observation, error)
+// SerialNormFunc describes a record normalization function for a
+// SerialScanningNormalizer; it is called once per record, in order.
+type SerialNormFunc func(rec []byte, mdin *RawMetadata, mdout map[string]interface{}) ([]Observation, error)
 
-type MetadataFinalizeFunc func(mdin *RawMetadata, mdout map[string]interface{}) error
+// SerialMetadataFinalizeFunc is a metadata finalization function for a
+// SerialScanningNormalizer; it is called at the end of a normalization with
+// input and output metadata, to edit the latter prior to output.
+type SerialMetadataFinalizeFunc func(mdin *RawMetadata, mdout map[string]interface{}) error
 
-func NewScanningNormalizer(metadataURL string) *ScanningNormalizer {
-	norm := new(ScanningNormalizer)
-	norm.filetypeMap = make(map[string]filetypeMapEntry)
+func NewSerialScanningNormalizer(metadataURL string) *SerialScanningNormalizer {
+	norm := new(SerialScanningNormalizer)
+	norm.filetypeMap = make(map[string]serialFiletypeMapEntry)
 	norm.metadataURL = metadataURL
 	return norm
 }
 
-func (norm *ScanningNormalizer) RegisterFiletype(
+func (norm *SerialScanningNormalizer) RegisterFiletype(
 	filetype string,
 	splitFunc bufio.SplitFunc,
-	normFunc NormFunc,
-	finalFunc MetadataFinalizeFunc) {
+	normFunc SerialNormFunc,
+	finalFunc SerialMetadataFinalizeFunc) {
 
-	norm.filetypeMap[filetype] = filetypeMapEntry{splitFunc: splitFunc, normFunc: normFunc}
+	norm.filetypeMap[filetype] =
+		serialFiletypeMapEntry{
+			splitFunc: splitFunc,
+			normFunc:  normFunc,
+			finalFunc: finalFunc}
 }
 
-func (norm *ScanningNormalizer) Normalize(in io.Reader, metain io.Reader, out io.Writer) error {
+func (norm *SerialScanningNormalizer) Normalize(in *os.File, metain io.Reader, out io.Writer) error {
 
 	// read raw metadata
 	rmd, err := RawMetadataFromReader(metain, nil)
@@ -109,7 +123,7 @@ func (norm *ScanningNormalizer) Normalize(in io.Reader, metain io.Reader, out io
 	var recno int
 	for scanner.Scan() {
 		recno++
-		rec := scanner.Text()
+		rec := scanner.Bytes()
 
 		obsen, err := fte.normFunc(rec, rmd, omd)
 		if err == nil {
@@ -138,8 +152,209 @@ func (norm *ScanningNormalizer) Normalize(in io.Reader, metain io.Reader, out io
 	// add analyzer metadata link
 	omd["_analyzer"] = norm.metadataURL
 
+	// now write output metadata
+	b, err := json.Marshal(omd)
+	if err != nil {
+		return fmt.Errorf("error marshaling metadata: %s", err.Error())
+	}
+
+	if _, err := fmt.Fprintf(out, "%s\n", b); err != nil {
+		return fmt.Errorf("error writing metadata: %s", err.Error())
+	}
+
 	// all done
 	return nil
+}
+
+type parallelFiletypeMapEntry struct {
+	splitFunc bufio.SplitFunc
+	normFunc  ParallelNormFunc
+	mergeFunc ParallelMetadataMergeFunc
+}
+
+// ParallelScanningNormalizer implements a normalizer whose raw data input can be
+// processed using a standard library Scanner, and which may be processed in parallel
+type ParallelScanningNormalizer struct {
+	filetypeMap map[string]parallelFiletypeMapEntry
+	metadataURL string
+	concurrency int
+}
+
+type ParallelNormFunc func(rec []byte, rawmeta *RawMetadata, metachan chan<- map[string]interface{}) ([]Observation, error)
+
+type ParallelMetadataMergeFunc func(in map[string]interface{}, accumulator map[string]interface{})
+
+func NewParallelScanningNormalizer(metadataURL string, concurrency int) *ParallelScanningNormalizer {
+	norm := new(ParallelScanningNormalizer)
+	norm.filetypeMap = make(map[string]parallelFiletypeMapEntry)
+	norm.metadataURL = metadataURL
+	norm.concurrency = concurrency
+	return norm
+}
+
+func (norm *ParallelScanningNormalizer) RegisterFiletype(
+	filetype string,
+	splitFunc bufio.SplitFunc,
+	normFunc ParallelNormFunc,
+	mergeFunc ParallelMetadataMergeFunc) {
+
+	norm.filetypeMap[filetype] =
+		parallelFiletypeMapEntry{
+			splitFunc: splitFunc,
+			normFunc:  normFunc,
+			mergeFunc: mergeFunc}
+}
+
+type psnRecord struct {
+	n     int
+	bytes []byte
+}
+
+func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader, out io.Writer) error {
+
+	// create channels
+	recChan := make(chan *psnRecord, norm.concurrency)
+	obsChan := make(chan []Observation, norm.concurrency)
+	errChan := make(chan error, norm.concurrency)
+	mdChan := make(chan map[string]interface{}, norm.concurrency)
+
+	// create signals
+	recordComplete := make([]chan struct{}, norm.concurrency)
+	mergeComplete := make(chan struct{})
+	writeComplete := make(chan struct{})
+
+	// create error accumulators
+	var writeError, outError error
+
+	// read raw metadata
+	rmd, err := RawMetadataFromReader(metain, nil)
+	if err != nil {
+		return PTOWrapError(err)
+	}
+
+	// copy raw arbitrary metadata to output
+	mdOut := make(map[string]interface{})
+	for k, v := range rmd.Metadata {
+		mdOut[k] = v
+	}
+
+	// check filetype for compression
+	filetype := rmd.Filetype(true)
+
+	var scanner *bufio.Scanner
+	if strings.HasSuffix(filetype, "-bz2") {
+		scanner = bufio.NewScanner(bzip2.NewReader(in))
+		filetype = filetype[0 : len(filetype)-4]
+	} else {
+		scanner = bufio.NewScanner(in)
+	}
+
+	// lookup file type in registry
+	fte, ok := norm.filetypeMap[filetype]
+	if !ok {
+		return PTOErrorf("no registered handler for filetype %s", filetype)
+	}
+	scanner.Split(fte.splitFunc)
+
+	// create condition cache
+	hasCondition := make(ConditionSet)
+
+	// start merging metadata
+	go func() {
+		for mdNext := range mdChan {
+			fte.mergeFunc(mdNext, mdOut)
+		}
+	}()
+
+	// start writing records
+	go func() {
+		for obsen := range obsChan {
+			for _, o := range obsen {
+				hasCondition[o.Condition.Name] = struct{}{}
+			}
+
+			if err := WriteObservations(obsen, out); err != nil {
+				writeError = PTOErrorf("error writing observation: %v", err)
+				break
+			}
+		}
+
+		close(writeComplete)
+	}()
+
+	// start normalizing records
+	for i := 0; i < norm.concurrency; i++ {
+		recordComplete[i] = make(chan struct{})
+		go func() {
+			// process all records
+			for rec := range recChan {
+				obsen, err := fte.normFunc(rec.bytes, rmd, mdChan)
+				if err != nil {
+					errChan <- err
+					return
+				}
+
+				obsChan <- obsen
+			}
+
+			errChan <- nil
+			close(recordComplete[i])
+		}()
+	}
+
+	// now go. split and process.
+	var recno int
+	for scanner.Scan() {
+		recno++
+		recBytes := make([]byte, len(scanner.Bytes()))
+		copy(recBytes, scanner.Bytes())
+		recChan <- &psnRecord{n: recno, bytes: recBytes}
+	}
+
+	// signal shutdown to record normalizers and wait for shutdown
+	close(recChan)
+	for i := 0; i < norm.concurrency; i++ {
+		<-recordComplete[i]
+		if maybeError := <-errChan; maybeError != nil {
+			outError = maybeError
+		}
+	}
+
+	// signal shutdown to writer and wait for shutdown
+	close(obsChan)
+	<-writeComplete
+	if writeError != nil {
+		outError = writeError
+	}
+
+	// signal shutdown to merger and wait for shutdown
+	close(mdChan)
+	<-mergeComplete
+
+	// all goroutines have shut down. did we error?
+	if outError != nil {
+		return outError
+	}
+
+	// add conditions
+	mdOut["_conditions"] = hasCondition.Conditions()
+
+	// add analyzer metadata link
+	mdOut["_analyzer"] = norm.metadataURL
+
+	// now write output metadata
+	b, err := json.Marshal(mdOut)
+	if err != nil {
+		return fmt.Errorf("error marshaling metadata: %s", err.Error())
+	}
+
+	if _, err := fmt.Fprintf(out, "%s\n", b); err != nil {
+		return fmt.Errorf("error writing metadata: %s", err.Error())
+	}
+
+	// all done
+	return nil
+
 }
 
 ///////////////////////////////////////////////////////////////////////
