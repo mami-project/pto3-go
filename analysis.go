@@ -204,6 +204,10 @@ func (norm *ParallelScanningNormalizer) RegisterFiletype(
 	normFunc ParallelNormFunc,
 	mergeFunc ParallelMetadataMergeFunc) {
 
+	if mergeFunc == nil {
+		mergeFunc = MergeByOverwrite
+	}
+
 	norm.filetypeMap[filetype] =
 		parallelFiletypeMapEntry{
 			splitFunc: splitFunc,
