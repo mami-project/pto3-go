@@ -230,6 +230,9 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 
 	// create signals
 	recordComplete := make([]chan struct{}, norm.concurrency)
+	for i := 0; i < norm.concurrency; i++ {
+		recordComplete[i] = make(chan struct{})
+	}
 	mergeComplete := make(chan struct{})
 	writeComplete := make(chan struct{})
 
@@ -294,7 +297,6 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 
 	// start normalizing records
 	for i := 0; i < norm.concurrency; i++ {
-		recordComplete[i] = make(chan struct{})
 		go func() {
 			// process all records
 			for rec := range recChan {
