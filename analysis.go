@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"runtime"
 )
 
 // ConditionSet tracks conditions seen in analysis output by name.
@@ -42,6 +43,10 @@ type serialFiletypeMapEntry struct {
 	splitFunc bufio.SplitFunc
 	normFunc  SerialNormFunc
 	finalFunc SerialMetadataFinalizeFunc
+}
+
+type ScanningNormalizer interface {
+	Normalize(in *os.File, metain io.Reader, out io.Writer)
 }
 
 // SerialScanningNormalizer implements a normalizer whose raw data input can
@@ -127,7 +132,15 @@ func (norm *SerialScanningNormalizer) Normalize(in *os.File, metain io.Reader, o
 
 		obsen, err := fte.normFunc(rec, rmd, omd)
 		if err == nil {
-			return PTOErrorf("error parsing record %d: %v", recno, err)
+			if ne, ok := err.(*NormalizerFuncError); ok {
+				if ne.Abort {
+					return PTOErrorf("error normalizing record %d: %v", recno, err)
+				} else {
+					// skip this error
+				}
+			} else {
+				return PTOErrorf("error normalizing record %d: %v", recno, err)
+			}
 		}
 
 		for _, o := range obsen {
@@ -190,11 +203,23 @@ func MergeByOverwrite(in map[string]interface{}, accumulator map[string]interfac
 	}
 }
 
+// NewParallelScanningNormalizer creates a new ScanningNormalizer
+// that spawns multiple goroutines to process records using the 
+// ParallelNormFunc. The normalization function must be
+// safe to use with multiple goroutines. If concurrency is set to
+// 0 it will default to GOMAXPROCS. 
 func NewParallelScanningNormalizer(metadataURL string, concurrency int) *ParallelScanningNormalizer {
 	norm := new(ParallelScanningNormalizer)
 	norm.filetypeMap = make(map[string]parallelFiletypeMapEntry)
 	norm.metadataURL = metadataURL
 	norm.concurrency = concurrency
+
+	if concurrency == 0 {
+		// 0 is a special value to GOMAXPROCS and means
+		// "return current setting without changing it".
+		norm.concurrency = runtime.GOMAXPROCS(0)
+	}
+
 	return norm
 }
 
@@ -220,10 +245,24 @@ type psnRecord struct {
 	bytes []byte
 }
 
+// NormalizerFuncError wraps Errors caused by the normalization
+// function. If abort is true this indicates to the Normalizer
+// that it should stop and report the error. Otherwise the Normalizer
+// continues. 
+type NormalizerFuncError struct {
+	Abort bool
+	Cause error
+}
+
+func (ne *NormalizerFuncError) Error() string {
+
+	return fmt.Sprintf("normalizer error: %s", ne.Cause.Error())
+}
+
 func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader, out io.Writer) error {
 	// create channels
-	recChan := make(chan *psnRecord, norm.concurrency)
-	obsChan := make(chan []Observation, norm.concurrency)
+	recChan := make(chan *psnRecord, norm.concurrency * norm.concurrency)
+	obsChan := make(chan []Observation, norm.concurrency * norm.concurrency)
 	errChan := make(chan error, norm.concurrency)
 	mdChan := make(chan map[string]interface{}, norm.concurrency)
 
@@ -302,7 +341,7 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 			for rec := range recChan {
 				obsen, err := fte.normFunc(rec.bytes, rmd, mdChan)
 				if err != nil {
-					errChan <- PTOErrorf("error parsing record %d: %v (goroutine %d)", me, rec.n, err, me)
+					errChan <- PTOErrorf("error normalizing record %d: %v (goroutine %d)", me, rec.n, err, me)
 					close(recordComplete[me])
 					return
 				}
@@ -322,11 +361,21 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 		copy(recBytes, scanner.Bytes())
 
 		select {
+			case err = <- errChan:
+				// Is it a proper NormalizerFuncError?
+				if ne, ok := err.(*NormalizerFuncError); ok {
+					if ne.Abort {
+						outError = err
+						goto shutdown
+					} else {
+						// skip this error
+					}
+				} else { // no.. it's not
+					outError = err
+					goto shutdown
+				}
 			case recChan <- &psnRecord{n: recno, bytes: recBytes}:
 				// NOP
-			case err = <- errChan:
-				outError = err
-				goto shutdown
 		}
 	}
 
