@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"runtime"
 )
 
 // ConditionSet tracks conditions seen in analysis output by name.
@@ -42,6 +43,10 @@ type serialFiletypeMapEntry struct {
 	splitFunc bufio.SplitFunc
 	normFunc  SerialNormFunc
 	finalFunc SerialMetadataFinalizeFunc
+}
+
+type ScanningNormalizer interface {
+	Normalize(in *os.File, metain io.Reader, out io.Writer)
 }
 
 // SerialScanningNormalizer implements a normalizer whose raw data input can
@@ -127,7 +132,7 @@ func (norm *SerialScanningNormalizer) Normalize(in *os.File, metain io.Reader, o
 
 		obsen, err := fte.normFunc(rec, rmd, omd)
 		if err == nil {
-			return PTOErrorf("error parsing record %d: %v", recno, err)
+			return PTOErrorf("error normalizing record %d: %v", recno, err)
 		}
 
 		for _, o := range obsen {
@@ -190,11 +195,23 @@ func MergeByOverwrite(in map[string]interface{}, accumulator map[string]interfac
 	}
 }
 
+// NewParallelScanningNormalizer creates a new ScanningNormalizer
+// that spawns multiple goroutines to process records using the 
+// ParallelNormFunc. The normalization function must be
+// safe to use with multiple goroutines. If concurrency is set to
+// 0 it will default to GOMAXPROCS. 
 func NewParallelScanningNormalizer(metadataURL string, concurrency int) *ParallelScanningNormalizer {
 	norm := new(ParallelScanningNormalizer)
 	norm.filetypeMap = make(map[string]parallelFiletypeMapEntry)
 	norm.metadataURL = metadataURL
 	norm.concurrency = concurrency
+
+	if concurrency == 0 {
+		// 0 is a special value to GOMAXPROCS and means
+		// "return current setting without changing it".
+		norm.concurrency = runtime.GOMAXPROCS(0)
+	}
+
 	return norm
 }
 
@@ -221,10 +238,15 @@ type psnRecord struct {
 }
 
 func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader, out io.Writer) error {
-
 	// create channels
-	recChan := make(chan *psnRecord, norm.concurrency)
-	obsChan := make(chan []Observation, norm.concurrency)
+
+	// (munt): It seems yet unclear how to determine the "ideal" channel size
+	//         as either too large channels or too small channels have some
+	//         impact (either positive or negative) on the performance.
+	//         Until we know how to calculate this value experimental evidence
+	//         suggests that "a little extra room" is at least not hurtful.
+	recChan := make(chan *psnRecord, norm.concurrency * norm.concurrency)
+	obsChan := make(chan []Observation, norm.concurrency * norm.concurrency)
 	errChan := make(chan error, norm.concurrency)
 	mdChan := make(chan map[string]interface{}, norm.concurrency)
 
@@ -303,34 +325,40 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 			for rec := range recChan {
 				obsen, err := fte.normFunc(rec.bytes, rmd, mdChan)
 				if err != nil {
-					errChan <- PTOErrorf("error parsing record %d: %v", rec.n, err)
+					errChan <- PTOErrorf("error normalizing record %d: %v (goroutine %d)", me, rec.n, err, me)
 					close(recordComplete[me])
 					return
 				}
 				obsChan <- obsen
 			}
 
-			errChan <- nil
 			close(recordComplete[me])
 		}(i)
 	}
 
 	// now go. split and process.
 	var recno int
+
 	for scanner.Scan() {
 		recno++
 		recBytes := make([]byte, len(scanner.Bytes()))
 		copy(recBytes, scanner.Bytes())
-		recChan <- &psnRecord{n: recno, bytes: recBytes}
+
+		select {
+			case err = <- errChan:
+				outError = err
+				goto shutdown
+			case recChan <- &psnRecord{n: recno, bytes: recBytes}:
+				// NOP
+		}
 	}
+
+shutdown:
 
 	// signal shutdown to record normalizers and wait for shutdown
 	close(recChan)
 	for i := 0; i < norm.concurrency; i++ {
 		<-recordComplete[i]
-		if maybeError := <-errChan; maybeError != nil {
-			outError = maybeError
-		}
 	}
 
 	// signal shutdown to writer and wait for shutdown
