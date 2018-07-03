@@ -221,7 +221,6 @@ type psnRecord struct {
 }
 
 func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader, out io.Writer) error {
-
 	// create channels
 	recChan := make(chan *psnRecord, norm.concurrency)
 	obsChan := make(chan []Observation, norm.concurrency)
@@ -303,34 +302,40 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 			for rec := range recChan {
 				obsen, err := fte.normFunc(rec.bytes, rmd, mdChan)
 				if err != nil {
-					errChan <- PTOErrorf("error parsing record %d: %v", rec.n, err)
+					errChan <- PTOErrorf("error parsing record %d: %v (goroutine %d)", me, rec.n, err, me)
 					close(recordComplete[me])
 					return
 				}
 				obsChan <- obsen
 			}
 
-			errChan <- nil
 			close(recordComplete[me])
 		}(i)
 	}
 
 	// now go. split and process.
 	var recno int
+
 	for scanner.Scan() {
 		recno++
 		recBytes := make([]byte, len(scanner.Bytes()))
 		copy(recBytes, scanner.Bytes())
-		recChan <- &psnRecord{n: recno, bytes: recBytes}
+
+		select {
+			case recChan <- &psnRecord{n: recno, bytes: recBytes}:
+				// NOP
+			case err = <- errChan:
+				outError = err
+				goto shutdown
+		}
 	}
+
+shutdown:
 
 	// signal shutdown to record normalizers and wait for shutdown
 	close(recChan)
 	for i := 0; i < norm.concurrency; i++ {
 		<-recordComplete[i]
-		if maybeError := <-errChan; maybeError != nil {
-			outError = maybeError
-		}
 	}
 
 	// signal shutdown to writer and wait for shutdown
