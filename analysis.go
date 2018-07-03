@@ -239,6 +239,12 @@ type psnRecord struct {
 
 func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader, out io.Writer) error {
 	// create channels
+
+	// (munt): It seems yet unclear how to determine the "ideal" channel size
+	//         as either too large channels or too small channels have some
+	//         impact (either positive or negative) on the performance.
+	//         Until we know how to calculate this value experimental evidence
+	//         suggests that "a little extra room" is at least not hurtful.
 	recChan := make(chan *psnRecord, norm.concurrency * norm.concurrency)
 	obsChan := make(chan []Observation, norm.concurrency * norm.concurrency)
 	errChan := make(chan error, norm.concurrency)
