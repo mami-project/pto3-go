@@ -132,15 +132,7 @@ func (norm *SerialScanningNormalizer) Normalize(in *os.File, metain io.Reader, o
 
 		obsen, err := fte.normFunc(rec, rmd, omd)
 		if err == nil {
-			if ne, ok := err.(*NormalizerFuncError); ok {
-				if ne.Abort {
-					return PTOErrorf("error normalizing record %d: %v", recno, err)
-				} else {
-					// skip this error
-				}
-			} else {
-				return PTOErrorf("error normalizing record %d: %v", recno, err)
-			}
+			return PTOErrorf("error normalizing record %d: %v", recno, err)
 		}
 
 		for _, o := range obsen {
@@ -243,20 +235,6 @@ func (norm *ParallelScanningNormalizer) RegisterFiletype(
 type psnRecord struct {
 	n     int
 	bytes []byte
-}
-
-// NormalizerFuncError wraps Errors caused by the normalization
-// function. If abort is true this indicates to the Normalizer
-// that it should stop and report the error. Otherwise the Normalizer
-// continues. 
-type NormalizerFuncError struct {
-	Abort bool
-	Cause error
-}
-
-func (ne *NormalizerFuncError) Error() string {
-
-	return fmt.Sprintf("normalizer error: %s", ne.Cause.Error())
 }
 
 func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader, out io.Writer) error {
@@ -362,18 +340,8 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 
 		select {
 			case err = <- errChan:
-				// Is it a proper NormalizerFuncError?
-				if ne, ok := err.(*NormalizerFuncError); ok {
-					if ne.Abort {
-						outError = err
-						goto shutdown
-					} else {
-						// skip this error
-					}
-				} else { // no.. it's not
-					outError = err
-					goto shutdown
-				}
+				outError = err
+				goto shutdown
 			case recChan <- &psnRecord{n: recno, bytes: recBytes}:
 				// NOP
 		}
