@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"runtime"
+	"strings"
 )
 
 // ConditionSet tracks conditions seen in analysis output by name.
@@ -196,10 +196,10 @@ func MergeByOverwrite(in map[string]interface{}, accumulator map[string]interfac
 }
 
 // NewParallelScanningNormalizer creates a new ScanningNormalizer
-// that spawns multiple goroutines to process records using the 
+// that spawns multiple goroutines to process records using the
 // ParallelNormFunc. The normalization function must be
 // safe to use with multiple goroutines. If concurrency is set to
-// 0 it will default to GOMAXPROCS. 
+// 0 it will default to GOMAXPROCS.
 func NewParallelScanningNormalizer(metadataURL string, concurrency int) *ParallelScanningNormalizer {
 	norm := new(ParallelScanningNormalizer)
 	norm.filetypeMap = make(map[string]parallelFiletypeMapEntry)
@@ -245,8 +245,8 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 	//         impact (either positive or negative) on the performance.
 	//         Until we know how to calculate this value experimental evidence
 	//         suggests that "a little extra room" is at least not hurtful.
-	recChan := make(chan *psnRecord, norm.concurrency * norm.concurrency)
-	obsChan := make(chan []Observation, norm.concurrency * norm.concurrency)
+	recChan := make(chan *psnRecord, norm.concurrency*norm.concurrency)
+	obsChan := make(chan []Observation, norm.concurrency*norm.concurrency)
 	errChan := make(chan error, norm.concurrency)
 	mdChan := make(chan map[string]interface{}, norm.concurrency)
 
@@ -345,11 +345,11 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 		copy(recBytes, scanner.Bytes())
 
 		select {
-			case err = <- errChan:
-				outError = err
-				goto shutdown
-			case recChan <- &psnRecord{n: recno, bytes: recBytes}:
-				// NOP
+		case err = <-errChan:
+			outError = err
+			goto shutdown
+		case recChan <- &psnRecord{n: recno, bytes: recBytes}:
+			// NOP
 		}
 	}
 
@@ -488,6 +488,7 @@ func AnalyzeObservationStream(in io.Reader, afn func(obs *Observation) error) (A
 			} else if currentSet.ID == 0 {
 				// new current set, cache by ID
 				currentSet.ID = obs.SetID
+				obs.Set = currentSet
 				setTable.AddSetFrom(obs)
 			} else if currentSet.ID != obs.SetID {
 				var ok bool
@@ -495,9 +496,11 @@ func AnalyzeObservationStream(in io.Reader, afn func(obs *Observation) error) (A
 				if !ok {
 					return nil, PTOErrorf("observation on input line %d refers to uncached set %x", lineno, obs.SetID)
 				}
+				obs.Set = currentSet
+			} else {
+				obs.Set = currentSet
 			}
 
-			obs.Set = currentSet
 			if err := afn(obs); err != nil {
 				return nil, PTOWrapError(err)
 			}

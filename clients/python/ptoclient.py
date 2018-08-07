@@ -7,7 +7,6 @@ from collections import deque
 import requests
 import pandas as pd
 import numpy as np
-import networkx as nx
 import dateparser
 
 def _as_time_query_string(v):
@@ -542,11 +541,3 @@ class Provenance():
                 break
 
             url = urlq.popleft()
-
-    def as_nxgraph(self):
-        g = nx.DiGraph()
-        for a in self._edges:
-            for b in self._edges[a]:
-                g.add_edge(a, b)
-        
-        return g
