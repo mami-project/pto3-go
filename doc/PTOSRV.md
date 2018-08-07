@@ -66,7 +66,8 @@ otherwise. The following permissions are used by ptosrv:
 | `write_raw:<c>` | Write raw data and metadata for campaign *c*          |
 | `read_obs`      | List observations, read observation data and metadata |
 | `write_obs`     | Write observation data and metadata                   |
-| `submit_query`  | Submit queries                                        |
+| `submit_query_obs`  | Submit observation selection queries      |
+| `submit_query_group`  | Submit aggregation queries        |
 | `read_query`    | Read query data and metadata                          |
 | `update_query`  | Update query metadata                                 |
 

@@ -430,7 +430,7 @@ meeting certain criteria from the PTO's observation database.
 
 | Method   | Resource            | Permission      | Description                                            |
 | -------- | ------------------- | --------------- | ------------------------------------------------------ |
-| `POST` or `GET` | `/query/submit` | `submit_query`  | Submit a query                                         |
+| `POST` or `GET` | `/query/submit` | `submit_query_obs` or `submit_query_group`  | Submit a query                                         |
 | `GET`    | `/query`            | `read_query`    | List currently cached and pending queries              |
 | `GET`    | `/query/<q>`        | `read_query`    | Get query metadata, including ETA for pending queries  |
 | `GET`    | `/query/<q>/result` | `read_query`    | Get query results (by convention)                      |
