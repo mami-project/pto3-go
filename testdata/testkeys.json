@@ -5,7 +5,8 @@
         "read_raw:test": true,
         "read_obs": true,
         "write_obs": true,
-        "submit_query": true,
+        "submit_query_group": true,
+        "submit_query_obs": true,
         "list_query": true,
         "read_query": true,
         "update_query": true

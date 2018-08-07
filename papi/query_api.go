@@ -69,13 +69,7 @@ func (qa *QueryAPI) handleList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (qa *QueryAPI) authorizedToSubmit(w http.ResponseWriter, r *http.Request, form url.Values) bool {
-
-	// first check for all query types
-	if qa.azr.IsAuthorized(w, r, "submit_query") {
-		return true
-	}
-
-	// now check by query type
+	// check by query type
 	perm := "submit_query_obs"
 
 	if _, ok := form["group"]; ok {
