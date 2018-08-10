@@ -1,8 +1,15 @@
-export GOROOT=/home/pto/go
+export GOPATH=/home/pto/go
+export GOROOT=/usr/local/go
+export PATH=$PATH:$GOROOT/bin
+
+# something wrong with the packages that subdirectory 
 
 go get github.com/mami-project/pto3-go
+go get github.com/mami-project/pto3-go/papi
 go get github.com/mami-project/pto3-ecn
+go get github.com/mami-project/pto3-ecn/ecn_qof_normalizer
 go get github.com/mami-project/pto3-trace
+go get github.com/mami-project/pto3-trace/cmd/pto3-trace
 
 go install github.com/mami-project/pto3-go
 go install github.com/mami-project/pto3-go/papi
