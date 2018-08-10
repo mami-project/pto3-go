@@ -399,7 +399,7 @@ class PTOClient:
         self._baseurl = baseurl
         self._token = token
     
-    def sets_by_metadata(self, k=None, v=None, source=None, analyzer=None):
+    def sets_by_metadata(self, k=None, v=None, source=None, analyzer=None, condition=None):
         params = {}
         
         if k:
@@ -410,6 +410,8 @@ class PTOClient:
             params["source"] = source
         if analyzer:
             params["analyzer"] = analyzer
+        if condition:
+            params["condition"] = condition
         
         r = requests.get(self._baseurl+"obs/by_metadata", params=params,
                          headers = _headers_for_token(self._token))

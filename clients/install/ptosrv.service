@@ -1,0 +1,16 @@
+[Unit]
+Description=pto3 server (go)
+After=syslog.target
+
+[Service]
+ExecStart=/home/pto/go/bin/ptosrv \
+        -config /etc/pto/ptoconfig.json
+User=pto
+Group=pto
+Restart=on-failure
+Type=simple
+StandardError=syslog
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target

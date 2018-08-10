@@ -31,6 +31,23 @@ func main() {
 	}
 	log.Printf("ptosrv starting with configuration at %s...", *configPath)
 
+	// initialize database and exit if -initdb given
+	if *initdb {
+		azr := &papi.NullAuthorizer{}
+		r := mux.NewRouter()
+		obsapi := papi.NewObsAPI(config, azr, r)
+		if obsapi == nil {
+			log.Fatalf("-initdb given but no observation API configuration available in %s", *configPath)
+		}
+
+		if err := obsapi.CreateTables(); err != nil {
+			log.Fatal(err)
+		}
+
+		log.Printf("Observation database initialized; exiting...")
+		return
+	}
+
 	// create an API key authorizer
 	azr, err := papi.LoadAPIKeys(config.APIKeyFile)
 	if err != nil {
