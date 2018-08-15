@@ -68,10 +68,12 @@ func main() {
 
 	pidCache := make(pto3.PathCache)
 
-	log.Printf("autonorm starting for campaigns %v", aconfig.Autonorm.Campaigns)
+	log.Printf("autnorm starting with configuration %+v", aconfig.Autonorm)
 
 	// for each campaign directory
 	for _, camname := range aconfig.Autonorm.Campaigns {
+
+		log.Printf("scanning campaign %s", camname)
 
 		// retrieve campaign and metadata
 		cam, err := rds.CampaignForName(camname)
@@ -112,9 +114,9 @@ func main() {
 
 			if len(osids) > 0 {
 				if len(osids) == 1 {
-					log.Printf("skipping source %s: already in set %x", filelink, osids[0])
+					log.Printf("skipping %s: already in set %x", filelink, osids[0])
 				} else {
-					log.Printf("skipping source %s: already in %d sets including %x", filelink, len(osids), osids[0])
+					log.Printf("skipping %s: already in %d sets including %x", filelink, len(osids), osids[0])
 
 				}
 
@@ -124,8 +126,9 @@ func main() {
 
 				normalizer := aconfig.Autonorm.Normalizers[filetype.Filetype]
 
-				if normalizer != "" {
-					log.Fatalf("no configured normalizer for file %s in campaign %s with filetype %s", filename, camname, filetype.Filetype)
+				if normalizer == "" {
+					log.Printf("skipping %s: no normalizer for filetype", filelink, filetype.Filetype)
+					continue
 				}
 
 				// and now we have a normalizer. create a temporary output file.
