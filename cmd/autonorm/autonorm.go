@@ -6,15 +6,16 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 
 	"github.com/go-pg/pg"
 	pto3 "github.com/mami-project/pto3-go"
 )
 
 type autonormConfig struct {
-	Campaigns   []string
-	Normalizers map[string]string
+	Autonorm struct {
+		Campaigns   []string
+		Normalizers map[string]string
+	}
 }
 
 func newAutonormConfig(filename string) (*autonormConfig, error) {
@@ -40,7 +41,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// get autonormalizer configuration
+	// get autonormalizer configuration from the PTO config file
 	aconfig, err := newAutonormConfig(pconfig.ConfigFilePath)
 	if err != nil {
 		log.Fatal(err)
@@ -68,7 +69,7 @@ func main() {
 	pidCache := make(pto3.PathCache)
 
 	// for each campaign directory
-	for _, camname := range aconfig.Campaigns {
+	for _, camname := range aconfig.Autonorm.Campaigns {
 
 		// retrieve campaign and metadata
 		cam, err := rds.CampaignForName(camname)
@@ -84,20 +85,21 @@ func main() {
 
 		for _, filename := range filenames {
 
+			// generate a link to this file for source
+			filelink, err := pconfig.LinkTo(fmt.Sprintf("/raw/%s/%s", camname, filename))
+			if err != nil {
+				log.Fatal(err)
+			}
+
 			// skip if deprecated
 			filemd, err := cam.GetFileMetadata(filename)
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			if filemd.Get("_deprecated", true) != "" {
+			if deprecated := filemd.Get("_deprecated", true); deprecated != "" {
+				log.Printf("skipping %s: deprecated %s", filelink, deprecated)
 				continue
-			}
-
-			// generate a link to this file for source
-			filelink, err := pconfig.LinkTo(fmt.Sprintf("/raw/%s/%s", camname, filename))
-			if err != nil {
-				log.Fatal(err)
 			}
 
 			// find observation sets claiming this file as a source
@@ -106,11 +108,19 @@ func main() {
 				log.Fatal(err)
 			}
 
-			if len(osids) == 0 {
+			if len(osids) > 0 {
+				if len(osids) == 1 {
+					log.Printf("skipping source %s: already in set %x", filelink, osids[0])
+				} else {
+					log.Printf("skipping source %s: already in %d sets including %x", filelink, len(osids), osids[0])
+
+				}
+
+			} else {
 				// we have a winner! get a filetype to find a normalizer
 				filetype := cam.GetFiletype(filename)
 
-				normalizer := aconfig.Normalizers[filetype.Filetype]
+				normalizer := aconfig.Autonorm.Normalizers[filetype.Filetype]
 
 				if normalizer != "" {
 					log.Fatalf("no configured normalizer for file %s in campaign %s with filetype %s", filename, camname, filetype.Filetype)
@@ -122,10 +132,14 @@ func main() {
 					log.Fatal(err)
 				}
 
+				log.Printf("normalizing %s into %s using normalizer %s...", filelink, obsfile.Name(), normalizer)
+
 				// run the normalizer into it
 				if err := pto3.RunNormalizer(pconfig, obsfile, normalizer, camname, filename); err != nil {
 					log.Fatal(err)
 				}
+
+				log.Printf("...loading observation file %s...", obsfile.Name())
 
 				// load it
 				set, err := pto3.CopySetFromObsFile(obsfile.Name(), db, cidCache, pidCache)
@@ -135,10 +149,7 @@ func main() {
 
 				set.LinkVia(pconfig)
 
-				log.Printf("created observation set %x:", set.ID)
-				b, _ := json.MarshalIndent(set, "  ", "  ")
-				os.Stderr.Write(b)
-				log.Println("")
+				log.Printf("...created observation set %x from %s using normalizer %s", set.ID, filelink, normalizer)
 			}
 		}
 	}
