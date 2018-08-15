@@ -79,7 +79,8 @@ func main() {
 		// retrieve campaign and metadata
 		cam, err := rds.CampaignForName(camname)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("skipping campaign %s: %s", camname, err.Error())
+			continue
 		}
 
 		// iterate over files
