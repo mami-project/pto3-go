@@ -48,7 +48,7 @@ cp ptosrv.service /etc/systemd/system
 export GOPATH=/home/pto/go
 mkdir $GOPATH
 chown pto:pto $GOPATH
-runuser -u pto bash debian_install_pto3go.sh
+bash -x debian_install_pto3go.sh
 setcap 'cap_net_bind_service=+ep' $GOPATH/bin/ptosrv
 
 # initialize database
