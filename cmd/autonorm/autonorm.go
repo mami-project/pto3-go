@@ -68,6 +68,8 @@ func main() {
 
 	pidCache := make(pto3.PathCache)
 
+	log.Printf("autonorm starting for campaigns %v", aconfig.Autonorm.Campaigns)
+
 	// for each campaign directory
 	for _, camname := range aconfig.Autonorm.Campaigns {
 
