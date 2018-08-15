@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 
 	"github.com/go-pg/pg"
 	pto3 "github.com/mami-project/pto3-go"
@@ -68,7 +69,7 @@ func main() {
 
 	pidCache := make(pto3.PathCache)
 
-	log.Printf("autnorm starting with configuration %+v", aconfig.Autonorm)
+	log.Printf("autonorm starting with configuration %+v", aconfig.Autonorm)
 
 	// for each campaign directory
 	for _, camname := range aconfig.Autonorm.Campaigns {
@@ -136,6 +137,7 @@ func main() {
 				if err != nil {
 					log.Fatal(err)
 				}
+				defer os.Remove(obsfile.Name())
 
 				log.Printf("normalizing %s into %s using normalizer %s...", filelink, obsfile.Name(), normalizer)
 
