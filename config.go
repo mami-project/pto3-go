@@ -56,6 +56,9 @@ type PTOConfiguration struct {
 	// Access logging file path
 	AccessLogPath string
 	accessLogger  *log.Logger
+
+	// Path to configuration file
+	ConfigFilePath string
 }
 
 // LinkTo creates a link to a relative URL from the configuration's base URL
@@ -120,7 +123,14 @@ func NewConfigFromFile(filename string) (*PTOConfiguration, error) {
 		return nil, err
 	}
 
-	return NewConfigFromJSON(b)
+	out, err := NewConfigFromJSON(b)
+	if err != nil {
+		return nil, err
+	}
+
+	out.ConfigFilePath = filename
+
+	return out, nil
 }
 
 var DefaultConfigPaths = []string{"ptoconfig.json", "~/.ptoconfig.json", "/etc/pto/ptoconfig.json"}

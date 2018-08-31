@@ -11,6 +11,18 @@ go get github.com/mami-project/pto3-ecn/ecn_qof_normalizer
 go get github.com/mami-project/pto3-trace
 go get github.com/mami-project/pto3-trace/cmd/pto3-trace
 
+pushd $GOPATH/src/github.com/mami-project/pto3-go
+git pull
+popd
+
+pushd $GOPATH/src/github.com/mami-project/pto3-ecn
+git pull
+popd
+
+pushd $GOPATH/src/github.com/mami-project/pto3-trace
+git pull
+popd
+
 go install github.com/mami-project/pto3-go
 go install github.com/mami-project/pto3-go/papi
 go install github.com/mami-project/pto3-go/papi/ptosrv
@@ -18,6 +30,7 @@ go install github.com/mami-project/pto3-go/cmd/ptocat
 go install github.com/mami-project/pto3-go/cmd/ptoload
 go install github.com/mami-project/pto3-go/cmd/ptonorm
 go install github.com/mami-project/pto3-go/cmd/ptopass
+go install github.com/mami-project/pto3-go/cmd/autonorm
 go install github.com/mami-project/pto3-ecn/ecn_normalizer
 go install github.com/mami-project/pto3-ecn/ecn_stabilizer
 go install github.com/mami-project/pto3-ecn/ecn_pathdep
