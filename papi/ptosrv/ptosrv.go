@@ -10,6 +10,7 @@ import (
 	"github.com/gorilla/mux"
 	pto3 "github.com/mami-project/pto3-go"
 	"github.com/mami-project/pto3-go/papi"
+	"github.com/rs/cors"
 )
 
 var configPath = flag.String("config", "", "Path to PTO `config file`")
@@ -97,12 +98,15 @@ func main() {
 			bindto = ":443"
 		}
 		log.Printf("...listening on %s", bindto)
-		log.Fatal(http.ListenAndServeTLS(bindto, config.CertificateFile, config.PrivateKeyFile, r))
+		log.Fatal(http.ListenAndServeTLS(bindto,
+			config.CertificateFile, config.PrivateKeyFile,
+			cors.Default().Handler(r)))
 	} else {
 		if bindto == "" {
 			bindto = ":80"
 		}
 		log.Printf("...listening INSECURELY on %s", bindto)
-		log.Fatal(http.ListenAndServe(bindto, r))
+		log.Fatal(http.ListenAndServe(bindto,
+			cors.Default().Handler(r)))
 	}
 }
