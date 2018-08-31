@@ -55,6 +55,9 @@ func TestQueryLifecycle(t *testing.T) {
 		}
 	}
 
+	// test retrieval
+	executeRequest(TestRouter, t, "GET", "https://ptotest.mami-project.eu/query/retrieve?"+queryParams, nil, "", GoodAPIKey, http.StatusOK)
+
 	// grab results, iterating over pagination, and parse them
 	resultLink := q.Result
 	rowCount := 0

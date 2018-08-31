@@ -7,7 +7,6 @@
         "write_obs": true,
         "submit_query_group": true,
         "submit_query_obs": true,
-        "list_query": true,
         "read_query": true,
         "update_query": true
     }
