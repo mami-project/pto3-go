@@ -92,7 +92,7 @@ func main() {
 
 	// tell CORS to go away, and that API keys are OK
 	c := cors.New(cors.Options{
-		AllowedMethods:   []string{"GET", "POST", "PUT"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "OPTIONS"},
 		AllowCredentials: true,
 	})
 
