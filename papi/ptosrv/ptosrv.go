@@ -106,7 +106,7 @@ func main() {
 		}
 		log.Printf("...listening on %s", bindto)
 		log.Fatal(http.ListenAndServeTLS(bindto,
-			config.CertificateFile, config.PrivateKeyFile, c.Handler(r))
+			config.CertificateFile, config.PrivateKeyFile, c.Handler(r)))
 	} else {
 		if bindto == "" {
 			bindto = ":80"
