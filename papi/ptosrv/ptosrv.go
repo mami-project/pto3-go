@@ -90,6 +90,11 @@ func main() {
 
 	bindto := config.BindTo
 
+	// tell CORS to go away, and that API keys are OK
+	c := cors.New(cors.Options{
+		AllowCredentials: true,
+	})
+
 	// if certificate and key are present, listen and serve over TLS.
 	// otherwise, go insecure.
 
@@ -100,13 +105,13 @@ func main() {
 		log.Printf("...listening on %s", bindto)
 		log.Fatal(http.ListenAndServeTLS(bindto,
 			config.CertificateFile, config.PrivateKeyFile,
-			cors.Default().Handler(r)))
+			c.Handler(r)))
 	} else {
 		if bindto == "" {
 			bindto = ":80"
 		}
 		log.Printf("...listening INSECURELY on %s", bindto)
 		log.Fatal(http.ListenAndServe(bindto,
-			cors.Default().Handler(r)))
+			c.Handler(r)))
 	}
 }
