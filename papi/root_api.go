@@ -51,7 +51,7 @@ func (ra *RootAPI) handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ra *RootAPI) noMoreCORS(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Request-Headers", "Authorization")
+	w.Header().Set("Access-Control-Request-Headers", "authorization")
 	w.Header().Set("Access-Control-Request-Method", "POST")
 	w.Header().Set("Access-Control-Allow-Origin", ra.config.AllowOrigin)
 	w.WriteHeader(http.StatusOK)
