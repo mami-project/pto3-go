@@ -43,7 +43,7 @@ func (qa *QueryAPI) handleList(w http.ResponseWriter, r *http.Request) {
 	// to keep everything in memory. investigate this after we get things running.
 
 	// fail if not authorized
-	if !qa.azr.IsAuthorized(w, r, "list_query") {
+	if !qa.azr.IsAuthorized(w, r, "read_query") {
 		return
 	}
 
@@ -100,6 +100,35 @@ func (qa *QueryAPI) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	qa.queryResponse(w, http.StatusOK, q)
+}
+
+func (qa *QueryAPI) handleRetrieve(w http.ResponseWriter, r *http.Request) {
+
+	// Parse the form (we need this to check authorization)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "error parsing form", http.StatusBadRequest)
+	}
+
+	// fail if not authorized
+	if !qa.azr.IsAuthorized(w, r, "read_query") {
+		return
+	}
+
+	// parse the query and try to retrieve it by value
+	q, err := qa.qc.ParseQueryFromForm(r.Form)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "parsing query", err)
+		return
+	}
+
+	// check to see if it's been cached
+	oq, err := qa.qc.QueryByIdentifier(q.Identifier)
+	if err != nil {
+		pto3.HandleErrorHTTP(w, "retrieving query", err)
+		return
+	}
+
+	qa.queryResponse(w, http.StatusOK, oq)
 }
 
 func (qa *QueryAPI) handleGetMetadata(w http.ResponseWriter, r *http.Request) {
@@ -249,6 +278,7 @@ func (qa *QueryAPI) additionalHeaders(w http.ResponseWriter) {
 func (qa *QueryAPI) addRoutes(r *mux.Router, l *log.Logger) {
 	r.HandleFunc("/query", LogAccess(l, qa.handleList)).Methods("GET")
 	r.HandleFunc("/query/submit", LogAccess(l, qa.handleSubmit)).Methods("GET", "POST")
+	r.HandleFunc("/query/retrieve", LogAccess(l, qa.handleRetrieve)).Methods("GET", "POST")
 	r.HandleFunc("/query/{query}", LogAccess(l, qa.handleGetMetadata)).Methods("GET")
 	r.HandleFunc("/query/{query}", LogAccess(l, qa.handlePutMetadata)).Methods("PUT")
 	r.HandleFunc("/query/{query}/result", LogAccess(l, qa.handleGetResults)).Methods("GET")
