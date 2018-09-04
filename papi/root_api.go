@@ -50,8 +50,16 @@ func (ra *RootAPI) handleRoot(w http.ResponseWriter, r *http.Request) {
 	w.Write(linksj)
 }
 
+func (ra *RootAPI) noMoreCORS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Request-Headers", "Authorization")
+	w.Header().Set("Access-Control-Request-Method", "POST")
+	w.Header().Set("Access-Control-Allow-Origin", ra.config.AllowOrigin)
+	w.WriteHeader(http.StatusOK)
+}
+
 func (ra *RootAPI) addRoutes(r *mux.Router, l *log.Logger) {
 	r.HandleFunc("/", LogAccess(l, ra.handleRoot)).Methods("GET")
+	r.PathPrefix("/").Methods("OPTIONS").HandlerFunc(LogAccess(l, ra.noMoreCORS))
 }
 
 func NewRootAPI(config *pto3.PTOConfiguration, azr Authorizer, r *mux.Router) *RootAPI {

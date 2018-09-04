@@ -10,7 +10,6 @@ import (
 	"github.com/gorilla/mux"
 	pto3 "github.com/mami-project/pto3-go"
 	"github.com/mami-project/pto3-go/papi"
-	"github.com/rs/cors"
 )
 
 var configPath = flag.String("config", "", "Path to PTO `config file`")
@@ -91,10 +90,10 @@ func main() {
 	bindto := config.BindTo
 
 	// tell CORS to go away, and that API keys are OK
-	c := cors.New(cors.Options{
-		AllowedMethods:   []string{"GET", "POST", "PUT", "OPTIONS"},
-		AllowCredentials: true,
-	})
+	// c := cors.New(cors.Options{
+	// 	AllowedMethods:   []string{"GET", "POST", "PUT", "OPTIONS"},
+	// 	AllowCredentials: true,
+	// })
 
 	// if certificate and key are present, listen and serve over TLS.
 	// otherwise, go insecure.
@@ -105,14 +104,12 @@ func main() {
 		}
 		log.Printf("...listening on %s", bindto)
 		log.Fatal(http.ListenAndServeTLS(bindto,
-			config.CertificateFile, config.PrivateKeyFile,
-			c.Handler(r)))
+			config.CertificateFile, config.PrivateKeyFile, r))
 	} else {
 		if bindto == "" {
 			bindto = ":80"
 		}
 		log.Printf("...listening INSECURELY on %s", bindto)
-		log.Fatal(http.ListenAndServe(bindto,
-			c.Handler(r)))
+		log.Fatal(http.ListenAndServe(bindto, r))
 	}
 }
