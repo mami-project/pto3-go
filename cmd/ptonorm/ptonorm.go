@@ -53,7 +53,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := pto3.RunNormalizer(config, outfile, args[0], args[1], args[2]); err != nil {
+	if err = pto3.RunNormalizer(config, outfile, args[0], args[1], args[2]); err != nil {
 		log.Fatal(err)
 	}
 
