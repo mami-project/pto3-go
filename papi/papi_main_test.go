@@ -132,7 +132,7 @@ func setupAZR() papi.Authorizer {
 	return &papi.APIKeyAuthorizer{
 		APIKeys: map[string]map[string]bool{
 			"default": map[string]bool{
-				"list_raw": true,
+				"raw_metadata": true,
 			},
 			GoodAPIKey: map[string]bool{
 				"read_raw:test":      true,
