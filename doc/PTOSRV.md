@@ -61,7 +61,7 @@ otherwise. The following permissions are used by ptosrv:
 
 | Permission      | Description                                           |
 | --------------- | ----------------------------------------------------- |
-| `list_raw`      | List campaign URLs                                    |
+| `raw_metadata`      | List campaign URLs                                    |
 | `read_raw:<c>`  | Read raw data and metadata for campaign *c*           |
 | `write_raw:<c>` | Write raw data and metadata for campaign *c*          |
 | `read_obs`      | List observations, read observation data and metadata |

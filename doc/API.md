@@ -32,10 +32,10 @@ The resources and methods available thereon are summarized in the table below.
 
 | Method   | Resource              | Permission      | Description                                   |
 | -------- | --------------------- | --------------- | --------------------------------------------- |
-| `GET`    | `/raw`                | `list_raw`      | Retrieve URLs for campaigns as JSON           |
-| `GET`    | `/raw/<c>`            | `read_raw:<c>`  | Retrieve metadata for campaign *c* as JSON    |
+| `GET`    | `/raw`                | `raw_metadata`      | Retrieve URLs for campaigns as JSON           |
+| `GET`    | `/raw/<c>`            | `raw_metadata`  | Retrieve metadata for campaign *c* as JSON    |
 | `PUT`    | `/raw/<c>`            | `write_raw:<c>` | Write metadata for campaign *c* as JSON       |
-| `GET`    | `/raw/<c>/<f>`        | `read_raw:<c>`  | Retrieve metadata for file *f* in *c* as JSON |
+| `GET`    | `/raw/<c>/<f>`        | `raw_metadata`  | Retrieve metadata for file *f* in *c* as JSON |
 | `PUT`    | `/raw/<c>/<f>`        | `write_raw:<c>` | Write metadata for file *f* in *c* as JSON    |
 | `GET`    | `/raw/<c>/<f>/data`   | `read_raw:<c>`  | Retrieve content for file *f* in *c* (by convention) |
 | `PUT`    | `/raw/<c>/<f>/data`   | `write_raw:<c>` | Write content for file *f* in *c*  (by convention) |
@@ -104,7 +104,7 @@ are listed below:
 
 We use [curl](https://curl.haxx.se) to illustrate the usage of the PTO raw
 API. We assume the API is rooted at `https://pto.example.com/`, and that the
-API key `abadc0de` holds the permissions `list_raw`, `read_raw:test`, and
+API key `abadc0de` holds the permissions `raw_metadata`, `read_raw:test`, and
 `write_raw:test`. (In these examples, the output of curl is prettyprinted via
 `python3 -m json.tool`, not shown)
 

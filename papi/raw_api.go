@@ -54,7 +54,7 @@ type campaignList struct {
 func (ra *RawAPI) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 
 	// fail if not authorized
-	if !ra.azr.IsAuthorized(w, r, "list_raw") {
+	if !ra.azr.IsAuthorized(w, r, "raw_metadata") {
 		return
 	}
 
@@ -116,15 +116,15 @@ func (cfl *campaignFileList) MarshalJSON() ([]byte, error) {
 func (ra *RawAPI) handleGetCampaignMetadata(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
+	// fail if not authorized
+	if !ra.azr.IsAuthorized(w, r, "raw_metadata") {
+		return
+	}
+
 	// get campaign name
 	camname, ok := vars["campaign"]
 	if !ok {
 		http.Error(w, "missing campaign", http.StatusBadRequest)
-		return
-	}
-
-	// fail if not authorized
-	if !ra.azr.IsAuthorized(w, r, "read_raw:"+camname) {
 		return
 	}
 
@@ -279,6 +279,12 @@ func (ra *RawAPI) handlePutCampaignMetadata(w http.ResponseWriter, r *http.Reque
 // any metadata inherited from the campaign. It writes a JSON object to the
 // response containing file metadata.
 func (ra *RawAPI) handleGetFileMetadata(w http.ResponseWriter, r *http.Request) {
+
+	// fail if not authorized
+	if !ra.azr.IsAuthorized(w, r, "raw_metadata") {
+		return
+	}
+
 	vars := mux.Vars(r)
 
 	camname, ok := vars["campaign"]
@@ -290,11 +296,6 @@ func (ra *RawAPI) handleGetFileMetadata(w http.ResponseWriter, r *http.Request) 
 	filename, ok := vars["file"]
 	if !ok {
 		http.Error(w, "missing file", http.StatusBadRequest)
-		return
-	}
-
-	// fail if not authorized
-	if !ra.azr.IsAuthorized(w, r, "read_raw:"+camname) {
 		return
 	}
 
