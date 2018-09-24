@@ -32,6 +32,12 @@ type PTOConfiguration struct {
 	// Private key file path
 	PrivateKeyFile string
 
+	// File to serve for / (empty == serve paths to enabled apps)
+	RootFile string
+
+	// Directory to serve files from for /static
+	StaticRoot string
+
 	// base path for raw data store; empty for no RDS.
 	RawRoot string
 

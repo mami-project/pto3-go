@@ -126,6 +126,40 @@ func teardownQuery(config *pto3.PTOConfiguration) {
 	}
 }
 
+func setupStatic(config *pto3.PTOConfiguration) {
+	// create temporary static directory
+	var err error
+	config.StaticRoot, err = ioutil.TempDir("", "pto3-test-static")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	config.RootFile = config.StaticRoot + "/index.html"
+
+	// create an index.html file
+	hfi, err := os.Open("../testdata/index.html")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer hfi.Close()
+
+	hfo, err := os.Create(config.RootFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer hfo.Close()
+
+	if _, err := io.Copy(hfo, hfi); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func teardownStatic(config *pto3.PTOConfiguration) {
+	if err := os.RemoveAll(config.StaticRoot); err != nil {
+		log.Fatal(err)
+	}
+}
+
 const GoodAPIKey = "07e57ab18e70"
 
 func setupAZR() papi.Authorizer {
@@ -238,6 +272,10 @@ func TestMain(m *testing.M) {
 		// get an authorizer
 		azr := setupAZR()
 
+		// setup static paths
+		setupStatic(TestConfig)
+		defer teardownStatic(TestConfig)
+
 		papi.NewRootAPI(TestConfig, azr, TestRouter)
 
 		// build a raw data store  (and prepare to clean up after it)
@@ -257,10 +295,13 @@ func TestMain(m *testing.M) {
 	}())
 }
 
-func TestListRoot(t *testing.T) {
+func TestStatic(t *testing.T) {
+	// get index.html and make sure it's html
 	res := executeRequest(TestRouter, t, "GET", TestBaseURL+"/", nil, "", "", http.StatusOK)
 
-	checkContentType(t, res)
+	if res.Header().Get("Content-Type") != "text/html" {
+		t.Fatalf("static root should be text/html, got %s", res.Header().Get("Content-Type"))
+	}
 
 	// check AllowOrigin
 	acao := res.Header().Get("Access-Control-Allow-Origin")
@@ -268,16 +309,13 @@ func TestListRoot(t *testing.T) {
 		t.Fatalf("Access-Control-Allow-Origin on list root is %s", acao)
 	}
 
-	var links map[string]string
+	// now by the static path and make sure it's html
+	res = executeRequest(TestRouter, t, "GET", TestBaseURL+"/static/index.html", nil, "", "", http.StatusOK)
 
-	if err := json.Unmarshal(res.Body.Bytes(), &links); err != nil {
-		t.Fatal(err)
+	if res.Header().Get("Content-Type") != "text/html" {
+		t.Fatalf("static root should be text/html, got %s", res.Header().Get("Content-Type"))
 	}
 
-	rawlink := links["raw"]
-	if rawlink != TestBaseURL+"/raw" {
-		t.Fatalf("raw link is %s", rawlink)
-	}
 }
 
 func TestBadAuth(t *testing.T) {
