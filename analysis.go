@@ -325,7 +325,7 @@ func (norm *ParallelScanningNormalizer) Normalize(in *os.File, metain io.Reader,
 			for rec := range recChan {
 				obsen, err := fte.normFunc(rec.bytes, rmd, mdChan)
 				if err != nil {
-					errChan <- PTOErrorf("error normalizing record %d: %v (goroutine %d)", me, rec.n, err, me)
+					errChan <- PTOErrorf("error normalizing record %d: %v (goroutine %d)", rec.n, err, me)
 					close(recordComplete[me])
 					return
 				}

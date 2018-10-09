@@ -84,16 +84,20 @@ func (qc *QueryCache) EnableQueryLogging() {
 	EnableQueryLogging(qc.db)
 }
 
+func (qc *QueryCache) metadataPath(identifier string) string {
+	return filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.json", identifier))
+}
+
 func (qc *QueryCache) writeMetadataFile(identifier string) (*os.File, error) {
-	return os.Create(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.json", identifier)))
+	return os.Create(qc.metadataPath(identifier))
 }
 
 func (qc *QueryCache) readMetadataFile(identifier string) (*os.File, error) {
-	return os.Open(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.json", identifier)))
+	return os.Open(qc.metadataPath(identifier))
 }
 
 func (qc *QueryCache) statMetadataFile(identifier string) (os.FileInfo, error) {
-	return os.Stat(filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.json", identifier)))
+	return os.Stat(qc.metadataPath(identifier))
 }
 
 func (qc *QueryCache) fetchQuery(identifier string) (*Query, error) {
@@ -179,6 +183,27 @@ func (qc *QueryCache) CachedQueryLinks() ([]string, error) {
 	}
 
 	return out, nil
+}
+
+func (qc *QueryCache) Purge(identifier string) error {
+	qc.lock.RLock()
+	defer qc.lock.RUnlock()
+
+	if err := os.Remove(qc.dataPath(identifier)); err != nil {
+		if !os.IsNotExist(err) {
+			return PTOWrapError(err)
+		}
+	}
+
+	if err := os.Remove(qc.metadataPath(identifier)); err != nil {
+		if !os.IsNotExist(err) {
+			return PTOWrapError(err)
+		}
+	}
+
+	delete(qc.query, identifier)
+
+	return nil
 }
 
 // GroupSpec can group a pg-go query by some set of criteria
@@ -834,6 +859,10 @@ func (q *Query) UpdateFromJSON(b []byte) error {
 	return nil
 }
 
+func (q *Query) Purge() error {
+	return q.qc.Purge(q.Identifier)
+}
+
 func (q *Query) FlushMetadata() error {
 	out, err := q.qc.writeMetadataFile(q.Identifier)
 	if err != nil {
@@ -852,12 +881,16 @@ func (q *Query) FlushMetadata() error {
 	return nil
 }
 
+func (qc *QueryCache) dataPath(identifier string) string {
+	return filepath.Join(qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", identifier))
+}
+
 func (q *Query) writeResultFile() (*os.File, error) {
-	return os.Create(filepath.Join(q.qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", q.Identifier)))
+	return os.Create(q.qc.dataPath(q.Identifier))
 }
 
 func (q *Query) ReadResultFile() (*os.File, error) {
-	return os.Open(filepath.Join(q.qc.config.QueryCacheRoot, fmt.Sprintf("%s.ndjson", q.Identifier)))
+	return os.Open(q.qc.dataPath(q.Identifier))
 }
 
 func (q *Query) PaginateResultObject(offset int, count int) (map[string]interface{}, bool, error) {
