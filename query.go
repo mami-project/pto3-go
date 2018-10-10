@@ -506,6 +506,8 @@ func (qc *QueryCache) ExecuteQueryFromForm(form url.Values, done chan struct{}) 
 	// execute and do an immediate wait for it if it's new
 	if new {
 		q.ExecuteWaitImmediate(done)
+	} else {
+		close(done)
 	}
 
 	return q, new, nil
@@ -543,6 +545,8 @@ func (qc *QueryCache) ExecuteQueryFromURLEncoded(encoded string, done chan struc
 	// execute and do an immediate wait for it if it's new
 	if new {
 		q.ExecuteWaitImmediate(done)
+	} else {
+		close(done)
 	}
 
 	return q, new, nil
