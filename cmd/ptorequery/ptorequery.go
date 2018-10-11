@@ -82,4 +82,6 @@ func main() {
 
 	log.Printf("waiting for queries to finish executing...")
 
+	// WORK POINTER
+
 }
