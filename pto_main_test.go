@@ -155,6 +155,9 @@ func compareData(afn, bfn func() (io.ReadCloser, error)) error {
 func readPassword() (string, error) {
 	file, err := os.Open("pto_main_password.txt")
 	if err != nil {
+		if os.IsNotExist(err) {
+			return "helpful guide sheep train", nil
+		}
 		return "", err
 	}
 
