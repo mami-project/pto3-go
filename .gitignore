@@ -20,3 +20,6 @@ clients/python/*.ipynb
 clients/python/.ipynb_checkpoints/**
 clients/python/*.obs
 *.pyc
+
+# Password file for pto test
+pto_main_password.txt
