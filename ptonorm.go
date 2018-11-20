@@ -153,9 +153,9 @@ func RunNormalizer(config *PTOConfiguration, outfile io.Writer,
 	go normalizerMetadataFilter(obspipe, outfile, sourceurl, obserr, outdone)
 
 	// start a goroutine to wait for the process to finish
-	go func() {
+	/*go func() {
 		cmderr <- cmd.Wait()
-	}()
+	}()*/
 
 	// now wait on the exit channels, return as soon as command completes
 	for {
@@ -172,6 +172,15 @@ func RunNormalizer(config *PTOConfiguration, outfile io.Writer,
 			if err != nil {
 				return err
 			}
+		case <- outdone:
+			// This should not block because outdone is only ready
+			// when the command has already finished
+			err = cmd.Wait()
+			if err != nil {
+				return err
+			}
+			return nil
+		/*	
 		case err := <-cmderr:
 			if err == nil {
 				// wait on output completion
@@ -181,5 +190,6 @@ func RunNormalizer(config *PTOConfiguration, outfile io.Writer,
 				return err
 			}
 		}
+		*/
 	}
 }
