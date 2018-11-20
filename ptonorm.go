@@ -172,7 +172,7 @@ func RunNormalizer(config *PTOConfiguration, outfile io.Writer,
 			if err != nil {
 				return err
 			}
-		case <- outdone:
+		case <-outdone:
 			// This should not block because outdone is only ready
 			// when the command has already finished
 			err = cmd.Wait()
@@ -180,16 +180,16 @@ func RunNormalizer(config *PTOConfiguration, outfile io.Writer,
 				return err
 			}
 			return nil
-		/*	
-		case err := <-cmderr:
-			if err == nil {
-				// wait on output completion
-				<-outdone
-				return nil
-			} else {
-				return err
-			}
+			/*
+				case err := <-cmderr:
+					if err == nil {
+						// wait on output completion
+						<-outdone
+						return nil
+					} else {
+						return err
+					}
+			*/
 		}
-		*/
 	}
 }
