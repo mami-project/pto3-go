@@ -132,7 +132,7 @@ func RunNormalizer(config *PTOConfiguration, outfile io.Writer,
 	metaerr := make(chan error, 1)
 	// dataerr := make(chan error, 1)
 	obserr := make(chan error, 1)
-	cmderr := make(chan error, 1)
+	//cmderr := make(chan error, 1)
 	outdone := make(chan struct{})
 
 	// get metadata
