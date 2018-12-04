@@ -693,6 +693,7 @@ func CopySetFromObsFile(
 
 	obsfile, err := os.Open(filename)
 	if err != nil {
+		log.Printf("can't open \"%s\": %v", filename, err)
 		return nil, err
 	}
 	defer obsfile.Close()
@@ -700,16 +701,19 @@ func CopySetFromObsFile(
 	// first pass: extract paths, conditions, and metadata
 	set, pathSet, conditionSet, err := obsFileFirstPass(obsfile)
 	if err != nil {
+		log.Printf("error on first pass of \"%s\": %v", filename, err)
 		return nil, err
 	}
 
 	// ensure every condition is declared
 	if err := set.verifyConditionSet(conditionSet); err != nil {
+		log.Printf("error on verifying conditions of \"%s\": %v", filename, err)
 		return nil, err
 	}
 
 	// now rewind for a second pass
 	if _, err := obsfile.Seek(0, 0); err != nil {
+		log.Printf("error on rewinding \"%s\": %v", filename, err)
 		return nil, PTOWrapError(err)
 	}
 
@@ -718,34 +722,43 @@ func CopySetFromObsFile(
 
 		// make sure conditions are inserted
 		if err := cidCache.FillConditionIDsInSet(t, set); err != nil {
+			log.Printf("error on filling condition IDs of \"%s\": %v", filename, err)
 			return err
 		}
 
 		// make sure paths are inserted
 		if err := pidCache.CacheNewPaths(t, pathSet); err != nil {
+			log.Printf("error on inserting paths of \"%s\": %v", filename, err)
 			return err
 		}
 
 		// insert the set
 		if err := set.Insert(t, true); err != nil {
+			log.Printf("error on iserting set of \"%s\": %v", filename, err)
 			return err
 		}
 
 		// now insert the observations
 		if err := loadObservations(cidCache, pidCache, t, set, obsfile); err != nil {
+			log.Printf("error on loading observations of \"%s\": %v", filename, err)
 			return err
 		}
 
 		// Force the observation set count and time interval to update
 		if _, err := set.CountObservations(t); err != nil {
+			log.Printf("error on counting observations of \"%s\": %v", filename, err)
 			return err
 		}
 
 		_, _, err := set.TimeInterval(t)
+		if err != nil {
+			log.Printf("error on setting time interval of \"%s\": %v", filename, err)
+		}
 		return err
 	})
 
 	if err != nil {
+		log.Printf("error on runnign transaction for \"%s\": %v", filename, err)
 		return nil, err
 	}
 

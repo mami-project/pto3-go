@@ -46,14 +46,14 @@ func main() {
 	db := pg.Connect(&config.ObsDatabase)
 	if *initdbFlag {
 		if err := pto3.CreateTables(db); err != nil {
-			log.Fatal("creating database tables", err)
+			log.Fatal("creating database tables: ", err)
 		}
 	}
 
 	// share pid and condition caches across all files
 	cidCache, err := pto3.LoadConditionCache(db)
 	if err != nil {
-		log.Fatal("loading condition cache", err)
+		log.Fatal("loading condition cache: ", err)
 	}
 
 	pidCache := make(pto3.PathCache)
@@ -62,7 +62,7 @@ func main() {
 		var set *pto3.ObservationSet
 		set, err = pto3.CopySetFromObsFile(filename, db, cidCache, pidCache)
 		if err != nil {
-			log.Fatal("copying set from obs file", err)
+			log.Fatal("copying set from obs file: ", err)
 		}
 
 		set.LinkVia(config)
