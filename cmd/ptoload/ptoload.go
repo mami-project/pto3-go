@@ -3,7 +3,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -58,7 +57,7 @@ func main() {
 
 	pidCache := make(pto3.PathCache)
 
-	for _, filename := range args {
+	for i, filename := range args {
 		var set *pto3.ObservationSet
 		set, err = pto3.CopySetFromObsFile(filename, db, cidCache, pidCache)
 		if err != nil {
@@ -67,9 +66,9 @@ func main() {
 
 		set.LinkVia(config)
 
-		log.Printf("created observation set %x:", set.ID)
-		b, _ := json.MarshalIndent(set, "  ", "  ")
-		os.Stderr.Write(b)
-		log.Println("")
+		log.Printf("%d/%d done, created observation set %x:", i, len(args), set.ID)
+		//b, _ := json.MarshalIndent(set, "  ", "  ")
+		//os.Stderr.Write(b)
+		//log.Println("")
 	}
 }
