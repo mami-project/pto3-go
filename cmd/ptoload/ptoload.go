@@ -66,9 +66,12 @@ func main() {
 
 		set.LinkVia(config)
 
-		log.Printf("%d/%d done, created observation set %x:", i, len(args), set.ID)
-		//b, _ := json.MarshalIndent(set, "  ", "  ")
-		//os.Stderr.Write(b)
-		//log.Println("")
+		log.Printf("%d/%d (%5.2f%%) done, created observation set 0x%x",
+			i, len(args), 100.0*float64(i)/float64(len(args)), set.ID)
+		/* Previous debugging output:
+		 * b, _ := json.MarshalIndent(set, "  ", "  ")
+		 * os.Stderr.Write(b)
+		 * log.Println("")
+		 */
 	}
 }
