@@ -193,11 +193,13 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 
 		// ensure conditions have IDs
 		if err := set.ensureConditionsInDB(db); err != nil {
+			log.Printf("error ensuring condition is in DB: %v", err)
 			return err
 		}
 
 		// main insertion
 		if err := db.Insert(set); err != nil {
+			log.Printf("error inserting set: %v", err)
 			return PTOWrapError(err)
 		}
 
@@ -205,6 +207,7 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 		for i := range set.Conditions {
 			_, err := db.Exec("INSERT INTO observation_set_conditions VALUES (?, ?)", set.ID, set.Conditions[i].ID)
 			if err != nil {
+				log.Printf("error on INSERT INTO observation_set_conditions: %v", err)
 				return PTOWrapError(err)
 			}
 		}
@@ -734,7 +737,7 @@ func CopySetFromObsFile(
 
 		// insert the set
 		if err := set.Insert(t, true); err != nil {
-			log.Printf("error on iserting set of \"%s\": %v", filename, err)
+			log.Printf("error on inserting set of \"%s\": %v", filename, err)
 			return err
 		}
 
@@ -758,7 +761,7 @@ func CopySetFromObsFile(
 	})
 
 	if err != nil {
-		log.Printf("error on runnign transaction for \"%s\": %v", filename, err)
+		log.Printf("error on running transaction for \"%s\": %v", filename, err)
 		return nil, err
 	}
 
