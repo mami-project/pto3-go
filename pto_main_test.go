@@ -1,6 +1,7 @@
 package pto3_test
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -151,6 +152,23 @@ func compareData(afn, bfn func() (io.ReadCloser, error)) error {
 	return nil
 }
 
+func readPassword() (string, error) {
+	file, err := os.Open("pto_main_password.txt")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "helpful guide sheep train", nil
+		}
+		return "", err
+	}
+
+	scanner := bufio.NewScanner(file)
+	if !scanner.Scan() {
+		return "", scanner.Err()
+	}
+
+	return scanner.Text(), nil
+}
+
 func TestMain(m *testing.M) {
 	// define a configuration
 	testConfigJSON := []byte(`
@@ -163,13 +181,18 @@ func TestMain(m *testing.M) {
 	"ObsDatabase" : {
 		"Addr":     "localhost:5432",
 		"User":     "ptotest",
-		"Database": "ptotest",
-		"Password": "helpful guide sheep train"
+		"Database": "ptotest"
 	}
 }`)
 
 	var err error
 	TestConfig, err = pto3.NewConfigFromJSON(testConfigJSON)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Original password was "helpful guide sheep train"
+	TestConfig.ObsDatabase.Password, err = readPassword()
 	if err != nil {
 		log.Fatal(err)
 	}

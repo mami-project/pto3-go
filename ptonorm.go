@@ -130,9 +130,7 @@ func RunNormalizer(config *PTOConfiguration, outfile io.Writer,
 	}
 
 	metaerr := make(chan error, 1)
-	// dataerr := make(chan error, 1)
 	obserr := make(chan error, 1)
-	cmderr := make(chan error, 1)
 	outdone := make(chan struct{})
 
 	// get metadata
@@ -152,11 +150,6 @@ func RunNormalizer(config *PTOConfiguration, outfile io.Writer,
 	sourceurl := fmt.Sprintf("%s%s/%s/%s", config.BaseURL, "raw", campaign, filename)
 	go normalizerMetadataFilter(obspipe, outfile, sourceurl, obserr, outdone)
 
-	// start a goroutine to wait for the process to finish
-	go func() {
-		cmderr <- cmd.Wait()
-	}()
-
 	// now wait on the exit channels, return as soon as command completes
 	for {
 		select {
@@ -172,14 +165,14 @@ func RunNormalizer(config *PTOConfiguration, outfile io.Writer,
 			if err != nil {
 				return err
 			}
-		case err := <-cmderr:
-			if err == nil {
-				// wait on output completion
-				<-outdone
-				return nil
-			} else {
+		case <-outdone:
+			// This should not block because outdone is only ready
+			// when the command has already finished
+			err = cmd.Wait()
+			if err != nil {
 				return err
 			}
+			return nil
 		}
 	}
 }
