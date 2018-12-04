@@ -147,7 +147,15 @@ func RunNormalizer(config *PTOConfiguration, outfile io.Writer,
 
 	// start a goroutine to filter metadata in output
 	// and add a source URL
-	sourceurl := fmt.Sprintf("%s%s/%s/%s", config.BaseURL, "raw", campaign, filename)
+	var sourceurl string
+
+	// make sure there's a slash between base and rest of source URL
+	if len(config.BaseURL) == 0 || config.BaseURL[len(config.BaseURL)-1:] != "/" {
+		sourceurl = fmt.Sprintf("%s/%s/%s/%s", config.BaseURL, "raw", campaign, filename)
+	} else {
+		sourceurl = fmt.Sprintf("%s%s/%s/%s", config.BaseURL, "raw", campaign, filename)
+	}
+
 	go normalizerMetadataFilter(obspipe, outfile, sourceurl, obserr, outdone)
 
 	// now wait on the exit channels, return as soon as command completes
