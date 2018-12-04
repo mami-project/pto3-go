@@ -1,4 +1,4 @@
-// ptorequery is a command-line utility to run a query based on
+// ptorequery is a command-line utility to run queries in bulk
 package main
 
 import (
@@ -19,7 +19,7 @@ func main() {
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "%s: update or rebuild a PTO query cache\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Usage: %s <flags> querylist.json ...\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s <flags> querylist.txt ...\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 
@@ -82,6 +82,8 @@ func main() {
 
 	log.Printf("waiting for queries to finish executing...")
 
-	// WORK POINTER
+	for _, done := range donechans {
+		<-done
+	}
 
 }
