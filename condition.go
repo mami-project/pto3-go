@@ -88,8 +88,6 @@ func (cache ConditionCache) FillConditionIDsInSet(db orm.DB, set *ObservationSet
 	return nil
 }
 
-// SetConditionID ensures the given condition has a valid ID. It keeps the
-// condition cache synchronized with the database if the condition is new.
 func (cache ConditionCache) setConditionID(db orm.DB, c *Condition) error {
 	// check for a cache hit
 	id, ok := cache[c.Name]
@@ -110,6 +108,8 @@ func (cache ConditionCache) setConditionID(db orm.DB, c *Condition) error {
 	return nil
 }
 
+// SetConditionID ensures the given condition has a valid ID. It keeps the
+// condition cache synchronized with the database if the condition is new.
 func (cache ConditionCache) SetConditionID(db orm.DB, c *Condition) error {
 	ccMutex.Lock()
 	defer ccMutex.Unlock()
@@ -139,7 +139,7 @@ func (cache ConditionCache) reload(db orm.DB) error {
 }
 
 func (cache ConditionCache) ConditionsByName(db orm.DB, conditionName string) ([]Condition, error) {
-	ccMutex.Unlock()
+	ccMutex.Lock()
 	defer ccMutex.Unlock()
 
 	var out []Condition
