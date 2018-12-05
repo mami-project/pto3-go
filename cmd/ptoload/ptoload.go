@@ -15,6 +15,38 @@ import (
 var helpFlag = flag.Bool("h", false, "display a help message")
 var configFlag = flag.String("config", "", "path to PTO configuration `file` with DB connection information")
 var initdbFlag = flag.Bool("initdb", false, "Create database tables on startup")
+var nLoaders = flag.Int("nloaders", 1, "number of parallel loaders")
+
+func namePusher(args []string, c chan string) {
+	for _, a := range args {
+		c <- a
+	}
+	close(c)
+}
+
+func progressMeter(n int, tick chan int) {
+	progressed := 0
+
+	for t := range tick {
+		progressed++
+		log.Printf("%d/%d (%5.2f%%) done, created observation set 0x%x",
+			progressed, n, 100.0*float64(progressed)/float64(n), t)
+	}
+}
+
+func loader(i int, names chan string, config *pto3.PTOConfiguration, db *pg.DB, cidCache pto3.ConditionCache, pidCache pto3.PathCache, tick chan int, loaderDone chan int) {
+	for filename := range names {
+		var set *pto3.ObservationSet
+		set, err := pto3.CopySetFromObsFile(filename, db, cidCache, pidCache)
+		if err != nil {
+			log.Fatal("copying set from obs file: ", err)
+		}
+
+		set.LinkVia(config)
+		tick <- set.ID
+	}
+	loaderDone <- i
+}
 
 func main() {
 	flag.Usage = func() {
@@ -57,21 +89,19 @@ func main() {
 
 	pidCache := make(pto3.PathCache)
 
-	for i, filename := range args {
-		var set *pto3.ObservationSet
-		set, err = pto3.CopySetFromObsFile(filename, db, cidCache, pidCache)
-		if err != nil {
-			log.Fatal("copying set from obs file: ", err)
-		}
+	names := make(chan string)
+	go namePusher(args, names)
 
-		set.LinkVia(config)
+	tick := make(chan int)
+	go progressMeter(len(args), tick)
 
-		log.Printf("%d/%d (%5.2f%%) done, created observation set 0x%x",
-			i+1, len(args), 100.0*float64(i+1)/float64(len(args)), set.ID)
-		/* Previous debugging output:
-		 * b, _ := json.MarshalIndent(set, "  ", "  ")
-		 * os.Stderr.Write(b)
-		 * log.Println("")
-		 */
+	loaderDone := make(chan int)
+	for i := 0; i < *nLoaders; i++ {
+		go loader(i, names, config, db, cidCache, pidCache, tick, loaderDone)
+	}
+
+	for i := 0; i < len(args); i++ {
+		loaderID := <-loaderDone
+		fmt.Printf("loader %d done\n", loaderID)
 	}
 }

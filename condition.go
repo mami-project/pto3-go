@@ -3,6 +3,7 @@ package pto3
 import (
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/go-pg/pg/orm"
 )
@@ -58,13 +59,17 @@ func (c *Condition) SelectByID(db orm.DB) error {
 // ConditionCache maps a condition name to a condition ID
 type ConditionCache map[string]int
 
+var ccMutex = &sync.Mutex{}
+
 // FillConditionIDsInSet ensures all the conditions in a given observation set
 // have valid IDs. It keeps the condition cache synchronized with the database
 // if any new conditions have been added.
 func (cache ConditionCache) FillConditionIDsInSet(db orm.DB, set *ObservationSet) error {
+	ccMutex.Lock()
+	defer ccMutex.Unlock()
 
 	for _, c := range set.Conditions {
-		if err := cache.SetConditionID(db, &c); err != nil {
+		if err := cache.setConditionID(db, &c); err != nil {
 			return err
 		}
 	}
@@ -74,7 +79,7 @@ func (cache ConditionCache) FillConditionIDsInSet(db orm.DB, set *ObservationSet
 
 // SetConditionID ensures the given condition has a valid ID. It keeps the
 // condition cache synchronized with the database if the condition is new.
-func (cache ConditionCache) SetConditionID(db orm.DB, c *Condition) error {
+func (cache ConditionCache) setConditionID(db orm.DB, c *Condition) error {
 	// check for a cache hit
 	id, ok := cache[c.Name]
 	if ok {
@@ -94,7 +99,21 @@ func (cache ConditionCache) SetConditionID(db orm.DB, c *Condition) error {
 	return nil
 }
 
+func (cache ConditionCache) SetConditionID(db orm.DB, c *Condition) error {
+	ccMutex.Lock()
+	defer ccMutex.Unlock()
+
+	return cache.setConditionID(db, c)
+}
+
 func (cache ConditionCache) Reload(db orm.DB) error {
+	ccMutex.Lock()
+	defer ccMutex.Unlock()
+
+	return cache.reload(db)
+}
+
+func (cache ConditionCache) reload(db orm.DB) error {
 	var conditions []Condition
 
 	if err := db.Model(&conditions).Select(); err != nil {
@@ -109,11 +128,14 @@ func (cache ConditionCache) Reload(db orm.DB) error {
 }
 
 func (cache ConditionCache) ConditionsByName(db orm.DB, conditionName string) ([]Condition, error) {
+	ccMutex.Unlock()
+	defer ccMutex.Unlock()
+
 	var out []Condition
 
 	if strings.HasSuffix(conditionName, ".*") {
 		// Wildcard. Reload cache and find everything that matches.
-		if err := cache.Reload(db); err != nil {
+		if err := cache.reload(db); err != nil {
 			return nil, err
 		}
 		out = make([]Condition, 0)
@@ -125,7 +147,7 @@ func (cache ConditionCache) ConditionsByName(db orm.DB, conditionName string) ([
 	} else {
 		// No wildcard, just look up by name.
 		if cache[conditionName] == 0 {
-			if err := cache.Reload(db); err != nil {
+			if err := cache.reload(db); err != nil {
 				return nil, err
 			}
 		}
@@ -140,6 +162,9 @@ func (cache ConditionCache) ConditionsByName(db orm.DB, conditionName string) ([
 }
 
 func (cache ConditionCache) Names() []string {
+	ccMutex.Lock()
+	defer ccMutex.Unlock()
+
 	names := make([]string, len(cache))
 
 	i := 0
@@ -153,10 +178,12 @@ func (cache ConditionCache) Names() []string {
 
 // LoadConditionCache creates a new condition cache with all the conditions in a given database.
 func LoadConditionCache(db orm.DB) (ConditionCache, error) {
+	ccMutex.Lock()
+	defer ccMutex.Unlock()
 
 	cache := make(ConditionCache)
 
-	if err := cache.Reload(db); err != nil {
+	if err := cache.reload(db); err != nil {
 		return nil, err
 	}
 

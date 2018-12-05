@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/go-pg/pg/orm"
 )
@@ -39,12 +40,17 @@ func extractTarget(pathstring string) string {
 // PathCache maps a path string to a path ID
 type PathCache map[string]int
 
+var pcMutex sync.Mutex
+
 // CacheNewPaths takes a set of path names, and adds those not already
 // appearing to the cache and the underlying database. It modifies the pathSet
 // to contain only those paths added. Note that duplicate paths may be added
 // to the database using this function: it only checks the cache, not the
 // database, before adding, for performance reasons.
 func (cache PathCache) CacheNewPaths(db orm.DB, pathSet map[string]struct{}) error {
+	pcMutex.Lock()
+	defer pcMutex.Unlock()
+
 	// first, reduce to paths not already in the cache
 	for ps := range pathSet {
 		if cache[ps] > 0 {
@@ -110,6 +116,9 @@ func (p *Path) Parse() {
 // InsertOnce retrieves a path's ID if it has already been inserted into the
 // database, inserting it into the database if it's not already there.
 func (p *Path) InsertOnce(db orm.DB) error {
+	pcMutex.Lock()
+	defer pcMutex.Unlock()
+
 	// force source and target before insertion
 	p.Parse()
 
