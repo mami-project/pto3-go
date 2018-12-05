@@ -23,9 +23,8 @@ func extractSource(pathstring string) string {
 	elements := strings.Split(pathstring, " ")
 	if len(elements) > 0 && elements[0] != "*" {
 		return elements[0]
-	} else {
-		return ""
 	}
+	return ""
 }
 
 func extractTarget(pathstring string) string {

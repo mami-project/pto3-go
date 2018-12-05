@@ -36,8 +36,16 @@ func NewConditionWithID(id int, name string) *Condition {
 	return out
 }
 
+// ConditionCache maps a condition name to a condition ID
+type ConditionCache map[string]int
+
+var ccMutex = &sync.Mutex{}
+
 // FIXME consider replacing this with a condition cache everywhere
 func (c *Condition) InsertOnce(db orm.DB) error {
+	ccMutex.Lock()
+	defer ccMutex.Unlock()
+
 	if c.ID == 0 {
 		_, err := db.Model(c).
 			Column("id").
@@ -53,13 +61,11 @@ func (c *Condition) InsertOnce(db orm.DB) error {
 
 // FIXME consider replacing this with a condition cache everywhere
 func (c *Condition) SelectByID(db orm.DB) error {
+	ccMutex.Lock()
+	defer ccMutex.Unlock()
+
 	return db.Select(c)
 }
-
-// ConditionCache maps a condition name to a condition ID
-type ConditionCache map[string]int
-
-var ccMutex = &sync.Mutex{}
 
 func (cache ConditionCache) IDFromName(name string) (int, bool) {
 	ccMutex.Lock()
