@@ -629,10 +629,12 @@ func writeObsToCSV(
 	jslice[0] = fmt.Sprintf("%d", set.ID)
 
 	// replace path string with path ID
-	jslice[3] = fmt.Sprintf("%d", pidCache[jslice[3]])
+	id, _ := pidCache.IDFromName(jslice[3])
+	jslice[3] = fmt.Sprintf("%d", id)
 
 	// replace condition name with condition ID
-	jslice[4] = fmt.Sprintf("%d", cidCache[jslice[4]])
+	id, _ = cidCache.IDFromName(jslice[4])
+	jslice[4] = fmt.Sprintf("%d", id)
 
 	// write as CSV to output writer
 	return out.Write(jslice)

@@ -42,6 +42,17 @@ type PathCache map[string]int
 
 var pcMutex sync.Mutex
 
+func (cache PathCache) IDFromName(name string) (int, bool) {
+	pcMutex.Lock()
+	defer pcMutex.Unlock()
+
+	if id, ok := cache[name]; ok {
+		return id, true
+	}
+
+	return 0, false
+}
+
 // CacheNewPaths takes a set of path names, and adds those not already
 // appearing to the cache and the underlying database. It modifies the pathSet
 // to contain only those paths added. Note that duplicate paths may be added

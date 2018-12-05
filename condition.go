@@ -61,6 +61,17 @@ type ConditionCache map[string]int
 
 var ccMutex = &sync.Mutex{}
 
+func (cache ConditionCache) IDFromName(name string) (int, bool) {
+	ccMutex.Lock()
+	defer ccMutex.Unlock()
+
+	if id, ok := cache[name]; ok {
+		return id, true
+	}
+
+	return 0, false
+}
+
 // FillConditionIDsInSet ensures all the conditions in a given observation set
 // have valid IDs. It keeps the condition cache synchronized with the database
 // if any new conditions have been added.
