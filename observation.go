@@ -629,11 +629,17 @@ func writeObsToCSV(
 	jslice[0] = fmt.Sprintf("%d", set.ID)
 
 	// replace path string with path ID
-	id, _ := pidCache.IDFromName(jslice[3])
+	id, ok := pidCache.IDFromName(jslice[3])
+	if !ok {
+		return fmt.Errorf("lookup of path \"%s\" failed", jslice[3])
+	}
 	jslice[3] = fmt.Sprintf("%d", id)
 
 	// replace condition name with condition ID
-	id, _ = cidCache.IDFromName(jslice[4])
+	id, ok = cidCache.IDFromName(jslice[4])
+	if !ok {
+		return fmt.Errorf("lookup of condition \"%s\" failed", jslice[3])
+	}
 	jslice[4] = fmt.Sprintf("%d", id)
 
 	// write as CSV to output writer
@@ -679,6 +685,7 @@ func loadObservations(
 
 	// now copy from the CSV pipe
 	if _, err := t.CopyFrom(dbpipe, "COPY observations (set_id, time_start, time_end, path_id, condition_id, value) FROM STDIN WITH CSV"); err != nil {
+		log.Printf("error on copying from db pipe: %v", err)
 		return PTOWrapError(err)
 	}
 
