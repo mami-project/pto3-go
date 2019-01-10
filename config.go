@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/go-pg/pg"
 )
@@ -69,6 +70,9 @@ type PTOConfiguration struct {
 
 // LinkTo creates a link to a relative URL from the configuration's base URL
 func (config *PTOConfiguration) LinkTo(relative string) (string, error) {
+	// Make sure relative doesn't start with a '/'. See #119.
+	relative = strings.TrimPrefix(relative, "/")
+
 	u, err := url.Parse(relative)
 	if err != nil {
 		return "", PTOWrapError(err)
@@ -88,6 +92,11 @@ func NewConfigFromJSON(b []byte) (*PTOConfiguration, error) {
 
 	if err := json.Unmarshal(b, &config); err != nil {
 		return nil, err
+	}
+
+	// Make sure baseURL ends with a '/'. See #119.
+	if !strings.HasSuffix(config.BaseURL, "/") {
+		config.BaseURL = config.BaseURL + "/"
 	}
 
 	config.baseURL, err = url.Parse(config.BaseURL)
