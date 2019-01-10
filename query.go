@@ -162,6 +162,8 @@ func (qc *QueryCache) QueryByIdentifier(identifier string) (*Query, error) {
 func (qc *QueryCache) CachedQueryLinks() ([]string, error) {
 	out := make([]string, 0)
 
+	baseURL := qc.config.BaseURL
+	
 	// FIXME: cache this somewhere, allow invalidation
 	direntries, err := ioutil.ReadDir(qc.config.QueryCacheRoot)
 
@@ -173,7 +175,7 @@ func (qc *QueryCache) CachedQueryLinks() ([]string, error) {
 		metafilename := direntry.Name()
 		if strings.HasSuffix(metafilename, ".json") {
 			linkname := metafilename[0 : len(metafilename)-len(".json")]
-			link, _ := qc.config.LinkTo(fmt.Sprintf("/query/%s", linkname))
+			link, _ := qc.config.LinkTo(fmt.Sprintf("%s/query/%s", baseURL, linkname))
 			out = append(out, link)
 		}
 	}
