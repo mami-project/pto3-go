@@ -12,6 +12,7 @@ jobs: # basic units of work in a run
         environment: # environment variables for primary container
           POSTGRES_USER: ptotest
           POSTGRES_DB: ptotest
+          POSTGRES_PASSWORD: helpful guide sheep train
     # directory where steps are run. Path must conform to the Go Workspace requirements
     working_directory: /go/src/github.com/mami-project/pto3-go
 

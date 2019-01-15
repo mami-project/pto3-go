@@ -11,6 +11,7 @@
     "ObsDatabase": {
         "Addr": ":5432",
         "Database": "ptotest",
-        "User": "ptotest"
+        "User": "ptotest",
+        "Password": "helpful guide sheep train"
     }
 }
