@@ -49,12 +49,16 @@ jobs: # basic units of work in a run
             echo Failed waiting for Postgres && exit 1
 
       - run:
-          name: Run PTO core unit tests
-          command: go test -coverprofile=${TEST_RESULTS}/pto-core-coverage.out github.com/mami-project/pto3-go
+          name: Run PTO core tests and generate coverage report
+          command: |
+            go test -coverprofile=${TEST_RESULTS}/pto-core-coverage.out github.com/mami-project/pto3-go
+            go tool cover -html=${TEST_RESULTS}/pto-core-coverage.out -o ${TEST_RESULTS}/pto-core-coverage.html
 
       - run:
-          name: Run PTO API unit tests
-          command: go test -coverprofile=${TEST_RESULTS}/pto-api-coverage.out github.com/mami-project/pto3-go/papi 
+          name: Run PTO API tests and generate coverage report
+          command: |      
+            go test -coverprofile=${TEST_RESULTS}/pto-api-coverage.out github.com/mami-project/pto3-go/papi 
+            go tool cover -html=${TEST_RESULTS}/pto-api-coverage.out -o ${TEST_RESULTS}/pto-api-coverage.html
 
       - store_artifacts: # Upload test summary for display in Artifacts: https://circleci.com/docs/2.0/artifacts/
           path: /tmp/test-results
