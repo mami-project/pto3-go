@@ -50,15 +50,12 @@ jobs: # basic units of work in a run
 
       - run:
           name: Run PTO core unit tests
-          command: go test github.com/mami-project/pto3-go | tee ${TEST_RESULTS}/go-test.out
+          command: go test -coverprofile=${TEST_RESULTS}pto-core-coverage.out github.com/mami-project/pto3-go
 
       - run:
           name: Run PTO API unit tests
-          command: go test github.com/mami-project/pto3-go/papi | tee -a ${TEST_RESULTS}/go-test.out
+          command: go test github.com/mami-project/pto3-go/papi -coverprofile=${TEST_RESULTS}pto-api-coverage.out
 
       - store_artifacts: # Upload test summary for display in Artifacts: https://circleci.com/docs/2.0/artifacts/
           path: /tmp/test-results
           destination: raw-test-output
-
-      - store_test_results: # Upload test results for display in Test Summary: https://circleci.com/docs/2.0/collect-test-data/
-          path: /tmp/test-results
