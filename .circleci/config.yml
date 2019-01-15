@@ -1,0 +1,55 @@
+version: 2 # use CircleCI 2.0
+jobs: # basic units of work in a run
+  build: # runs not using Workflows must have a `build` job as entry point
+    docker: # run the steps with Docker
+      # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
+      - image: circleci/golang:1.10
+      # CircleCI PostgreSQL images available at: https://hub.docker.com/r/circleci/postgres/
+      - image: circleci/postgres:9.6-alpine-ram
+        environment: # environment variables for primary container
+          POSTGRES_USER: ptotest
+          POSTGRES_DB: ptotest
+    # directory where steps are run. Path must conform to the Go Workspace requirements
+    working_directory: /go/src/github.com/mami-project/pto3-go
+
+    environment: # environment variables for the build itself
+      TEST_RESULTS: /tmp/test-results # path to where test results will be saved
+
+    steps: # steps that comprise the `build` job
+      - checkout # check out source code to working directory
+      - run: mkdir -p $TEST_RESULTS # create the test results directory
+
+      - restore_cache: # restores saved cache if no changes are detected since last run
+      # Read about caching dependencies: https://circleci.com/docs/2.0/caching/
+          keys:
+            - v1-pkg-cache
+
+      # Normally, this step would be in a custom primary image;
+      # we've added it here for the sake of explanation.
+      # - run: go get github.com/lib/pq
+      # - run: go get github.com/mattes/migrate
+      # - run: go get github.com/jstemmer/go-junit-report
+
+      #  CircleCi's Go Docker image includes netcat
+      #  This allows polling the DB port to confirm it is open before proceeding
+      - run:
+          name: Waiting for Postgres to be ready
+          command: |
+            for i in `seq 1 10`;
+            do
+              nc -z localhost 5432 && echo Success && exit 0
+              echo -n .
+              sleep 1
+            done
+            echo Failed waiting for Postgres && exit 1
+
+      - run:
+          name: Run PTO core unit tests
+          command: go test github.com/mami-project/pto3-go | tee ${TEST_RESULTS}/go-test.out
+
+      - run:
+          name: Run PTO API unit tests
+          command: go test github.com/mami-project/pto3-go/papi | tee -a ${TEST_RESULTS}/go-test.out
+
+      - store_test_results: # Upload test results for display in Test Summary: https://circleci.com/docs/2.0/collect-test-data/
+          path: /tmp/test-results
