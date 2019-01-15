@@ -33,6 +33,7 @@ jobs: # basic units of work in a run
       
       - run: go get github.com/go-pg/pg
       - run: go get github.com/go-pg/pg/orm
+      - run: go get github.com/gorilla/mux
 
       #  CircleCi's Go Docker image includes netcat
       #  This allows polling the DB port to confirm it is open before proceeding
@@ -54,6 +55,10 @@ jobs: # basic units of work in a run
       - run:
           name: Run PTO API unit tests
           command: go test github.com/mami-project/pto3-go/papi | tee -a ${TEST_RESULTS}/go-test.out
+
+      - store_artifacts: # Upload test summary for display in Artifacts: https://circleci.com/docs/2.0/artifacts/
+          path: /tmp/test-results
+          destination: raw-test-output
 
       - store_test_results: # Upload test results for display in Test Summary: https://circleci.com/docs/2.0/collect-test-data/
           path: /tmp/test-results
