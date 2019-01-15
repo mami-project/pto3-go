@@ -57,6 +57,11 @@ jobs: # basic units of work in a run
             go test -coverprofile=${TEST_RESULTS}/pto-api-coverage.out github.com/mami-project/pto3-go/papi || exit 1
             go tool cover -html=${TEST_RESULTS}/pto-api-coverage.out -o ${TEST_RESULTS}/pto-api-coverage.html
 
+      - save_cache: # Store cache in the /go/pkg directory
+          key: v1-pkg-cache
+          paths:
+            - "/go/pkg"
+
       - store_artifacts: # Upload test summary for display in Artifacts: https://circleci.com/docs/2.0/artifacts/
           path: /tmp/test-results
           destination: raw-test-output
