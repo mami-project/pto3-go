@@ -1,5 +1,7 @@
 # pto3-go
 
+[![CircleCI](https://circleci.com/gh/mami-project/pto3-go.svg?style=svg)](https://circleci.com/gh/mami-project/pto3-go)
+
 MAMI Path Transparency Observatory (PTO) version 3 [API](doc/API.md) implementation in Go, backed by filesystem storage (for raw data) and PostgreSQL (for observation storage and query).
 
 Installation and configuration instructions are available in [PTOSRV.md](doc/PTOSRV.md).
