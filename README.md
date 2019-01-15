@@ -6,7 +6,9 @@ MAMI Path Transparency Observatory (PTO) version 3 [API](doc/API.md) implementat
 
 Installation and configuration instructions are available in [PTOSRV.md](doc/PTOSRV.md).
 
-Once the service is running, interact with it via its API. API documentation is [here](doc/API.md). There is also a (not yet well-documented) Python client for retrieving observations and queries 
+Once the service is running, interact with it via its API. API documentation is
+[here](doc/API.md). There is also a (not yet well-documented) Python client for
+retrieving observations and queries in [pto3-access](/mami-project/pto3-access).
 
 Writing and running local analyzers and normalizers is covered in [ANALYZER.md](doc/ANALYZER.md)
 
