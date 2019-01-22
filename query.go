@@ -177,7 +177,7 @@ func (qc *QueryCache) CachedQueryLinks() ([]string, error) {
 		metafilename := direntry.Name()
 		if strings.HasSuffix(metafilename, ".json") {
 			linkname := metafilename[0 : len(metafilename)-len(".json")]
-			link, _ := qc.config.LinkTo(fmt.Sprintf("/query/%s", linkname))
+			link, _ := qc.config.LinkTo(fmt.Sprintf("query/%s", linkname))
 			out = append(out, link)
 		}
 	}

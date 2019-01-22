@@ -3,7 +3,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -46,30 +45,33 @@ func main() {
 	db := pg.Connect(&config.ObsDatabase)
 	if *initdbFlag {
 		if err := pto3.CreateTables(db); err != nil {
-			log.Fatal(err)
+			log.Fatal("creating database tables: ", err)
 		}
 	}
 
 	// share pid and condition caches across all files
 	cidCache, err := pto3.LoadConditionCache(db)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("loading condition cache: ", err)
 	}
 
 	pidCache := make(pto3.PathCache)
 
-	for _, filename := range args {
+	for i, filename := range args {
 		var set *pto3.ObservationSet
 		set, err = pto3.CopySetFromObsFile(filename, db, cidCache, pidCache)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("copying set from obs file: ", err)
 		}
 
 		set.LinkVia(config)
 
-		log.Printf("created observation set %x:", set.ID)
-		b, _ := json.MarshalIndent(set, "  ", "  ")
-		os.Stderr.Write(b)
-		log.Println("")
+		log.Printf("%d/%d (%5.2f%%) done, created observation set 0x%x",
+			i+1, len(args), 100.0*float64(i+1)/float64(len(args)), set.ID)
+		/* Previous debugging output:
+		 * b, _ := json.MarshalIndent(set, "  ", "  ")
+		 * os.Stderr.Write(b)
+		 * log.Println("")
+		 */
 	}
 }

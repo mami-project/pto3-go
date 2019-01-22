@@ -128,6 +128,12 @@ func (qa *QueryAPI) handleRetrieve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 404 if no query
+	if oq == nil {
+		http.Error(w, "query not found", http.StatusNotFound)
+		return
+	}
+
 	qa.queryResponse(w, http.StatusOK, oq)
 }
 

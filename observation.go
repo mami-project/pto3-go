@@ -193,11 +193,13 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 
 		// ensure conditions have IDs
 		if err := set.ensureConditionsInDB(db); err != nil {
+			log.Printf("error ensuring condition is in DB: %v", err)
 			return err
 		}
 
 		// main insertion
 		if err := db.Insert(set); err != nil {
+			log.Printf("error inserting set: %v", err)
 			return PTOWrapError(err)
 		}
 
@@ -205,6 +207,7 @@ func (set *ObservationSet) Insert(db orm.DB, force bool) error {
 		for i := range set.Conditions {
 			_, err := db.Exec("INSERT INTO observation_set_conditions VALUES (?, ?)", set.ID, set.Conditions[i].ID)
 			if err != nil {
+				log.Printf("error on INSERT INTO observation_set_conditions: %v", err)
 				return PTOWrapError(err)
 			}
 		}
@@ -534,15 +537,21 @@ func DropTables(db *pg.DB) error {
 	})
 }
 
-func EnableQueryLogging(db *pg.DB) {
-	db.OnQueryProcessed(func(event *pg.QueryProcessedEvent) {
-		query, err := event.FormattedQuery()
-		if err != nil {
-			panic(err)
-		}
+type LoggingQueryHook struct{}
 
-		log.Printf("%s %s", time.Since(event.StartTime), query)
-	})
+func (lqh *LoggingQueryHook) BeforeQuery(qe *pg.QueryEvent) {
+	query, err := qe.FormattedQuery()
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("%s", query)
+}
+
+func (lqh *LoggingQueryHook) AfterQuery(qe *pg.QueryEvent) {}
+
+func EnableQueryLogging(db *pg.DB) {
+	lqh := LoggingQueryHook{}
+	db.AddQueryHook(&lqh)
 }
 
 func WriteObservations(obsdat []Observation, out io.Writer) error {
@@ -693,6 +702,7 @@ func CopySetFromObsFile(
 
 	obsfile, err := os.Open(filename)
 	if err != nil {
+		log.Printf("can't open \"%s\": %v", filename, err)
 		return nil, err
 	}
 	defer obsfile.Close()
@@ -700,16 +710,19 @@ func CopySetFromObsFile(
 	// first pass: extract paths, conditions, and metadata
 	set, pathSet, conditionSet, err := obsFileFirstPass(obsfile)
 	if err != nil {
+		log.Printf("error on first pass of \"%s\": %v", filename, err)
 		return nil, err
 	}
 
 	// ensure every condition is declared
 	if err := set.verifyConditionSet(conditionSet); err != nil {
+		log.Printf("error on verifying conditions of \"%s\": %v", filename, err)
 		return nil, err
 	}
 
 	// now rewind for a second pass
 	if _, err := obsfile.Seek(0, 0); err != nil {
+		log.Printf("error on rewinding \"%s\": %v", filename, err)
 		return nil, PTOWrapError(err)
 	}
 
@@ -718,34 +731,43 @@ func CopySetFromObsFile(
 
 		// make sure conditions are inserted
 		if err := cidCache.FillConditionIDsInSet(t, set); err != nil {
+			log.Printf("error on filling condition IDs of \"%s\": %v", filename, err)
 			return err
 		}
 
 		// make sure paths are inserted
 		if err := pidCache.CacheNewPaths(t, pathSet); err != nil {
+			log.Printf("error on inserting paths of \"%s\": %v", filename, err)
 			return err
 		}
 
 		// insert the set
 		if err := set.Insert(t, true); err != nil {
+			log.Printf("error on inserting set of \"%s\": %v", filename, err)
 			return err
 		}
 
 		// now insert the observations
 		if err := loadObservations(cidCache, pidCache, t, set, obsfile); err != nil {
+			log.Printf("error on loading observations of \"%s\": %v", filename, err)
 			return err
 		}
 
 		// Force the observation set count and time interval to update
 		if _, err := set.CountObservations(t); err != nil {
+			log.Printf("error on counting observations of \"%s\": %v", filename, err)
 			return err
 		}
 
 		_, _, err := set.TimeInterval(t)
+		if err != nil {
+			log.Printf("error on setting time interval of \"%s\": %v", filename, err)
+		}
 		return err
 	})
 
 	if err != nil {
+		log.Printf("error on running transaction for \"%s\": %v", filename, err)
 		return nil, err
 	}
 
