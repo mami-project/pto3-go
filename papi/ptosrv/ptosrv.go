@@ -15,6 +15,7 @@ import (
 
 var configPath = flag.String("config", "", "Path to PTO `config file`")
 var initdb = flag.Bool("initdb", false, "Create database tables on startup")
+var querylog = flag.Bool("querylog", false, "Log all database queries")
 var help = flag.Bool("help", false, "show usage message")
 
 func main() {
@@ -39,6 +40,10 @@ func main() {
 		obsapi := papi.NewObsAPI(config, azr, r)
 		if obsapi == nil {
 			log.Fatalf("-initdb given but no observation API configuration available in %s", *configPath)
+		}
+
+		if *querylog {
+			obsapi.EnableQueryLogging()
 		}
 
 		if err := obsapi.CreateTables(); err != nil {
@@ -72,11 +77,9 @@ func main() {
 	if obsapi != nil {
 		log.Printf("...will serve /obs from postgresql://%s@%s/%s",
 			config.ObsDatabase.User, config.ObsDatabase.Addr, config.ObsDatabase.Database)
-		if *initdb {
-			if err := obsapi.CreateTables(); err != nil {
-				log.Fatal(err)
-			}
-			log.Printf("...initialized observation database")
+		if *querylog {
+			log.Printf("...with query logging enabled")
+			obsapi.EnableQueryLogging()
 		}
 	}
 
