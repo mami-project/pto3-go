@@ -56,7 +56,7 @@ func main() {
 
 			oq, err := qc.ParseQueryFromURLEncoded(encoded)
 			if err != nil {
-				log.Printf("error parsing query %s: %v", encoded)
+				log.Printf("error parsing query %s: %v", encoded, err)
 			}
 
 			var doPurge bool
@@ -66,7 +66,7 @@ func main() {
 
 			if doPurge {
 				if err := oq.Purge(); err != nil && !os.IsNotExist(err) {
-					log.Printf("error purging query %s: %v", encoded)
+					log.Printf("error purging query %s: %v", encoded, err)
 				}
 			}
 
