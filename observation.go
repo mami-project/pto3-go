@@ -537,15 +537,21 @@ func DropTables(db *pg.DB) error {
 	})
 }
 
-func EnableQueryLogging(db *pg.DB) {
-	db.OnQueryProcessed(func(event *pg.QueryProcessedEvent) {
-		query, err := event.FormattedQuery()
-		if err != nil {
-			panic(err)
-		}
+type LoggingQueryHook struct{}
 
-		log.Printf("%s %s", time.Since(event.StartTime), query)
-	})
+func (lqh *LoggingQueryHook) BeforeQuery(qe *pg.QueryEvent) {
+	query, err := qe.FormattedQuery()
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("%s", query)
+}
+
+func (lqh *LoggingQueryHook) AfterQuery(qe *pg.QueryEvent) {}
+
+func EnableQueryLogging(db *pg.DB) {
+	lqh := LoggingQueryHook{}
+	db.AddQueryHook(&lqh)
 }
 
 func WriteObservations(obsdat []Observation, out io.Writer) error {
