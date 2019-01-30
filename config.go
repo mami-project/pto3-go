@@ -129,6 +129,13 @@ func NewConfigFromJSON(b []byte) (*PTOConfiguration, error) {
 		config.ConcurrentQueries = 8
 	}
 
+	// default pool size is 20; if this is 0, pgo-pg will set the pool size
+	// to 10 times the number of processors. on the main machine which runs
+	// ptosrv, we have 56 processors, which means that calling pg.Connect
+	// twice will exhaust the maximum number of file descriptors per process,
+	// which is 1024.
+	config.ObsDatabase.PoolSize = 20
+
 	return &config, nil
 }
 

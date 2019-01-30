@@ -129,7 +129,7 @@ func main() {
 				normalizer := aconfig.Autonorm.Normalizers[filetype.Filetype]
 
 				if normalizer == "" {
-					log.Printf("skipping %s: no normalizer for filetype", filelink, filetype.Filetype)
+					log.Printf("skipping %s: no normalizer for filetype %s", filelink, filetype.Filetype)
 					continue
 				}
 
